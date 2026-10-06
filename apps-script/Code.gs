@@ -343,6 +343,67 @@ function roomLines(r, all) {
   return out;
 }
 
+/* ===================== 旧アプリ（claude.ai アーティファクト版）からのデータ移行 =====================
+   Drive 上の移行JSON（{weekly:[...], settings:[...]}）を読み、_app_db に取り込む。
+   - 旧アプリで未転記（sentAt なし）の記録は、巡回ログ・部屋別ログにも行を追加する
+   - 旧アプリで転記済みの記録は、巡回ログの既存行を探して「アプリID」を付け、部屋別ログの行だけ追加する
+   - 同じ id が _app_db にあれば飛ばす（何度実行しても二重にならない）
+   実行：エディタで importFromDrive を選んで ▶。ウェブアプリの再デプロイは不要 */
+var MIGRATION_FILE_ID = "1VMiTTV6WhZJvxlVaIRccI90-q7NS18dG";   // クレーン日報_旧アプリ移行データ_20261006.json
+
+function importFromDrive() {
+  var text = DriveApp.getFileById(MIGRATION_FILE_ID).getBlob().getDataAsString("UTF-8");
+  var data = JSON.parse(text);
+  var sh = dbSheet();
+  var docs = readAllDocs();
+  var existing = {};
+  COLS.forEach(function (c) { docs[c].forEach(function (r) { existing[c + "/" + r.id] = true; }); });
+  var now = nowIso(), added = 0, skipped = 0, toSheet = 0, tagged = 0;
+
+  var weekly = (data.weekly || []).slice().sort(function (a, b) { return String(a.createdAt).localeCompare(String(b.createdAt)); });
+  weekly.forEach(function (rec) {
+    if (!rec || !rec.id) return;
+    if (existing["weekly/" + rec.id]) { skipped++; return; }
+    if (!rec.sentAt) {
+      materialize("weekly", rec, docs);                 // 巡回ログ＋部屋別ログに行を追加
+      rec.sentAt = now; toSheet++;
+    } else {
+      if (tagExistingLogRow(rec)) tagged++;             // 巡回ログの既存行に アプリID を付ける
+      var rs = ss().getSheetByName("部屋別ログ");        // 旧アプリ時代は部屋別ログが空だったので、ここで追加
+      if (rs) roomLines(rec, docs.weekly).forEach(function (line) {
+        var rr = appendValues(rs, line, rec.id); rs.getRange(rr, 1).setNumberFormat("yyyy/mm/dd");
+      });
+    }
+    rec.by = rec.by || rec.staff || "import";
+    sh.appendRow(["weekly", rec.id, rec.createdAt || now, now, "import", JSON.stringify(stripId(rec))]);
+    docs.weekly.push(rec); added++;
+  });
+  (data.settings || []).forEach(function (s0) {
+    if (!s0 || !s0.id || existing["settings/" + s0.id]) { skipped++; return; }
+    sh.appendRow(["settings", s0.id, now, now, "import", JSON.stringify(stripId(s0))]); added++;
+  });
+  var msg = "移行完了：取り込み " + added + " 件（うちシートへ新規追加 " + toSheet + " 件、既存行にID付与 " + tagged + " 件）、スキップ " + skipped + " 件";
+  Logger.log(msg);
+  SpreadsheetApp.getActive().toast(msg);
+  return msg;
+}
+/* 巡回ログで、週・店舗・機械・プレイ数が一致し アプリID が空の行に id を書く */
+function tagExistingLogRow(rec) {
+  var sh = ss().getSheetByName("巡回ログ"); if (!sh) return false;
+  var last = sh.getLastRow(); if (last < 2) return false;
+  var idc = idColumn(sh, true);
+  var v = sh.getRange(2, 1, last - 1, Math.max(5, idc)).getValues();
+  var wk = dateOf(rec.week); var wkKey = wk instanceof Date ? Utilities.formatDate(wk, TZ, "yyyy-MM-dd") : String(wk);
+  for (var i = 0; i < v.length; i++) {
+    var a = v[i][0]; var aKey = a instanceof Date ? Utilities.formatDate(a, TZ, "yyyy-MM-dd") : String(a);
+    if (aKey === wkKey && String(v[i][1]) === String(rec.store) && String(v[i][2]) === String(rec.machine)
+        && num(v[i][4]) === num(rec.plays) && String(v[i][idc - 1] || "") === "") {
+      sh.getRange(i + 2, idc).setValue(rec.id); return true;
+    }
+  }
+  return false;
+}
+
 /* ===================== 手動メンテ用（エディタから実行） ===================== */
 function setup() {            // 初回：スタッフタブと _app_db を作る
   ensureStaffSheet(); dbSheet();
