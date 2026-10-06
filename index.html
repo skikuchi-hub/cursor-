@@ -693,6 +693,10 @@ body{font-variant-numeric:tabular-nums}
   padding:11px 13px;font-size:13px;font-weight:700;color:var(--ink);font-family:var(--fs-body);
 }
 .gq-details[open] summary{border-radius:var(--r-m) var(--r-m) 0 0}
+/* ============ 更新の案内 ============ */
+.updbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:0;padding:8px 14px;background:var(--gold-wash);color:var(--gold-text);font-size:12.5px;font-weight:700;border-bottom:1px solid var(--line)}
+.updbar .btn{padding:7px 12px;font-size:12px}
 /* ============ PIN gate ============ */
 .gate{position:fixed;inset:0;z-index:200;background:var(--navy);display:flex;align-items:center;justify-content:center;padding:24px 16px}
 .gate-card{width:100%;max-width:360px;background:var(--surface,#fff);border-radius:18px;padding:26px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.35);text-align:center}
@@ -720,6 +724,7 @@ body{font-variant-numeric:tabular-nums}
       <div class="save-dot" id="saveDot" data-mode="local"><b></b><span id="saveMode">端末保存</span></div>
     </div>
   </header>
+  <div class="updbar" id="updBar" hidden><span>新しいバージョンがあります</span><button class="btn pri" id="updGo">更新する</button></div>
 
   <main>
     <!-- ========================= 巡回ログ入力 ========================= -->
@@ -1237,6 +1242,19 @@ const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になってい�
   : e && e.code==="network" ? "通信できませんでした。電波のよい所でもう一度試してください"
   : (e && e.message) || "エラーが発生しました";
 
+/* 新しいバージョンの検知：index.html の ETag を同期のたびに HEAD で確認し、変わっていたら更新バーを出す
+   （ホーム画面アプリは古い画面を保持しがちなため） */
+let APP_ETAG = null;
+async function checkAppUpdate(){
+  try {
+    const res = await fetch(location.pathname.endsWith("/") ? location.pathname+"index.html" : location.pathname, {method:"HEAD", cache:"no-store"});
+    const tag = res.headers.get("ETag") || res.headers.get("Last-Modified") || "";
+    if (!tag) return;
+    if (APP_ETAG===null){ APP_ETAG = tag; return; }
+    if (tag!==APP_ETAG){ const b=$("#updBar"); if (b) b.hidden=false; }
+  } catch(e){}
+}
+
 /* PIN 入力画面 */
 function showGate(msg){
   const g=$("#gate"); if (!g) return;
@@ -1286,7 +1304,7 @@ const Store = {
   },
   async sync(first){
     if (this.syncing || !PIN) return; this.syncing=true;
-    try { const r = await api("bootstrap"); this.applyBootstrap(r); }
+    try { const r = await api("bootstrap"); this.applyBootstrap(r); checkAppUpdate(); }
     catch(e){
       if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; this.mode="offline"; this.paintMode(); showGate("PINが無効です。入り直してください"); }
       else { this.mode="offline"; this.paintMode(); if (first) toast(errMsg(e)); }
@@ -3044,6 +3062,7 @@ function wire(){
   $("#closeX").onclick = closeDrawer;
   // PIN 入力
   $("#gateGo").onclick = submitGate;
+  $("#updGo").onclick = () => location.reload();
   $("#gatePin").onkeydown = e => { if (e.key==="Enter") submitGate(); };
   // 担当バッジを長押し（1.2秒）で PIN を入れ直す
   (function(){ const b=$("#meBadge"); if(!b) return; let t; const arm=()=>{ clearTimeout(t); t=setTimeout(()=>{ if (API_URL && confirm("PINを入れ直しますか？")) signOut(); },1200); }; const dis=()=>clearTimeout(t);
