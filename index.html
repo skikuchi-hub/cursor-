@@ -287,10 +287,11 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
   background:none;border:0;padding:9px 2px 10px;display:flex;flex-direction:column;
   align-items:center;gap:3px;color:var(--ink-3);font-size:9.5px;font-weight:700;letter-spacing:.02em;
 }
-.tab i{font-size:19px;font-style:normal;line-height:1;transition:transform .16s cubic-bezier(.2,1.5,.4,1)}
+.tab i{width:38px;height:28px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-style:normal;
+  transition:background .18s,transform .16s cubic-bezier(.2,1.5,.4,1)}
+.tab i svg{width:24px;height:24px;display:block;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
 .tab[aria-selected="true"]{color:var(--ink)}
-.tab[aria-selected="true"] i{transform:translateY(-2px) scale(1.14)}
-.tab[aria-selected="true"]::after{content:"";width:18px;height:3px;border-radius:2px;background:var(--rose);margin-top:1px}
+.tab[aria-selected="true"] i{background:var(--navy);color:var(--gold);transform:translateY(-1px)}
 
 /* ============ lists & tables ============ */
 .rowitem{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-top:1px solid var(--line)}
@@ -721,7 +722,7 @@ body{font-variant-numeric:tabular-nums}
 
   <main>
     <!-- ========================= 巡回ログ入力 ========================= -->
-    <section class="panel on" id="p-log" role="tabpanel" aria-label="巡回報告">
+    <section class="panel on" id="p-log" role="tabpanel" aria-label="巡回">
 
       <div class="card wk" id="wkStrip" aria-live="polite">
         <div class="wk-row">
@@ -779,7 +780,7 @@ body{font-variant-numeric:tabular-nums}
           <div class="field">
             <span class="lbl">担当</span>
             <select class="txt" id="staffIn"></select>
-            <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品登録・経費登録にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
+            <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品・経費にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
           </div>
         </div>
         <div class="field">
@@ -823,7 +824,7 @@ body{font-variant-numeric:tabular-nums}
             <option>カリーノ用</option>
             <option>4人機用</option>
           </select>
-          <p class="hint">巡回報告で、その機械のときだけ候補に出ます。</p>
+          <p class="hint">巡回タブで、その機械のときだけ候補に出ます。</p>
         </div>
         <div class="grid2">
           <div class="field">
@@ -912,7 +913,7 @@ body{font-variant-numeric:tabular-nums}
     </section>
 
     <!-- ========================= ダッシュボード ========================= -->
-    <section class="panel" id="p-dash" role="tabpanel" aria-label="成果一覧">
+    <section class="panel" id="p-dash" role="tabpanel" aria-label="成績">
       <div class="gq">
 
         <!-- だれの成績を見るか -->
@@ -970,7 +971,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="gq-screen">
           <div class="gq-h">▶ きょうの クエスト</div>
           <div class="gq-quest">
-            <div class="gq-qrow"><span>巡回報告</span><b><span id="gqToday">0</span>／<span id="gqDaily">0</span>マシーン</b></div>
+            <div class="gq-qrow"><span>巡回</span><b><span id="gqToday">0</span>／<span id="gqDaily">0</span>マシーン</b></div>
             <div class="gq-bar hp"><i id="gqQuestBar"></i></div>
             <div class="gq-qnote" id="gqQuestNote">目標を設定すると、1日の巡回マシーン数が出ます</div>
           </div>
@@ -1074,10 +1075,10 @@ body{font-variant-numeric:tabular-nums}
   </main>
 
   <nav class="tabbar" role="tablist">
-    <button class="tab" role="tab" aria-selected="true"  data-p="p-log"><i>🕹️</i>巡回報告</button>
-    <button class="tab" role="tab" aria-selected="false" data-p="p-prize"><i>🎁</i>景品登録</button>
-    <button class="tab" role="tab" aria-selected="false" data-p="p-cost"><i>💰</i>経費登録</button>
-    <button class="tab" role="tab" aria-selected="false" data-p="p-dash"><i>🎮</i>成果一覧</button>
+    <button class="tab" role="tab" aria-selected="true"  data-p="p-log"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v5"/><circle cx="12" cy="9.5" r="2"/><path d="M10.5 11.2c-3.4 2-4.4 5-2.6 8.3"/><path d="M13.5 11.2c3.4 2 4.4 5 2.6 8.3"/><path d="M12 11.5v5.5"/></svg></i>巡回</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-prize"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><circle cx="6.5" cy="7.5" r="2.5"/><circle cx="17.5" cy="7.5" r="2.5"/><circle cx="9.5" cy="12" r=".6" fill="currentColor"/><circle cx="14.5" cy="12" r=".6" fill="currentColor"/><path d="M10.6 15.2c.8.9 2 .9 2.8 0"/><path d="M12 14v1.2"/></svg></i>景品</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-cost"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.5 12 12.2l3.2-4.7M12 12.2V17M9.3 13.3h5.4M9.3 15.4h5.4"/></svg></i>経費</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-dash"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><rect x="5.5" y="12" width="3.4" height="8" rx=".8"/><rect x="10.3" y="7" width="3.4" height="13" rx=".8"/><rect x="15.1" y="9.5" width="3.4" height="10.5" rx=".8"/></svg></i>成績</button>
   </nav>
 </div>
 
@@ -1564,7 +1565,7 @@ function drawSlots(){
       ? names.map(n=>{ const st=stockOf(n);
           return `<button class="chip mini" data-act="fillprize" data-v="${esc(n)}" aria-pressed="${n===R.fillPrize}">${esc(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`;
         }).join("")
-      : `<span class="hint" style="margin:0">「🎁 景品登録」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`;
+      : `<span class="hint" style="margin:0">「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`;
     const fn = $("#fillNote");
     if (fn){ const k = sheetRows().length;
       fn.innerHTML = k ? `📗 スプレッドシートの景品マスタ <b>${k}件</b> を含みます（${esc(sheetStamp())} 取り込み）` : ""; }
@@ -1678,7 +1679,7 @@ function attachCombo(inp, onPick){
     const names = prizeNames4p().filter(n=>!q || n.toLowerCase().includes(q)).slice(0,30);
     box.innerHTML = names.length
       ? names.map(n=>`<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("")
-      : `<div class="none">${q?"候補なし（このまま新しい名前で登録できます）":"景品登録で「4人機用」の景品を登録すると出ます"}</div>`;
+      : `<div class="none">${q?"候補なし（このまま新しい名前で登録できます）":"景品タブで「4人機用」の景品を登録すると出ます"}</div>`;
   };
   box.addEventListener("pointerdown", e=>{
     const b = e.target.closest("[data-pick]"); if(!b) return;
@@ -2763,9 +2764,9 @@ function drawDayLog(day, daily){
   $("#gqLog").innerHTML =
     `<div class="gq-sum">この日の EXP <b>${expFmt(exp)}</b>（売上100円＝+1／景品登録1件＝+100／拠点とうちゃく＝+100／経費100円＝−1）　${daily?(hit?`／ 日間目標 <b>たっせい ★</b>`:`／ 日間目標 ${w.length}／${daily}`):""}</div>` +
     bonus.map(h=>`<div class="gq-sum">${h.icon} <b>${h.name}</b> に とうちゃく！　ボーナス <b>+${MILESTONE_EXP} EXP</b></div>`).join("") +
-    grp("🕹️ 巡回報告", w, gained, w.map(r=>`${esc(r.store)}／${esc(r.machine)}　売上${yen(num(r.sales)||num(r.plays)*PLAY_PRICE)}円 → ${expFmt(expOf(r))} EXP${r.pays?`　出${r.pays}`:""}`), "まだ 巡回報告が ありません", "マシーン") +
-    grp("🎁 景品登録", p, prizeExp, p.map(r=>`${esc(r.name)}　${yen(r.cost)}円${r.qty?`×${r.qty}`:""} → +${EXP_PER_PRIZE} EXP`), "景品登録は ありません") +
-    grp("💰 経費登録", x, -spent, x.map(r=>`${esc(r.kind)}　${yen(r.net)}円${r.payee?`（${esc(r.payee)}）`:""} → ${expFmt(-expCostOf(r))} EXP`), "経費登録は ありません");
+    grp("巡回", w, gained, w.map(r=>`${esc(r.store)}／${esc(r.machine)}　売上${yen(num(r.sales)||num(r.plays)*PLAY_PRICE)}円 → ${expFmt(expOf(r))} EXP${r.pays?`　出${r.pays}`:""}`), "まだ 巡回報告が ありません", "マシーン") +
+    grp("景品", p, prizeExp, p.map(r=>`${esc(r.name)}　${yen(r.cost)}円${r.qty?`×${r.qty}`:""} → +${EXP_PER_PRIZE} EXP`), "景品登録は ありません") +
+    grp("経費", x, -spent, x.map(r=>`${esc(r.kind)}　${yen(r.net)}円${r.payee?`（${esc(r.payee)}）`:""} → ${expFmt(-expCostOf(r))} EXP`), "経費登録は ありません");
 }
 /* ===== ジムランク：店舗ごと。今月の売上でランクが決まる（5万・10万・15万・20万・25万・30万=MAX。月が変わるとリセット）。
    ランクが上がるほどバッジが豪華になる。5店すべて獲得で殿堂入り ===== */
