@@ -1,76 +1,84 @@
-# 引き継ぎ：クレーンログ（旧クレーン日報）アプリ（GitHub Pages 版）＋ EXAmuse 景品仕入れ自動化
-2026-10-06 21:00 時点
+# 引き継ぎ：クレーンログ（旧クレーン日報）アプリ ＋ EXAmuse 景品仕入れ自動化
+2026-10-06 21:20 時点（運用開始済み）
 
-## 0. 今日やったこと（結論）
-- 2026-10-06 21:00 時点のデプロイ済み内容：訪問ごとの記録、売上の累計入力→差分記録、削除は本人と管理者のみ、アイコン（ゴールド地に紺のクロー）、アプリ名「クレーンログ」、下部メニューは線画アイコン＋「巡回／景品／経費／成績」。Apps Script も最新版を新バージョンでデプロイ済み。
-- クレーンログアプリを claude.ai のアーティファクトから **GitHub Pages ＋ Google Apps Script** に移植した。
-  理由：アーティファクトでは「入力できる人＝アプリを書き換えられる人（編集者）」になり、バイト追加時に壊されるリスクがあったため。
-- 新構成では、利用者は URL と PIN だけで使え、アプリの修正はこのリポジトリへ push した人（＝菊地さん／Claude Code）しかできない。
-- 実機確認済み：PIN ログイン、経費／巡回ログ／景品登録の保存とスプシ反映、削除でシートの行も消えること。
+## 0. 状態サマリ
+- クレーンログは claude.ai のアーティファクトから **GitHub Pages ＋ Google Apps Script** に移植済みで、本番運用中。
+  理由：アーティファクトでは「入力できる人＝アプリを書き換えられる人」になり、バイト追加時に壊されるリスクがあったため。
+- 利用者は URL と PIN だけで使う。アプリの修正はリポジトリへ push した人（菊地さん／Claude Code）しかできない。
+- 石原さんへ新 URL と PIN を案内済み。旧アーティファクトは共有解除・同期ルーチン停止済みで、菊地さんのみ開ける状態で残置。
+- Apps Script（Code.gs）は最新版を新バージョンでデプロイ済み。手動メンテ関数（下記 5）もすべて実行済み。
 
-## 1. 新アプリの場所
+## 1. 場所
 | もの | 場所 |
 |---|---|
 | 公開URL（スタッフが使う） | https://skikuchi-hub.github.io/cursor-/ |
 | リポジトリ | https://github.com/skikuchi-hub/cursor- |
 | 公開ブランチ（GitHub Pages のソース） | `claude/examuse-prize-handover-8s2xx8`（root） |
-| Apps Script | 日報スプシにバインド。ウェブアプリURL：`https://script.google.com/macros/s/AKfycbzAD2-ZwW18IJxlIED4T5WMwpGWzOqM_NA8irYQSzhZ1y7Rjw7UkSt7lWDU5HXsZquAUQ/exec`（config.js に設定済み） |
-| 日報スプシ | https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs |
+| Apps Script | 日報スプシにバインド（プロジェクト名「無題のプロジェクト」）。ウェブアプリURL：`https://script.google.com/macros/s/AKfycbzAD2-ZwW18IJxlIED4T5WMwpGWzOqM_NA8irYQSzhZ1y7Rjw7UkSt7lWDU5HXsZquAUQ/exec`（config.js に設定済み） |
+| 日報スプシ「クレーンゲーム日報」 | https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs （タイムゾーンは東京に変更済み） |
+| 旧アーティファクト（停止） | https://claude.ai/code/artifact/10dbc25d-f011-4fbc-bfb0-33a4b3154aab |
+| 移行データ（Drive） | `クレーン日報_旧アプリ移行データ_20261006.json`（ID 1VMiTTV6WhZJvxlVaIRccI90-q7NS18dG） |
 
 リポジトリの中身
 ```
-index.html              アプリ本体（旧アーティファクトの画面をそのまま移植。データ層だけ Apps Script 連携に差し替え）
-config.js               Apps Script ウェブアプリの URL
-icon-180.png            ホーム画面アイコン
-apps-script/Code.gs     スプシ側 API（Apps Script に貼ってあるものと同じ）
-apps-script/appsscript.json  マニフェスト（timeZone Asia/Tokyo）※スプシ側へはまだ未反映。スプシが日本時間なら不要
-README.md               セットアップ手順・運用メモ
-HANDOVER.md             この文書
+index.html                   アプリ本体（画面・ロジック）
+config.js                    Apps Script ウェブアプリの URL
+icon-180.png / icon-192.png / icon-512.png   アイコン（ゴールド地に紺のクロー）
+manifest.webmanifest         Android 用マニフェスト
+apps-script/Code.gs          スプシ側 API（Apps Script に貼ってあるものと同じ）
+apps-script/appsscript.json  マニフェスト（timeZone Asia/Tokyo。スプシ側未反映だが、スプシを東京にしたので不要）
+README.md                    セットアップ手順・運用メモ
+HANDOVER.md                  この文書
 ```
 
-## 2. 仕組み
-- **売上は「今月の累計」を入力し、記録は前回訪問との差分**。入力欄（A＋B／C＋D／BOX）には機械に出ている月累計をそのまま入れる。記録の `sAB/sCD/sBox/sales/plays` は差分（今回分）、`cum` に入力した累計、`prevId` に前回の記録ID。前回＝同じ店・機械・月で作成時刻が前の直近の記録。累計が前回より小さいときはリセット扱い（入力値＝今回分）。計算は Apps Script 側が正（`applySalesDelta`）。払出数は在庫差、カウンターはカウンター差で元々差分。既存記録は `recomputeSalesDeltas()` で再計算済み。
-- **削除は登録した本人（`by`）と管理者だけ**。アプリは他人の記録に🗑を出さず、Apps Script 側でも拒否する。
-- **記録は訪問ごと（週単位ではない）**。巡回ログの `week` 項目には訪問日（YYYY-MM-DD）が入る（項目名はスプシ互換のため week のまま）。同じ店に週に何度行っても1訪問＝1件。前回比較（カウンター差・前回景品・前回在庫）は「直前の記録」と比べる。シートの A列見出しは「訪問日」、K列「週キー（月曜）」は数式で自動。
-- **認証**：スプシ「スタッフ」タブ（名前／PIN／権限／有効／メモ）。PIN が一致した人として記録される。権限「管理者」だけ担当を切り替えて記録できる。「有効」を外すと入れなくなる。PIN は重複させない。
-- **保存**：アプリ → Apps Script（POST, text/plain JSON）→
-  1. 隠しタブ `_app_db` に JSON で保存（アプリが読む正。col/id/createdAt/updatedAt/by/json）
-  2. 同時に各タブへ行を追加：weekly→「巡回ログ」A〜J ＋「部屋別ログ」A〜L、prizes→「景品マスタ」A〜F・K、expenses→「経費台帳」A〜F。各タブの最終列に「アプリID」列を自動追加して対応づけ。アプリで削除するとタブの行も消える。
-  3. 旧「転記」機能は不要になった（ヘッダーのボタンは「📗 シート」リンクに変更）。sentAt は保存時に自動で入る。
-- **読み込み**：起動時と60秒ごと（画面が前面のとき）に bootstrap を取得。景品マスタ・過去他社データはタブから毎回直接読む → **毎時の同期ルーチン（trig_013n9gxPcuMzu5RkSXjxoRX5）は新アプリには不要**。
-- **オフライン**：前回の内容を端末に保持して表示のみ。保存はできない（トーストで案内）。
-- **PIN を入れ直す**：ヘッダーの「担当：◯◯」を1.2秒長押し。
-- API のアクション：`bootstrap` / `add` / `patch` / `remove` / `put`（詳細は Code.gs 冒頭コメント）。
+## 2. アプリの仕様（決定事項）
+- **名前・見た目**：アプリ名「クレーンログ」。下部メニューは線画アイコン（クロー／クマ／円／棒グラフ）で「巡回／景品／経費／成績」。選択中は紺バッジに金の線。上部は「今月の巡回（担当）」カード（今月の訪問台数／月間目標・売上・最終入力）。
+- **記録は訪問ごと（週単位ではない）**。訪問日は入力欄（既定は今日）。記録の `week` 項目に訪問日（YYYY-MM-DD）が入る（項目名はスプシ互換のまま）。店舗カードは「エリア」「前回 M/D」または「M/D n/m台 入力済」の2行。
+- **売上は「今月の累計」を入力し、記録は前回訪問との差分（今回分）**。入力欄（A＋B／C＋D／BOX）には機械に出ている月累計をそのまま入れる。入力中に「前回累計 → 今回分」を表示。記録の `sAB/sCD/sBox/sales/plays` は差分、`cum` に入力した累計、`prevId` に前回の記録ID。前回＝同じ店・機械・月で、作成時刻が前の直近の記録。累計が前回より小さいときはリセット扱い（入力値＝今回分）。計算は Apps Script 側が正（`applySalesDelta`）。メモは「売上7,600円（累計21,000円）」の形式。
+  例：下山門ミニSP 10/5 累計6,100 → 記録6,100、10/6 累計14,200 → 記録8,100、月合計14,200（＝機械の累計と一致、二重計上なし）。
+- **払出数**は在庫差（前回の残り＋補充 − 今回の残り）、**カウンター差**は直前の記録との差。どちらも元から差分。
+- **削除は登録した本人（`by`）と管理者だけ**。他人の記録に🗑は出ず、Apps Script 側でも拒否。
+- **認証**：スプシ「スタッフ」タブ（名前／PIN／権限／有効／メモ）。PIN は端末に記憶（ホーム画面アプリと Safari は別々に記憶）。権限「管理者」だけ担当を切り替えて記録できる。「有効」を外すと入れない。PIN は重複させない。PIN を入れ直すには「担当：◯◯」を1.2秒長押し。
+- **保存**：アプリ → Apps Script（POST, text/plain JSON）→ 隠しタブ `_app_db` に JSON 保存（アプリが読む正）＋ 各タブへ行追加（weekly→巡回ログ A〜J・部屋別ログ A〜L、prizes→景品マスタ A〜F・K、expenses→経費台帳 A〜F）。各タブ最終列「アプリID」で対応づけ、アプリで削除すると行も消える。旧「転記」は不要（ヘッダーは「📗 シート」リンク）。
+- **読み込み**：起動時・前面復帰時・60秒ごとに bootstrap。景品マスタ・過去他社データはタブから毎回直接読む。
+- **自動更新**：同期のたびに index.html の ETag を確認し、新版なら入力中でなければ自動で再読み込み。入力中は上部に「新しいバージョンがあります［更新する］」を出し、保存後に切り替える。
+- **オフライン**：前回の内容を表示のみ。保存不可（トーストで案内）。
+- API：`bootstrap` / `add` / `patch` / `remove` / `put`（Code.gs 冒頭コメント参照）。
 
-## 3. 日々の修正のやり方（Claude Code から）
-- 画面・計算の修正：`index.html` を直して **push するだけ**。GitHub Pages が1〜2分で反映。
-  - 作業ブランチは `claude/examuse-prize-handover-8s2xx8`（Pages のソースなので、ここに push すると即公開される）。
-  - ローカル確認は `scratchpad` の模擬API（Python）＋Playwright で行った。構文チェックは `node --check` で可能。
-- Apps Script（Code.gs）の修正：リポジトリの `apps-script/Code.gs` を直す → Apps Script エディタに貼り直して保存 → **デプロイ → デプロイを管理 → 編集 → 新バージョン → デプロイ**（URL は変わらない）。「新しいデプロイ」を作ると URL が変わるので、その場合は config.js も更新して push。
-- GitHub Pages は public リポジトリ。URL を知っていれば誰でも開けるが、PIN が無いと何も見えない・書けない。
+## 3. 修正のやり方（Claude Code から）
+- 画面・計算：`index.html` を直して **push するだけ**。GitHub Pages が1〜2分で反映、アプリ側は自動更新。
+  - 作業ブランチ＝公開ブランチ `claude/examuse-prize-handover-8s2xx8`。push すると即公開される。
+  - 確認手段：`node --check` で構文、scratchpad の模擬API（Python）＋Playwright で動作。クラウド環境からは github.io / script.google.com に接続できない（ネットワークポリシー）ので、実機確認は菊地さん。
+- Apps Script（Code.gs）：リポジトリの `apps-script/Code.gs` を直す → GitHub の **「Copy raw file」** でコピー（チャット本文からのコピーは引用符が変わって構文エラーになる）→ エディタに貼って保存 → **デプロイ → デプロイを管理 → 鉛筆 → 新バージョン → デプロイ**（URL は変わらない）。「新しいデプロイ」を作ると URL が変わるので、その場合は config.js も更新して push。
+- スプシのセル内容はクラウド環境から直接書けない。直す必要があるときは Code.gs に関数を足して菊地さんに実行してもらう（下記 5 の方式）。
+- GitHub Pages は public。URL を知っていても PIN が無いと何も見えない・書けない。
 
-## 4. 次にやること（未完了）
-1. ~~実機テスト~~ 完了（2026-10-06 19:50）
-2. ~~部屋別ログの確認~~ 完了
-3. **石原さんへ切り替え**：「スタッフ」タブの石原さんの PIN を伝える。新URLをホーム画面に追加してもらう。
-4. **旧アーティファクトのデータ移行**（https://claude.ai/code/artifact/10dbc25d-f011-4fbc-bfb0-33a4b3154aab）：
-   - 旧 db に残っていたのは 巡回ログ6件（石原さん、週2026-10-05。うち4件は未転記）と目標設定1件。prizes/expenses は空。
-   - 移行JSONを Drive に置き（`クレーン日報_旧アプリ移行データ_20261006.json`、ID 1VMiTTV6WhZJvxlVaIRccI90-q7NS18dG）、Code.gs に `importFromDrive()` を追加済み。
-     Apps Script エディタに最新の Code.gs を貼り直して `importFromDrive` を実行すれば取り込まれる（再実行しても二重にならない。再デプロイ不要）。
-   - 注意：福岡下山門通り店は同じ週に各機械2件ずつ入っている（10/5入力と10/6入力）。重複なら新アプリで片方を削除する（シートの行も消える）。
-   - ~~移行が済んだら、石原さんの共有を外す。毎時同期ルーチンを無効化。~~ 完了（2026-10-06 20:30）：移行実行済み、石原さんの共有解除済み、ルーチン trig_013n9gxPcuMzu5RkSXjxoRX5 は無効化済み（enabled=false）。旧アーティファクトは菊地さんのみが開ける状態で残置。
-5. **appsscript.json の反映**（任意）：Apps Script のプロジェクト設定で「マニフェストを表示」→ `timeZone` を Asia/Tokyo に。スプシのタイムゾーンが日本なら省略可。
-6. **バイト追加時**：「スタッフ」タブに行を追加（名前・PIN・権限「スタッフ」・有効✓）→ URL と PIN を渡すだけ。
+## 4. 運用（スタッフ向けルール）
+- Safari で URL を開き「ホーム画面に追加」。初回だけ PIN を入力。
+- 売上欄は **機械に出ている今月の累計をそのまま入力**。アプリが前回との差を出す。
+- 払出・補充・カウンターはこれまでどおり。削除は自分の記録だけ。
+- バイト追加：「スタッフ」タブに行を追加（名前・PIN・権限「スタッフ」・有効✓）→ URL と PIN を渡す。辞めたら「有効」を外す。
+- アプリ名・アイコンを変えたときは、ホーム画面のアイコンを削除して追加し直す必要がある。
 
-## 5. 既知の注意点
-- **日付はスプシのタイムゾーンで解釈する**（`dateOf` は `Utilities.parseDate(…, getSpreadsheetTimeZone())`）。初版は `new Date(y,m,d)` で書いていて、移行時に週が1日ずれた（10/5→10/4）。`repairDates()` で修復済み。スプシのタイムゾーンが日本以外になっている可能性があるので、ファイル → 設定 → タイムゾーンを「東京」にしておくと安心。
-- Apps Script の応答に1〜3秒かかる。保存ボタンは押下後に無効化される設計。
-- 複数人が同時に保存しても LockService で直列化されるが、他人の入力が画面に出るのは次回の取得（最大60秒）後。
-- 「巡回ログ」K〜O、「景品マスタ」G〜J、「経費台帳」G は配列数式のまま。行の追加・削除で数式範囲は自動調整される。
-- チャット本文からコードをコピーすると引用符が変換されて構文エラーになる。コードは GitHub の「Copy raw file」から取る。
-- GitHub への push は Claude GitHub App をリポジトリに入れて解決済み（今日の作業中に 403 で止まった経緯あり）。
+## 5. Apps Script の手動メンテ関数（エディタで選んで ▶ 実行。再実行しても安全）
+| 関数 | 用途 | 実施済み |
+|---|---|---|
+| `setup` | スタッフタブ・_app_db 作成、巡回ログ/部屋別ログの A1 を「訪問日」に | 済 |
+| `importFromDrive` | 旧アプリの記録（巡回ログ6件・目標設定1件）を Drive の移行JSONから取り込み | 済 |
+| `repairDates` | アプリID付き行の A列をスプシのタイムゾーンで書き直す | 済 |
+| `fixVisitDates` | 移行4件の訪問日を 10/5→10/6 に修正（＋repairDates） | 済 |
+| `recomputeSalesDeltas` | 全記録を累計→差分で再計算し、巡回ログ E・J、部屋別ログ F・G を更新 | 済 |
+| `renameDateHeaders` | A1 見出しの改名（setup から呼ばれる） | 済 |
 
-## 6. EXAmuse 景品仕入れ自動化（変更なし。前回の引き継ぎそのまま）
+## 6. 既知の注意点・今後の候補
+- 日付はスプシのタイムゾーンで解釈（`Utilities.parseDate(…, getSpreadsheetTimeZone())`）。初期はスプシが America/Los_Angeles で1日ずれたが、修復済み＋スプシを東京に変更済み。
+- Apps Script の応答は1〜3秒。保存ボタンは押下後に無効化。
+- 同時保存は LockService で直列化。他人の入力が見えるのは次回取得（最大60秒）後。
+- 「巡回ログ」K〜O、「景品マスタ」G〜J、「経費台帳」G は配列数式。行の追加・削除で範囲は自動調整。
+- 成績タブの EXP・バッジは今回分の売上で計算（累計ではない）。
+- 候補（未着手）：同じ日に同じ機械を2回記録したときの扱い（現状は2件とも別訪問として記録）。成績タブの「日ごとの売上」グラフは訪問日単位。
+
+## 7. EXAmuse 景品仕入れ自動化（変更なし。前回の引き継ぎそのまま）
 - 関係者：菊地（amuse@exploration-holdings.jp、Apple Mail アカウント「EXAmuse」、Mac）／石原さん（巡回担当、Thunderbird。スプシのメニューから発注要求）／仕入先 株式会社インフィニティ inf_main@8infinity.jp
 - 仕入れ想定商品スプシ：https://docs.google.com/spreadsheets/d/1c2dDei3-fMUtsAFXl4cnqvTMTuhjKrLEVSi0NSwEtAw
   タブ：商品一覧（A受信日…N発注ケース数 O発注個数 P発注金額 Q発注備考 R発注状況 …V商品キー W メール原文 X チェック結果 Y 機械タイプ）／発注要求／画像一覧／発注履歴／設定
