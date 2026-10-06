@@ -192,6 +192,7 @@ main{padding:14px 13px 96px}
 }
 .store .nm{display:block;font-size:13px;font-weight:700;line-height:1.35;margin:7px 0 2px}
 .store .ar{display:block;font-size:10.5px;color:var(--ink-3)}
+.store .ar2{margin-top:2px;color:var(--ink-2);font-weight:700}
 .store[aria-pressed="true"]{
   border-color:var(--sc,var(--rose));background:var(--surface);
   box-shadow:0 0 0 3px color-mix(in srgb,var(--sc,var(--rose)) 20%,transparent), var(--shadow);
@@ -221,7 +222,7 @@ input.num:focus-visible,input.txt:focus-visible,select.txt:focus-visible,textare
 }
 input.txt,select.txt,textarea.txt{
   width:100%;background:var(--surface-sunk);border:1.5px solid var(--line);
-  border-radius:var(--r-s);padding:10px 11px;font-size:15px;
+  border-radius:var(--r-s);padding:10px 11px;font-size:16px;   /* 16px 未満だと iPhone がフォーカス時に拡大するため */
 }
 textarea.txt{resize:vertical;min-height:62px;line-height:1.55}
 .quick{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
@@ -1934,7 +1935,8 @@ function renderStoreRow(){
       ${done===total ? '<span class="tick">✓</span>' : ''}
       <span class="biz">${esc(s.biz)}</span>
       <span class="nm">${esc(s.n)}</span>
-      <span class="ar">${esc(s.area)}・${sub}</span>
+      <span class="ar">${esc(s.area)}</span>
+      <span class="ar ar2">${sub}</span>
     </button>`;
   }).join("");
   $("#storeRow").onclick = e => {
