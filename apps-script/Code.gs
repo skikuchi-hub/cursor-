@@ -204,11 +204,16 @@ function recomputeSalesDeltas() {
     sh.getRange(x.row, 6).setValue(JSON.stringify(stripId(rec)));
     // 巡回ログ：E列 プレイ数
     logIds.forEach(function (id, i) { if (id === rec.id) log.getRange(i + 2, 5).setValue(num(rec.plays)); });
-    // 部屋別ログ：G列 ペア売上（A/B→sAB、C/D→sCD、枠・本体→sBox）
+    // 部屋別ログ：G列 ペア売上（A/B→sAB、C/D→sCD、枠・本体→sBox）、F列 カウンター差（直前の訪問と比較）
+    var prevR = done.filter(function (o) { return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine && String(o.createdAt || "") < String(rec.createdAt || "") && o.rooms; })
+      .sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
     roomVals.forEach(function (rv, i) {
       if (String(rv[roomId - 1]) !== rec.id) return;
       var k = String(rv[3]); var pair = (k === "A" || k === "B") ? rec.sAB : (k === "C" || k === "D") ? rec.sCD : rec.sBox;
       room.getRange(i + 2, 7).setValue(num(pair));
+      var x = (rec.rooms || []).filter(function (y) { return (y.k === "-" ? "本体" : y.k) === k; })[0];
+      var pv = (prevR && x) ? (prevR.rooms || []).filter(function (y) { return y.k === x.k; })[0] : null;
+      if (x) room.getRange(i + 2, 6).setValue((pv && pv.counter !== "" && x.counter !== "") ? Math.round((num(x.counter) - num(pv.counter)) * 100) / 100 : "");
     });
   });
   var msg = "売上の差分を計算し直しました：" + rows.length + " 件（値が変わった/累計を補った " + changed + " 件）";
