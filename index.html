@@ -237,6 +237,18 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .read .k{font-size:9.5px;letter-spacing:.07em;color:var(--ink-3);font-weight:700;display:block}
 .read .v{font-family:var(--fs-mono);font-size:19px;font-weight:700;display:block;margin-top:3px;font-variant-numeric:tabular-nums}
 .read .u{font-size:11px;color:var(--ink-3);font-weight:400}
+/* 週のまとめストリップ（旧：売上/獲得率/粗利の読み出し窓の置き換え） */
+.card.wk{padding:12px 14px 11px}
+.wk-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.wk-k{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--ink-3)}
+.wk-v{font-family:var(--fs-mono);font-variant-numeric:tabular-nums;color:var(--ink)}
+.wk-v b{font-size:22px;font-weight:700}
+.wk-of{font-size:12px;color:var(--ink-3);margin-left:2px}
+.wk-bar{height:6px;border-radius:999px;background:var(--surface-sunk);margin:8px 0 7px;overflow:hidden}
+.wk-bar i{display:block;height:100%;border-radius:999px;background:var(--navy);transition:width .5s cubic-bezier(.2,.9,.3,1)}
+.wk-bar i[data-full="1"]{background:var(--green)}
+.wk-sub{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--ink-2)}
+.wk-sub span:last-child{color:var(--ink-3);text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gaugewrap{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface)}
 .gaugewrap svg{flex:none}
 .gmeta{min-width:0}
@@ -710,26 +722,13 @@ body{font-variant-numeric:tabular-nums}
     <!-- ========================= 巡回ログ入力 ========================= -->
     <section class="panel on" id="p-log" role="tabpanel" aria-label="巡回報告">
 
-      <div class="card flush">
-        <div class="read">
-          <div><span class="k">売上</span><span class="v" id="rSales">0<span class="u">円</span></span></div>
-          <div><span class="k">獲得率</span><span class="v" id="rRate">—</span></div>
-          <div><span class="k">粗利（見込）</span><span class="v" id="rPer">0<span class="u">円</span></span></div>
+      <div class="card wk" id="wkStrip" aria-live="polite">
+        <div class="wk-row">
+          <div class="wk-k">この週の巡回</div>
+          <div class="wk-v"><b id="wkDone">0</b><span class="wk-of">/<span id="wkTotal">0</span>台</span></div>
         </div>
-        <div class="gaugewrap">
-          <svg width="76" height="76" viewBox="0 0 76 76" role="img" aria-label="景品原価率メーター">
-            <circle cx="38" cy="38" r="30" fill="none" stroke="var(--surface-sunk)" stroke-width="9"/>
-            <circle id="gArc" cx="38" cy="38" r="30" fill="none" stroke="var(--aqua)" stroke-width="9"
-              stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"
-              transform="rotate(-90 38 38)" style="transition:stroke-dashoffset .6s cubic-bezier(.2,.9,.3,1),stroke .3s"/>
-            <text id="gTxt" x="38" y="42" text-anchor="middle" font-size="16" font-weight="700"
-              fill="var(--ink)" class="mn">—</text>
-          </svg>
-          <div class="gmeta" hidden>
-            <span class="pill flat" id="gPill">数字を入れてね</span>
-            <p id="gNote">景品原価率は <b>目標30%</b>。超えたら獲得率を下げるか、安い景品に替える。</p>
-          </div>
-        </div>
+        <div class="wk-bar"><i id="wkBar" style="width:0%"></i></div>
+        <div class="wk-sub"><span id="wkSales">売上 0円</span><span id="wkLast">まだ入力なし</span></div>
       </div>
 
       <div class="card">
@@ -1879,7 +1878,7 @@ function setWeek(v){
   const m = toMonday(v);
   F.week = m;
   $("#weekBadge").textContent = m ? `${jpDate(m)}の週` : "";
-  renderStoreRow(); renderLogStatus(); buildRooms(true);
+  renderWeekStrip(); renderStoreRow(); renderLogStatus(); buildRooms(true);
 }
 
 function renderStoreRow(){
@@ -1908,6 +1907,22 @@ function renderMachineRow(){
   if (!st){ el.innerHTML = `<span class="hint" style="margin:0">先に店舗を選んでください</span>`; el.onclick=null; return; }
   chipRow(el, st.machines, F.machine, v => { F.machine=v; renderMachineRow(); renderLogStatus(); buildRooms(true); });
 }
+function renderWeekStrip(){
+  const el=$("#wkStrip"); if (!el) return;
+  const rows = Store.data.weekly.filter(r=>r.week===F.week);
+  const doneKeys = new Set(rows.map(r=>r.store+"|"+r.machine));
+  const total = STORES.reduce((n,s)=>n+s.machines.length,0);
+  const done = STORES.reduce((n,s)=>n+s.machines.filter(m=>doneKeys.has(s.n+"|"+m)).length,0);
+  const sales = rows.reduce((n,r)=>n+(num(r.sales)||num(r.plays)*PLAY_PRICE),0);
+  $("#wkDone").textContent = done; $("#wkTotal").textContent = total;
+  const bar=$("#wkBar"); bar.style.width = (total ? Math.round(done/total*100) : 0)+"%"; bar.dataset.full = (total && done>=total) ? "1" : "0";
+  $("#wkSales").textContent = `売上 ${yen(sales)}円`;
+  const last = rows.slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
+  if (last){
+    const d = new Date(last.createdAt||""); const when = isNaN(d) ? "" : `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    $("#wkLast").textContent = `最終入力 ${when} ${last.store||""}`.trim();
+  } else $("#wkLast").textContent = "まだ入力なし";
+}
 function renderLogStatus(){
   const st = storeOf(F.store);
   if (!st){ $("#storeDone").textContent=""; return; }
@@ -1918,25 +1933,6 @@ function renderLogStatus(){
 
 function updateReadouts(){
   const t = totals();
-  const pays = num($("#paysIn").value), cost = num($("#costIn").value);
-  $("#rSales").innerHTML = yen(t.sales)+'<span class="u">円</span>';
-  $("#rRate").textContent = t.plays>0 ? (pays>0 ? `1/${(t.plays/pays).toFixed(0)}` : "0") : "—";
-  $("#rPer").innerHTML = yen(Math.round(t.sales*(1-PLACE_RATE)-cost))+'<span class="u">円</span>';
-
-  const ratio = t.sales>0 ? cost/t.sales : null;
-  const arc = $("#gArc"), C=188.5;
-  arc.style.strokeDashoffset = String(C - C*(ratio===null?0:Math.min(ratio/0.5,1)));
-  const stt = costStatus(ratio);
-  arc.style.stroke = stt==="bad" ? "var(--critical)" : stt==="warn" ? "var(--warning)" : "var(--aqua)";
-  $("#gTxt").textContent = ratio===null ? "—" : pct(ratio,0);
-  const pill = $("#gPill");
-  pill.className = "pill "+(ratio===null?"flat":stt);
-  pill.textContent = ratio===null ? "数字を入れてね" : STATUS_WORD[stt];
-  $("#gNote").innerHTML = ratio===null
-    ? "景品原価率は <b>目標30%</b>。超えたら獲得率を下げるか、安い景品に替える。"
-    : stt==="warn" ? `目標30%を <b>${pct(ratio-COST_TARGET,1)}</b> 超えています。あと <b>${yen(Math.round(cost-t.sales*COST_TARGET))}円</b> 原価を削れば目標内。`
-    : `粗利は <b>${yen(Math.round(t.sales*(1-PLACE_RATE)-cost))}円</b>（場所代30%を引いた後）。いいペース。`;
-
   const ok = F.store && F.machine && t.sales>0;
   $("#saveLog").disabled = !ok;
   const missing = [];
@@ -2923,7 +2919,7 @@ async function saveGoal(){
 
 /* ===================== 全体 render ===================== */
 function render(){
-  renderStoreRow(); renderMachineRow(); renderLogStatus();
+  renderWeekStrip(); renderStoreRow(); renderMachineRow(); renderLogStatus();
   renderPrizeDatalist(); buildRooms(); renderLogList();
   renderPrizeForm(); renderPrizeList(); renderCostForm(); renderCostList();
   renderDash(); renderQuest();
