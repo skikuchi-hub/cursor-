@@ -1,6 +1,6 @@
 {
-  "name": "クレーン日報",
-  "short_name": "クレーン日報",
+  "name": "クレーンログ",
+  "short_name": "クレーンログ",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#f0a800",
