@@ -310,10 +310,14 @@ function idColumn(sh, create) {
   sh.setColumnWidth(c, 70);
   return c;
 }
+/* "YYYY-MM-DD" → スプレッドシートのタイムゾーンでその日の0時の Date。
+   new Date(y,m,d) はスクリプトのタイムゾーン基準になり、スプシ側のタイムゾーンと違うと日付が1日ずれるため、
+   必ずスプシのタイムゾーンで解釈する */
+function sheetTz() { try { return ss().getSpreadsheetTimeZone() || TZ; } catch (e) { return TZ; } }
 function dateOf(isoStr) {
   var m = String(isoStr || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return isoStr || "";
-  return new Date(+m[1], +m[2] - 1, +m[3]);
+  return Utilities.parseDate(m[1] + "-" + m[2] + "-" + m[3], sheetTz(), "yyyy-MM-dd");
 }
 function timeFrac(t) {
   var m = String(t || "").match(/^(\d{1,2}):(\d{2})/);
@@ -393,9 +397,10 @@ function tagExistingLogRow(rec) {
   var last = sh.getLastRow(); if (last < 2) return false;
   var idc = idColumn(sh, true);
   var v = sh.getRange(2, 1, last - 1, Math.max(5, idc)).getValues();
-  var wk = dateOf(rec.week); var wkKey = wk instanceof Date ? Utilities.formatDate(wk, TZ, "yyyy-MM-dd") : String(wk);
+  var tz = sheetTz();
+  var wk = dateOf(rec.week); var wkKey = wk instanceof Date ? Utilities.formatDate(wk, tz, "yyyy-MM-dd") : String(wk);
   for (var i = 0; i < v.length; i++) {
-    var a = v[i][0]; var aKey = a instanceof Date ? Utilities.formatDate(a, TZ, "yyyy-MM-dd") : String(a);
+    var a = v[i][0]; var aKey = a instanceof Date ? Utilities.formatDate(a, tz, "yyyy-MM-dd") : String(a);
     if (aKey === wkKey && String(v[i][1]) === String(rec.store) && String(v[i][2]) === String(rec.machine)
         && num(v[i][4]) === num(rec.plays) && String(v[i][idc - 1] || "") === "") {
       sh.getRange(i + 2, idc).setValue(rec.id); return true;
@@ -405,6 +410,26 @@ function tagExistingLogRow(rec) {
 }
 
 /* ===================== 手動メンテ用（エディタから実行） ===================== */
+/* アプリIDの付いた行の A列（週／日付）を _app_db の記録から書き直す。
+   タイムゾーン差で日付が1日ずれて入った行の修復用。何度実行してもよい */
+function repairDates() {
+  var docs = readAllDocs(); var byId = {};
+  docs.weekly.forEach(function (r) { byId[r.id] = r.week; });
+  docs.expenses.forEach(function (r) { byId[r.id] = r.date; });
+  var n = 0;
+  ["巡回ログ", "部屋別ログ", "経費台帳"].forEach(function (name) {
+    var sh = ss().getSheetByName(name); if (!sh) return;
+    var idc = idColumn(sh, false); if (!idc) return;
+    var last = sh.getLastRow(); if (last < 2) return;
+    var ids = sh.getRange(2, idc, last - 1, 1).getValues();
+    ids.forEach(function (v, i) {
+      var d = byId[String(v[0] || "")]; if (!d) return;
+      sh.getRange(i + 2, 1).setValue(dateOf(d)).setNumberFormat("yyyy/mm/dd"); n++;
+    });
+  });
+  var msg = "日付を書き直しました：" + n + " 行（スプシのタイムゾーン " + sheetTz() + " 基準）";
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
+}
 function setup() {            // 初回：スタッフタブと _app_db を作る
   ensureStaffSheet(); dbSheet();
   SpreadsheetApp.getActive().toast("スタッフタブと _app_db を用意しました。スタッフタブで PIN を確認してください。");
