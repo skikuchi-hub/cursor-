@@ -1172,7 +1172,10 @@ function lockStaff(on){
   const h=$("#staffHint"); if (h) h.textContent = on ? `PINで「${me()}」として記録されます。変えたいときは管理者（菊地さん）に連絡してください。` : "管理者は担当を切り替えて記録できます。";
 }
 async function rememberAccountStaff(name){}      // 旧：アカウント連携（PIN 方式では不要）
-const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];   // 担当なしの古いデータは最初の担当者の分として扱う
+const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];
+/* 削除できるのは登録した本人（by、無ければ担当）と管理者だけ。API 側でも同じ条件で拒否する */
+const canDelete = r => !!r && (r._local || (ME && ME.role==="admin") || (ME && (r.by || r.staff) === ME.name));
+const delBtn = (c,r) => canDelete(r) ? `<button class="del" data-c="${c}" data-id="${esc(r.id)}" aria-label="削除">🗑</button>` : "";   // 担当なしの古いデータは最初の担当者の分として扱う
 const mine = rows => (rows||[]).filter(r=>staffOf(r)===gqWho);
 
 /* ===================== utils ===================== */
@@ -1434,6 +1437,23 @@ function prevPrize(k){
   return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
 }
 const addPrizeOf = rm => clean(rm.addPrize) || clean(rm.prize);
+
+/* 売上は「今月の累計額」を入力する運用（機械の表示どおり）。記録は前回訪問との差分＝今回分。
+   同じ店・同じ機械・同じ月の直前の記録の累計（cum。無い古い記録は入力値そのもの）を引く。
+   累計が前回より小さいときはリセットとみなし、入力値をそのまま今回分にする */
+const cumOf = r => r.cum ? {sAB:num(r.cum.sAB), sCD:num(r.cum.sCD), sBox:num(r.cum.sBox)} : {sAB:num(r.sAB), sCD:num(r.sCD), sBox:num(r.sBox)};
+function prevSalesRec(){
+  if(!F.store || !F.machine) return null;
+  const mon = monthOf(F.week);
+  return Store.data.weekly
+    .filter(r => r.store===F.store && r.machine===F.machine && monthOf(r.week)===mon)
+    .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0] || null;
+}
+function salesDelta(f){                       // f: "sAB" | "sCD" | "sBox" → {cur, prev, delta, reset}
+  const cur = num(R ? R[f] : 0), pr = prevSalesRec(), prev = pr ? cumOf(pr)[f] : 0;
+  const reset = pr && cur>0 && cur<prev;
+  return {cur, prev, delta: pr ? (reset ? cur : cur-prev) : cur, reset, has:!!pr};
+}
 function roomPays(rm){
   const st = prevStock(rm.k);
   if (st===null || rm.before==="") return null;
@@ -1592,14 +1612,14 @@ function buildRooms(force){
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
   $("#zhint").innerHTML = t==="4p"
-    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアで集金した額。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
     : "枠の中身は前回のまま出ています。<b>① 空いていた枠をタップ</b>（＝出た景品）→ <b>② 補充した枠をタップ</b>。写真を撮らなくても、何が何個出たかが残ります。";
 
   if (t==="4p"){
     grid.innerHTML = PAIRS.map(([a,b,f])=>`
       <div class="zgrid">${R.rooms.filter(rm=>rm.k===a||rm.k===b).map(roomCell).join("")}</div>
       <div class="pair">
-        <span class="pk">${a}＋${b} 売上</span>
+        <span class="pk">${a}＋${b} 累計売上</span>
         <input class="yen" type="text" inputmode="numeric" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
         <span class="u">円</span><span class="pp" data-p="${f}"></span>
       </div>`).join("");
@@ -1612,8 +1632,8 @@ function buildRooms(force){
   } else {
     grid.innerHTML = `
       <div class="pair">
-        <span class="pk">売上金額</span>
-        <input class="yen" type="text" inputmode="numeric" data-f="sBox" placeholder="0" aria-label="売上金額">
+        <span class="pk">累計売上</span>
+        <input class="yen" type="text" inputmode="numeric" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
         <span class="u">円</span><span class="pp" data-p="sBox"></span>
       </div>
       <div class="modes">
@@ -1776,13 +1796,13 @@ function prizeCostUnit(name){
 function totals(){
   if (!R) return {sales:0,plays:0,pays:0,cost:0,known:false,refill:0};
   if (R.type==="box"){
-    const sales = num(R.sBox), out = R.slots.filter(sl=>sl.out);
+    const sales = salesDelta("sBox").delta, out = R.slots.filter(sl=>sl.out);
     const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0), 0);
     const rf = boxRefill(R.slots);
     const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0);
     return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill};
   }
-  const sales = num(R.sAB)+num(R.sCD);
+  const sales = salesDelta("sAB").delta + salesDelta("sCD").delta;
   let pays=0, known=false, cost=0, refill=0;
   R.rooms.forEach(rm=>{
     const p = roomPays(rm);
@@ -1814,10 +1834,12 @@ function autoMemo(){
     const f = Object.keys(fil).map(k=>`${k}${fil[k]}`).join(" ");
     const seats = R.slots.filter(sl=>sl.out).map(sl=>sl.i).join(",");
     const mv = R.slots.filter(slotMoved).length;
-    return [`売上${yen(num(R.sBox))}円`, o?`出 ${o}`:"", f?`補充 ${f}`:"",
+    const sb = salesDelta("sBox");
+    return [`売上${yen(sb.delta)}円${sb.has?`（累計${yen(sb.cur)}円）`:""}`, o?`出 ${o}`:"", f?`補充 ${f}`:"",
             mv?`配置変更 ${mv}枠`:"", seats?`出た枠 ${seats}`:""].filter(Boolean).join(" ｜ ");
   }
-  const money = `AB${yen(num(R.sAB))}/CD${yen(num(R.sCD))}円`;
+  const dab = salesDelta("sAB"), dcd = salesDelta("sCD");
+  const money = `AB${yen(dab.delta)}/CD${yen(dcd.delta)}円${(dab.has||dcd.has)?`（累計 AB${yen(dab.cur)}/CD${yen(dcd.cur)}）`:""}`;
   const parts = R.rooms.filter(rm=>rm.prize||rm.before!=="").map(rm=>{
     const head = rm.k==="-" ? "" : rm.k+" ";
     const ap = addPrizeOf(rm);
@@ -1850,9 +1872,13 @@ function updateDerived(){
       }
     });
   }
-  [["sAB",R.sAB],["sCD",R.sCD],["sBox",R.sBox]].forEach(([f,v])=>{
-    const el=document.querySelector(`#roomGrid [data-p="${f}"]`);
-    if (el) el.textContent = num(v)>0 ? `${Math.round(num(v)/PLAY_PRICE)}プレイ` : "";
+  ["sAB","sCD","sBox"].forEach(f=>{
+    const el=document.querySelector(`#roomGrid [data-p="${f}"]`); if (!el) return;
+    const d = salesDelta(f);
+    if (!(d.cur>0)) { el.textContent = d.has ? `前回までの累計 ${yen(d.prev)}円` : ""; return; }
+    el.textContent = !d.has ? `今月初回：今回分 ${yen(d.delta)}円＝${Math.round(d.delta/PLAY_PRICE)}プレイ`
+      : d.reset ? `前回累計 ${yen(d.prev)}円より小さいので、${yen(d.delta)}円を今回分として記録`
+      : `前回累計 ${yen(d.prev)}円 → 今回分 ${yen(d.delta)}円＝${Math.round(d.delta/PLAY_PRICE)}プレイ`;
   });
   if (!paysTouched) $("#paysIn").value = t.pays;
   if (!costTouched) $("#costIn").value = Math.round(t.cost);
@@ -1960,9 +1986,9 @@ function updateReadouts(){
   const missing = [];
   if (!F.store) missing.push("①で店舗を選ぶ");
   else if (!F.machine) missing.push("①で機械を選ぶ");
-  if (F.machine && !(t.sales>0)) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の売上金額を入れる（1円以上）" : "②で売上金額を入れる（1円以上）");
+  if (F.machine && !(t.sales>0)) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の累計売上を入れる（前回より増えている額）" : "②で累計売上を入れる（前回より増えている額）");
   $("#saveNote").textContent = ok
-    ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
+    ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　今回分の売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
     : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
     : (F.machine && R && R.type==="4p") ? ""
     : "押せるようになるまで：" + missing.join(" → ");
@@ -1985,7 +2011,10 @@ async function saveLog(){
   })) : [];
   const rec = {
     week:F.week, store:F.store, machine:F.machine, mtype:R.type,
-    rooms, slots, sAB:num(R.sAB), sCD:num(R.sCD), sBox:num(R.sBox),
+    rooms, slots,
+    sAB:salesDelta("sAB").delta, sCD:salesDelta("sCD").delta, sBox:salesDelta("sBox").delta,   // 今回分（前回累計との差）
+    cum:{sAB:num(R.sAB), sCD:num(R.sCD), sBox:num(R.sBox)},                                   // 入力した今月の累計
+    prevId:(prevSalesRec()||{}).id||"",
     sales:t.sales, plays:t.plays,
     pays:num($("#paysIn").value), cost:num($("#costIn").value),
     prize:mainPrize(), auto:autoMemo(),
@@ -2028,7 +2057,7 @@ function renderLogList(){
           ${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
         </div>
       </div>
-      ${r.source==="sheet"?"":`<button class="del" data-c="weekly" data-id="${esc(r.id)}" aria-label="削除">🗑</button>`}
+      ${r.source==="sheet"?"":delBtn("weekly",r)}
     </div>`;
   }).join("");
 }
@@ -2130,7 +2159,7 @@ function renderPrizeList(){
           <span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>
         </div>
       </div>
-      <button class="del" data-c="prizes" data-id="${esc(r.id)}" aria-label="削除">🗑</button>
+      ${delBtn("prizes",r)}
     </div>`;
   }).join("") + sheetHtml;
 }
@@ -2176,7 +2205,7 @@ function renderCostList(){
         <div class="t2">${yen(r.net)}円（税抜）${r.memo?"　"+esc(r.memo):""}</div>
         <div style="margin-top:6px">${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}</div>
       </div>
-      ${r.source==="sheet"?"":`<button class="del" data-c="expenses" data-id="${esc(r.id)}" aria-label="削除">🗑</button>`}
+      ${r.source==="sheet"?"":delBtn("expenses",r)}
     </div>`).join("");
 }
 

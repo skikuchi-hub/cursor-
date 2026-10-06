@@ -154,9 +154,65 @@ function addDoc(me, col, rec) {
     rec.sentAt = now;                                              // スプレッドシートへ即時に書くので「転記済み」
   }
   var docs = readAllDocs();
+  if (col === "weekly") applySalesDelta(rec, docs.weekly);   // 売上は月の累計入力 → 前回との差分を記録
   materialize(col, rec, docs);
   dbSheet().appendRow([col, rec.id, rec.createdAt, now, me.name, JSON.stringify(stripId(rec))]);
   return { ok: true, rec: rec };
+}
+
+/* ===================== 売上：累計入力 → 今回分（差分） =====================
+   アプリは機械に出ている「今月の累計売上」を入力する運用。記録では
+   sAB/sCD/sBox/sales/plays に「前回訪問との差分（今回分）」を、cum に入力した累計を持つ。
+   前回＝同じ店・同じ機械・同じ月（訪問日の月）で、作成時刻がこの記録より前の直近の記録。
+   古い記録（cum なし）は入力値を累計とみなす。累計が前回より小さいときはリセット扱いで入力値をそのまま今回分にする */
+var PLAY_PRICE = 100;
+function cumOf(r) { var c = r && r.cum; return c ? { sAB: num(c.sAB), sCD: num(c.sCD), sBox: num(c.sBox) } : { sAB: num(r && r.sAB), sCD: num(r && r.sCD), sBox: num(r && r.sBox) }; }
+function applySalesDelta(rec, allWeekly) {
+  var cum = cumOf(rec);
+  var mon = String(rec.week || "").slice(0, 7);
+  var prev = (allWeekly || []).filter(function (o) {
+    return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine &&
+      String(o.week || "").slice(0, 7) === mon && String(o.createdAt || "") < String(rec.createdAt || "");
+  }).sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
+  var pc = prev ? cumOf(prev) : { sAB: 0, sCD: 0, sBox: 0 };
+  function d(f) { var c = cum[f], p = pc[f]; return prev ? (c > 0 && c < p ? c : c - p) : c; }
+  rec.sAB = d("sAB"); rec.sCD = d("sCD"); rec.sBox = d("sBox");
+  rec.sales = rec.mtype === "box" ? rec.sBox : rec.sAB + rec.sCD;
+  rec.plays = Math.round(rec.sales / PLAY_PRICE);
+  rec.cum = cum; rec.prevId = prev ? prev.id : "";
+  return rec;
+}
+/* 既存の記録を全部、累計入力→差分のルールで計算し直し、_app_db と巡回ログ（プレイ数）・部屋別ログ（ペア売上）を更新する。
+   何度実行しても結果は同じ。エディタから実行 */
+function recomputeSalesDeltas() {
+  var sh = dbSheet(); var last = sh.getLastRow(); if (last < 2) return "記録なし";
+  var v = sh.getRange(2, 1, last - 1, 6).getValues();
+  var rows = [];
+  v.forEach(function (r, i) { if (String(r[0]) !== "weekly") return; var rec; try { rec = JSON.parse(r[5]); } catch (e) { return; } rec.id = String(r[1]); rows.push({ row: i + 2, rec: rec }); });
+  rows.sort(function (a, b) { return String(a.rec.createdAt || "").localeCompare(String(b.rec.createdAt || "")); });
+  var done = [], changed = 0;
+  var log = ss().getSheetByName("巡回ログ"), room = ss().getSheetByName("部屋別ログ");
+  var logId = log ? idColumn(log, false) : 0, roomId = room ? idColumn(room, false) : 0;
+  var logIds = (log && logId && log.getLastRow() > 1) ? log.getRange(2, logId, log.getLastRow() - 1, 1).getValues().map(function (x) { return String(x[0]); }) : [];
+  var roomVals = (room && roomId && room.getLastRow() > 1) ? room.getRange(2, 1, room.getLastRow() - 1, roomId).getValues() : [];
+  rows.forEach(function (x) {
+    var rec = x.rec, before = JSON.stringify([rec.sAB, rec.sCD, rec.sBox, rec.sales, rec.plays]);
+    applySalesDelta(rec, done);
+    done.push(rec);
+    if (JSON.stringify([rec.sAB, rec.sCD, rec.sBox, rec.sales, rec.plays]) !== before || !x.rec.cum) changed++;
+    sh.getRange(x.row, 4, 1, 2).setValues([[nowIso(), "recompute"]]);
+    sh.getRange(x.row, 6).setValue(JSON.stringify(stripId(rec)));
+    // 巡回ログ：E列 プレイ数
+    logIds.forEach(function (id, i) { if (id === rec.id) log.getRange(i + 2, 5).setValue(num(rec.plays)); });
+    // 部屋別ログ：G列 ペア売上（A/B→sAB、C/D→sCD、枠・本体→sBox）
+    roomVals.forEach(function (rv, i) {
+      if (String(rv[roomId - 1]) !== rec.id) return;
+      var k = String(rv[3]); var pair = (k === "A" || k === "B") ? rec.sAB : (k === "C" || k === "D") ? rec.sCD : rec.sBox;
+      room.getRange(i + 2, 7).setValue(num(pair));
+    });
+  });
+  var msg = "売上の差分を計算し直しました：" + rows.length + " 件（値が変わった/累計を補った " + changed + " 件）";
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
 function patchDoc(me, col, id, obj) {
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
@@ -172,6 +228,11 @@ function patchDoc(me, col, id, obj) {
 function removeDoc(me, col, id) {
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
   var row = findDbRow(col, id);
+  if (row && me.role !== "admin") {                     // 削除は登録した本人か管理者だけ
+    var rec; try { rec = JSON.parse(dbSheet().getRange(row, 6).getValue()); } catch (e) { rec = {}; }
+    var owner = rec.by || rec.staff || "";
+    if (owner && owner !== me.name) throw new Error("この記録は " + owner + " さんが登録したものなので削除できません");
+  }
   if (row) dbSheet().deleteRow(row);
   dematerialize(col, id);
   return { ok: true };
