@@ -504,6 +504,24 @@ function repairDates() {
   var msg = "日付を書き直しました：" + n + " 行（スプシのタイムゾーン " + sheetTz() + " 基準）";
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
+/* 旧アプリから移行した記録のうち、10/6 に入力されたのに訪問日が 10/5（当時の週キー）になっていた4件を 10/6 に直す。
+   _app_db の week を書き換え、巡回ログ・部屋別ログの A列も repairDates() で書き直す。何度実行しても同じ結果 */
+function fixVisitDates() {
+  var FIX = { m7v9mtwhkj2lf1ga4ovx: "2026-10-06", "6sxqysgo5hojclaycvdn": "2026-10-06", zgjurui20aaixqesdaz6: "2026-10-06", y6k1s9p3ptibnslmheeu: "2026-10-06" };
+  var sh = dbSheet(); var last = sh.getLastRow(); var n = 0;
+  if (last >= 2) {
+    var v = sh.getRange(2, 1, last - 1, 6).getValues();
+    v.forEach(function (r, i) {
+      if (String(r[0]) !== "weekly" || !FIX[String(r[1])]) return;
+      var rec; try { rec = JSON.parse(r[5]); } catch (e) { return; }
+      if (rec.week === FIX[String(r[1])]) return;
+      rec.week = FIX[String(r[1])];
+      sh.getRange(i + 2, 4, 1, 3).setValues([[nowIso(), "fixdate", JSON.stringify(rec)]]); n++;
+    });
+  }
+  var msg = "訪問日を直しました：" + n + " 件 → " + repairDates();
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
+}
 function setup() {            // 初回：スタッフタブと _app_db を作る（再実行しても安全）
   ensureStaffSheet(); dbSheet(); renameDateHeaders();
   SpreadsheetApp.getActive().toast("スタッフタブと _app_db を用意しました。スタッフタブで PIN を確認してください。");
