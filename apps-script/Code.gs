@@ -337,8 +337,9 @@ function roomLines(r, all) {
   });
   (r.rooms || []).forEach(function (x) {
     var pair = r.mtype === "4p" ? ((x.k === "A" || x.k === "B") ? r.sAB : r.sCD) : r.sBox;
-    var prevR = all.filter(function (o) { return o.id !== r.id && o.store === r.store && o.machine === r.machine && String(o.week) < String(r.week) && o.rooms; })
-      .sort(function (a, b) { return String(b.week).localeCompare(String(a.week)); })[0];
+    // 直前の訪問（同じ週でもよい）。記録の作成時刻で比べる
+    var prevR = all.filter(function (o) { return o.id !== r.id && o.store === r.store && o.machine === r.machine && String(o.createdAt || "") < String(r.createdAt || "") && o.rooms; })
+      .sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
     var pv = prevR ? (prevR.rooms || []).filter(function (y) { return y.k === x.k; })[0] : null;
     var dif = (pv && pv.counter !== "" && x.counter !== "") ? Math.round((num(x.counter) - num(pv.counter)) * 100) / 100 : "";
     out.push([wk, r.store, r.machine, x.k === "-" ? "本体" : x.k, x.counter === "" ? "" : num(x.counter), dif, num(pair),
@@ -410,6 +411,13 @@ function tagExistingLogRow(rec) {
 }
 
 /* ===================== 手動メンテ用（エディタから実行） ===================== */
+/* 巡回ログ・部屋別ログの A1「週」を「訪問日」に改名（記録は訪問ごと。K列の週キーは数式のまま） */
+function renameDateHeaders() {
+  ["巡回ログ", "部屋別ログ"].forEach(function (n) {
+    var sh = ss().getSheetByName(n); if (!sh) return;
+    if (String(sh.getRange(1, 1).getValue()).trim() === "週") sh.getRange(1, 1).setValue("訪問日");
+  });
+}
 /* アプリIDの付いた行の A列（週／日付）を _app_db の記録から書き直す。
    タイムゾーン差で日付が1日ずれて入った行の修復用。何度実行してもよい */
 function repairDates() {
@@ -430,7 +438,7 @@ function repairDates() {
   var msg = "日付を書き直しました：" + n + " 行（スプシのタイムゾーン " + sheetTz() + " 基準）";
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
-function setup() {            // 初回：スタッフタブと _app_db を作る
-  ensureStaffSheet(); dbSheet();
+function setup() {            // 初回：スタッフタブと _app_db を作る（再実行しても安全）
+  ensureStaffSheet(); dbSheet(); renameDateHeaders();
   SpreadsheetApp.getActive().toast("スタッフタブと _app_db を用意しました。スタッフタブで PIN を確認してください。");
 }

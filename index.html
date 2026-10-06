@@ -724,8 +724,8 @@ body{font-variant-numeric:tabular-nums}
 
       <div class="card wk" id="wkStrip" aria-live="polite">
         <div class="wk-row">
-          <div class="wk-k">この週の巡回</div>
-          <div class="wk-v"><b id="wkDone">0</b><span class="wk-of">/<span id="wkTotal">0</span>台</span></div>
+          <div class="wk-k" id="wkTitle">今月の巡回</div>
+          <div class="wk-v"><b id="wkDone">0</b><span class="wk-of" id="wkTotal">台</span></div>
         </div>
         <div class="wk-bar"><i id="wkBar" style="width:0%"></i></div>
         <div class="wk-sub"><span id="wkSales">売上 0円</span><span id="wkLast">まだ入力なし</span></div>
@@ -760,6 +760,13 @@ body{font-variant-numeric:tabular-nums}
 
       <div class="card">
         <div class="step"><em>3</em><h3>訪問の記録</h3></div>
+        <div class="field" style="margin-bottom:10px">
+          <span class="lbl">訪問日</span>
+          <div class="num-row">
+            <input class="txt" type="date" id="dateIn">
+            <button class="pad" id="dateToday" style="width:auto;padding:0 12px;font-size:12px;font-family:var(--fs-body)">きょう</button>
+          </div>
+        </div>
         <div class="grid2">
           <div class="field">
             <span class="lbl">訪問時間</span>
@@ -1041,7 +1048,7 @@ body{font-variant-numeric:tabular-nums}
             </div>
           </div>
           <div class="chartcard">
-            <h3>週ごとの売上</h3>
+            <h3>日ごとの売上</h3>
             <p class="cap">店舗を積み上げ。棒をタップすると内訳が出ます。</p>
             <div id="chWeek"></div>
             <div class="legend" id="chWeekLeg"></div>
@@ -1415,8 +1422,8 @@ const blankRoom = k => ({k, counter:"", prize:"", before:"", addPrize:"", add:""
 function lastVisit(){
   if(!F.store || !F.machine) return null;
   return Store.data.weekly
-    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots) && String(r.week) < String(F.week))
-    .sort((a,b)=>String(b.week).localeCompare(String(a.week)))[0] || null;
+    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots))
+    .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")))[0] || null;   // 直前の訪問（同じ週でもよい）
 }
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
 function prevStock(k){ const pr=prevRoom(k); return pr ? num(pr.before)+num(pr.add) : null; }
@@ -1871,26 +1878,35 @@ function renderPrizeDatalist(){
   )).filter(Boolean);
   $("#prizeList").innerHTML = names.map(n=>`<option value="${esc(n)}"></option>`).join("");
 }
+/* 記録は「訪問ごと」。F.week には訪問日（YYYY-MM-DD）が入る（項目名はスプレッドシート互換のため week のまま）。
+   同じ店に週に何度行っても、1回の訪問＝1件として記録する */
 function initWeek(){
-  F.week = toMonday(iso(new Date()));       // 週は常に「今週（月曜）」
+  F.week = iso(new Date());                 // 既定は今日
 }
 function setWeek(v){
-  const m = toMonday(v);
-  F.week = m;
-  $("#weekBadge").textContent = m ? `${jpDate(m)}の週` : "";
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(v||"") ? v : iso(new Date());
+  F.week = d;
+  $("#weekBadge").textContent = `訪問日 ${jpDate(d)}`;
+  const di=$("#dateIn"); if (di && di.value!==d) di.value = d;
   renderWeekStrip(); renderStoreRow(); renderLogStatus(); buildRooms(true);
 }
 
+function lastVisitDate(storeName){
+  const r = Store.data.weekly.filter(r=>r.store===storeName).sort((a,b)=>String(b.week).localeCompare(String(a.week)))[0];
+  return r ? r.week : "";
+}
 function renderStoreRow(){
   const doneKeys = new Set(Store.data.weekly.filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
   $("#storeRow").innerHTML = storesBySales().map(s=>{
     const total = s.machines.length;
     const done = s.machines.filter(m=>doneKeys.has(s.n+"|"+m)).length;
+    const lv = lastVisitDate(s.n);
+    const sub = done>0 ? `${jpDate(F.week)} ${done}/${total}台 入力済` : (lv ? `前回 ${jpDate(lv)}` : "まだ記録なし");
     return `<button class="store" data-v="${esc(s.n)}" aria-pressed="${s.n===F.store}" style="--sc:${storeColor(s.n)}">
       ${done===total ? '<span class="tick">✓</span>' : ''}
       <span class="biz">${esc(s.biz)}</span>
       <span class="nm">${esc(s.n)}</span>
-      <span class="ar">${esc(s.area)}・${done}/${total}台 入力済</span>
+      <span class="ar">${esc(s.area)}・${sub}</span>
     </button>`;
   }).join("");
   $("#storeRow").onclick = e => {
@@ -1909,26 +1925,30 @@ function renderMachineRow(){
 }
 function renderWeekStrip(){
   const el=$("#wkStrip"); if (!el) return;
-  const rows = Store.data.weekly.filter(r=>r.week===F.week);
-  const doneKeys = new Set(rows.map(r=>r.store+"|"+r.machine));
-  const total = STORES.reduce((n,s)=>n+s.machines.length,0);
-  const done = STORES.reduce((n,s)=>n+s.machines.filter(m=>doneKeys.has(s.n+"|"+m)).length,0);
-  const sales = rows.reduce((n,r)=>n+(num(r.sales)||num(r.plays)*PLAY_PRICE),0);
-  $("#wkDone").textContent = done; $("#wkTotal").textContent = total;
-  const bar=$("#wkBar"); bar.style.width = (total ? Math.round(done/total*100) : 0)+"%"; bar.dataset.full = (total && done>=total) ? "1" : "0";
+  const who = me(), mon = (F.week||iso(new Date())).slice(0,7);
+  const rows = Store.data.weekly.filter(r=>monthOf(r.week)===mon && staffOf(r)===who);
+  const n = rows.length;                                     // 1件＝1台の訪問記録
+  const goal = Store.goal(who).monthly;
+  const sales = rows.reduce((a,r)=>a+(num(r.sales)||num(r.plays)*PLAY_PRICE),0);
+  $("#wkTitle").textContent = `${jpMonth(mon)}の巡回（${who}）`;
+  $("#wkDone").textContent = n;
+  $("#wkTotal").textContent = goal>0 ? `/${goal}台` : "台";
+  const bar=$("#wkBar"); bar.parentElement.hidden = !(goal>0);
+  if (goal>0){ bar.style.width = Math.min(100, Math.round(n/goal*100))+"%"; bar.dataset.full = n>=goal ? "1" : "0"; }
   $("#wkSales").textContent = `売上 ${yen(sales)}円`;
   const last = rows.slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
   if (last){
-    const d = new Date(last.createdAt||""); const when = isNaN(d) ? "" : `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
-    $("#wkLast").textContent = `最終入力 ${when} ${last.store||""}`.trim();
-  } else $("#wkLast").textContent = "まだ入力なし";
+    const d = new Date(last.createdAt||""); const when = isNaN(d) ? jpDate(last.week) : `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+    $("#wkLast").textContent = `最終 ${when} ${last.store||""}`.trim();
+  } else $("#wkLast").textContent = "今月はまだ記録なし";
 }
 function renderLogStatus(){
   const st = storeOf(F.store);
   if (!st){ $("#storeDone").textContent=""; return; }
   const doneKeys = new Set(Store.data.weekly.filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
   const done = st.machines.filter(m=>doneKeys.has(st.n+"|"+m)).length;
-  $("#storeDone").textContent = `この週 ${done}/${st.machines.length}台`;
+  const lv = lastVisitDate(st.n);
+  $("#storeDone").textContent = done>0 ? `${jpDate(F.week)} ${done}/${st.machines.length}台 入力済` : (lv ? `前回の訪問 ${jpDate(lv)}` : "");
 }
 
 function updateReadouts(){
@@ -1940,7 +1960,7 @@ function updateReadouts(){
   else if (!F.machine) missing.push("①で機械を選ぶ");
   if (F.machine && !(t.sales>0)) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の売上金額を入れる（1円以上）" : "②で売上金額を入れる（1円以上）");
   $("#saveNote").textContent = ok
-    ? `${F.store}／${F.machine}／${jpDate(F.week)}の週　売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
+    ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
     : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
     : (F.machine && R && R.type==="4p") ? ""
     : "押せるようになるまで：" + missing.join(" → ");
@@ -1999,7 +2019,7 @@ function renderLogList(){
       <span class="sw"></span>
       <div class="bd">
         <div class="t1">${esc(r.store)}　<span style="font-weight:400;color:var(--ink-3)">${esc(r.machine)}</span></div>
-        <div class="t2">${jpDate(r.week)}の週　${yen(sales)}円＝${yen(r.plays)}プレイ　払出${yen(r.pays)}</div>
+        <div class="t2">${jpDate(r.week)}${r.time?" "+esc(r.time):""}　${yen(sales)}円＝${yen(r.plays)}プレイ　払出${yen(r.pays)}</div>
         ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>
@@ -2268,12 +2288,12 @@ function drawBench(rows){
       aria-label="店舗別 いまの月売上と引継ぎ前の月平均の比較">${body}</svg>`;
 }
 
-/* --- chart 2: 週次売上（店舗で積み上げ） --- */
+/* --- chart 2: 訪問日ごとの売上（店舗で積み上げ） --- */
 function drawWeek(){
   const weeks = Array.from(new Set(activeWeekly().map(r=>r.week).filter(Boolean))).sort().slice(-8);
   const el=$("#chWeek");
   if(!weeks.length){
-    el.innerHTML = `<div class="empty"><b>📊</b>巡回ログを入れると、ここに週ごとの棒グラフが出ます。</div>`;
+    el.innerHTML = `<div class="empty"><b>📊</b>巡回ログを入れると、ここに訪問日ごとの棒グラフが出ます。</div>`;
     $("#chWeekLeg").innerHTML=""; return;
   }
   const used = STORES.filter(s=>activeWeekly().some(r=>r.store===s.n));
@@ -2302,7 +2322,7 @@ function drawWeek(){
       const h=(sg.v/max)*ih, y=ty(acc+sg.v);
       bars+=`<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h-2)}" rx="3"
         fill="${storeColor(sg.name)}" class="hit"
-        data-tip="${esc(jpDate(d.w))}の週 ・ ${esc(sg.name)}&#10;${yen(sg.v)}円"/>`;
+        data-tip="${esc(jpDate(d.w))} ・ ${esc(sg.name)}&#10;${yen(sg.v)}円"/>`;
       acc+=sg.v;
     });
     bars+=`<text x="${cx}" y="${ty(d.total)-5}" text-anchor="middle" font-size="9" font-weight="700"
@@ -2310,7 +2330,7 @@ function drawWeek(){
     bars+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" class="mn">${jpDate(d.w)}</text>`;
   });
   el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
-    aria-label="週ごとの売上（店舗別の積み上げ棒グラフ）">
+    aria-label="訪問日ごとの売上（店舗別の積み上げ棒グラフ）">
     ${g}<line x1="${PL}" y1="${PT+ih}" x2="${W-PR}" y2="${PT+ih}" stroke="var(--axis)" stroke-width="1"/>${bars}</svg>`;
   $("#chWeekLeg").innerHTML = used.map(s=>`<span><i style="background:${storeColor(s.n)}"></i>${esc(s.n)}</span>`).join("");
   bindTips(el);
@@ -2349,13 +2369,13 @@ function drawCostTrend(){
   const dots = pts.map((p,i)=>{
     const last=i===pts.length-1;
     return `<circle cx="${tx(i)}" cy="${ty(p.v)}" r="${last?5.5:4}" fill="${last?"var(--s3)":"var(--surface)"}"
-      stroke="var(--s3)" stroke-width="2" class="hit" data-tip="${esc(jpDate(p.w))}の週&#10;原価率 ${pct(p.v,1)}"/>`;
+      stroke="var(--s3)" stroke-width="2" class="hit" data-tip="${esc(jpDate(p.w))}&#10;原価率 ${pct(p.v,1)}"/>`;
   }).join("");
   const labels = pts.map((p,i)=> (i===0||i===pts.length-1||pts.length<=5)
     ? `<text x="${tx(i)}" y="${H-9}" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" class="mn">${jpDate(p.w)}</text>`:"").join("");
   const lastV = pts[pts.length-1].v;
   el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
-      aria-label="景品原価率の週ごとの推移。目標30%の基準線つき">
+      aria-label="景品原価率の訪問日ごとの推移。目標30%の基準線つき">
       ${g}${refs}${area}${line}${dots}${labels}
       <text x="${tx(pts.length-1)}" y="${ty(lastV)-11}" text-anchor="end" font-size="10" font-weight="700"
         fill="var(--ink)" class="mn">${pct(lastV,1)}</text></svg>`;
@@ -2426,7 +2446,7 @@ const SHEETS = [
     { range:"A〜F列", note:"G列（月キー）は自動",
       cols:r=>[(r.date||"").replace(/-/g,"/"),r.store,r.kind,r.net,r.payee||"",r.memo||""] }]},
 ];
-const ROOM_HEAD = ["週","店舗","機械","部屋","カウンター数","カウンター差","ペア売上","景品","補充前数","補充景品","補充数","払出数"];
+const ROOM_HEAD = ["訪問日","店舗","機械","部屋","カウンター数","カウンター差","ペア売上","景品","補充前数","補充景品","補充数","払出数"];
 function sheetMemo(r){
   return [r.auto||"", r.memo||""].filter(Boolean).join(" ｜ ");
 }
@@ -2441,8 +2461,8 @@ function roomLines(rows){
     (r.rooms||[]).forEach(x=>{
       const pair = r.mtype==="4p" ? (x.k==="A"||x.k==="B" ? r.sAB : r.sCD) : r.sBox;
       const prevR = Store.data.weekly
-        .filter(o=>o.store===r.store && o.machine===r.machine && String(o.week)<String(r.week) && o.rooms)
-        .sort((a,b)=>String(b.week).localeCompare(String(a.week)))[0];
+        .filter(o=>o.id!==r.id && o.store===r.store && o.machine===r.machine && String(o.createdAt||"")<String(r.createdAt||"") && o.rooms)
+        .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
       const pv = prevR ? (prevR.rooms||[]).find(y=>y.k===x.k) : null;
       const dif = (pv && pv.counter!=="" && x.counter!=="") ? (num(x.counter)-num(pv.counter)).toFixed(2) : "";
       out.push([r.week,r.store,r.machine,x.k==="-"?"本体":x.k,x.counter,dif,pair,
@@ -2945,6 +2965,8 @@ function wire(){
     const d=new Date();
     $("#timeIn").value = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
   };
+  $("#dateIn").onchange = e => setWeek(e.target.value);
+  $("#dateToday").onclick = () => setWeek(iso(new Date()));
   $("#saveLog").onclick = saveLog;
 
   // 景品
@@ -3050,6 +3072,7 @@ $("#exDate").value = iso(new Date());
 $("#pzRateN").value = pzCostRate;
 wire();
 renderStaffSelect();
+$("#dateIn").value = iso(new Date());
 setWeek(iso(new Date()));
 updateReadouts();
 updatePzGauge();
