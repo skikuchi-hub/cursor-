@@ -1244,14 +1244,31 @@ const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になってい�
 
 /* 新しいバージョンの検知：index.html の ETag を同期のたびに HEAD で確認し、変わっていたら更新バーを出す
    （ホーム画面アプリは古い画面を保持しがちなため） */
-let APP_ETAG = null;
+let APP_ETAG = null, UPDATE_PENDING = false;
+/* 入力の途中か（途中なら勝手に再読み込みしない） */
+function formDirty(){
+  try {
+    const ae = document.activeElement;
+    if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName) && ae.id!=="gatePin") return true;
+    if (F.machine) return true;                                   // 巡回の入力中
+    if (clean($("#pzName").value) || clean($("#pzMemo").value)) return true;
+    if (num($("#exNet").value)!==0 || clean($("#exMemo").value)) return true;
+    if (clean($("#memoIn").value)) return true;
+  } catch(e){}
+  return false;
+}
+function applyUpdateIfIdle(){
+  if (!UPDATE_PENDING) return;
+  if (!formDirty()){ location.reload(); return; }
+  const b=$("#updBar"); if (b) b.hidden=false;                    // 入力中はバーだけ出し、保存後に切り替える
+}
 async function checkAppUpdate(){
   try {
     const res = await fetch(location.pathname.endsWith("/") ? location.pathname+"index.html" : location.pathname, {method:"HEAD", cache:"no-store"});
     const tag = res.headers.get("ETag") || res.headers.get("Last-Modified") || "";
     if (!tag) return;
     if (APP_ETAG===null){ APP_ETAG = tag; return; }
-    if (tag!==APP_ETAG){ const b=$("#updBar"); if (b) b.hidden=false; }
+    if (tag!==APP_ETAG){ UPDATE_PENDING = true; applyUpdateIfIdle(); }
   } catch(e){}
 }
 
@@ -1300,7 +1317,7 @@ const Store = {
   startPolling(){
     clearInterval(this.pollT);
     this.pollT = setInterval(()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); }, 60000);
-    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); });
+    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN){ applyUpdateIfIdle(); this.sync(false); } });
   },
   async sync(first){
     if (this.syncing || !PIN) return; this.syncing=true;
@@ -1353,7 +1370,9 @@ const Store = {
       if (!this.online()){ toast("いまは保存できません（オフライン）。電波のある所でもう一度押してください"); return false; }
       try {
         const r = await api("add", {col:c, rec});
-        this.data[c] = (this.data[c]||[]).filter(x=>x.id!==r.rec.id).concat(r.rec); render(); return true;
+        this.data[c] = (this.data[c]||[]).filter(x=>x.id!==r.rec.id).concat(r.rec); render();
+        setTimeout(applyUpdateIfIdle, 1500);                     // 保存が終わって手が空いたら新版へ
+        return true;
       } catch(e){ if (e.code==="unauthorized") this.sync(false); toast(errMsg(e)); return false; }
     }
     rec.id = "l"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); rec._local = true;
