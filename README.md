@@ -14,6 +14,9 @@ apps-script/appsscript.json  Apps Script のマニフェスト
 
 ## 仕組み
 
+- 記録は訪問ごと。売上欄は機械に出ている **今月の累計** を入力し、前回訪問との差分（今回分）が記録される。
+- 削除は登録した本人と管理者だけ。
+
 - 利用者はURLを開き、スタッフごとの **PIN** を入れる（端末に記憶、2回目以降は不要）。
 - 保存はすべて Apps Script 経由。Apps Script は
   1. 隠しタブ `_app_db` にアプリの記録を JSON で保存（アプリが読む正）
@@ -59,6 +62,11 @@ Branch にこのアプリの入ったブランチ、フォルダ `/ (root)` を�
 画面や計算の修正は `index.html` を直して push するだけ。1分ほどで反映される。
 Apps Script 側（`Code.gs`）を変えたときは、貼り直して保存したあと
 **デプロイ → デプロイを管理 → 編集 → バージョン：新バージョン → デプロイ** を行う（URLは変わらない）。
+
+## 手動メンテ関数（Apps Script エディタから実行）
+
+`setup`（初期化）／`importFromDrive`（旧アプリ移行）／`repairDates`（日付の書き直し）／`fixVisitDates`（移行分の訪問日修正）／
+`recomputeSalesDeltas`（累計→差分の再計算）。詳細は HANDOVER.md。
 
 ## PIN を入れ直す
 
