@@ -1,0 +1,3073 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#1b2d5b">
+<style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style>
+<title>クレーン日報</title>
+<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png">
+<link rel="icon" type="image/png" sizes="180x180" href="icon-180.png">
+<meta name="apple-mobile-web-app-title" content="クレーン日報">
+<meta name="application-name" content="クレーン日報">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700;900&family=Barlow:wght@600;700&family=DotGothic16&display=swap">
+<script src="config.js"></script>
+</head>
+<body>
+
+
+<style>
+/* ============ tokens ============ */
+:root{
+  color-scheme: light;
+  /* 役割色（土台＝ネイビー／お祝い＝ゴールド／補助＝スカイ・グリーン） */
+  --navy:#1b2d5b; --navy-2:#2a4a8c;
+  --gold:#f5c542; --gold-ink:#b57f00; --gold-text:#9c6d00; --gold-wash:#fff2c9;
+  --sky:#2f7fc6; --sky-ink:#2a6fb0; --sky-wash:#e4effa;
+  --green:#4b7a2a; --green-ink:#3c6321; --green-wash:#e5efd9;
+  --danger:#b8432c; --danger-ink:#8f3322; --danger-wash:#fbe7e3;
+  --plane:#f3f6fa; --surface:#ffffff; --surface-2:#f7f9fc; --surface-sunk:#eef2f7;
+  --ink:#14203a; --ink-2:#5a6a84; --ink-3:#64748f; --line:#dbe3ee; --line-2:#c3cfdf;
+  --shadow:0 12px 30px -18px rgba(27,45,91,.45);
+  --hero-grad:linear-gradient(155deg,#1b2d5b 0%,#2a4a8c 100%);
+  --hero-glow:radial-gradient(circle at 100% 0%, rgba(245,197,66,.16) 0%, rgba(245,197,66,0) 55%);
+  --hl:linear-gradient(transparent 62%, #fff2c9 62%);
+  /* 既存CSSの配線を変えないための旧名エイリアス */
+  --rose:var(--navy); --rose-ink:var(--navy); --rose-wash:var(--sky-wash);
+  --violet:var(--sky); --violet-wash:var(--sky-wash);
+  --amber:var(--gold-ink); --amber-wash:var(--gold-wash);
+  --aqua:var(--green); --aqua-ink:var(--green-ink); --aqua-wash:var(--green-wash);
+  /* 状態色（◎順調＝グリーン／△注意＝ゴールド） */
+  --good:#4b7a2a; --warning:#d99a00; --serious:#e07b39; --critical:#b8432c;
+  --good-ink:#3c6321; --warning-ink:#8a6200; --critical-ink:#8f3322;
+  /* グラフ系列（検証済み・両モード同じ色相順） */
+  --s1:#2f7fc6; --s2:#c4457f; --s3:#3f7a1a; --s4:#6b57c4; --s5:#e07b39; --s6:#1f9e8c;
+  --grid:#e6ecf4; --axis:#c3cfdf; --bench:#b9c6d8;
+  --r-s:8px; --r-m:14px; --r-l:18px;
+  --fs-display:'Zen Kaku Gothic New',"Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  --fs-body:'Zen Kaku Gothic New',"Hiragino Sans","Hiragino Kaku Gothic ProN",system-ui,sans-serif;
+  --fs-mono:'Barlow','Zen Kaku Gothic New',"Hiragino Sans",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --gold-ink:#f5c542; --gold-text:#f5c542; --gold-wash:#3a3012;
+    --sky:#5fa8e8; --sky-ink:#7fb8ea; --sky-wash:#1b3356;
+    --green:#7fb352; --green-ink:#9ccf6b; --green-wash:#1f3320;
+    --danger:#e0705a; --danger-ink:#f08a76; --danger-wash:#44231d;
+    --plane:#0f1729; --surface:#16213c; --surface-2:#1c2a4a; --surface-sunk:#111b33;
+    --ink:#eef3fb; --ink-2:#a8b8d4; --ink-3:#8a9bb8; --line:#2a3b5e; --line-2:#3a4f78;
+    --shadow:0 14px 34px -18px rgba(0,0,0,.8);
+    --hl:linear-gradient(transparent 62%, #3a3012 62%);
+    --rose:var(--navy-2); --rose-ink:var(--sky-ink); --rose-wash:var(--sky-wash);
+    --good:#7fb352; --warning:#f5c542; --serious:#e8894a; --critical:#e0705a;
+    --good-ink:#9ccf6b; --warning-ink:#f5c542; --critical-ink:#f08a76;
+    --s1:#4a90d0; --s2:#c94f85; --s3:#5e8f2e; --s4:#8a74e0; --s5:#d6782f; --s6:#1f9484;
+    --grid:#243454; --axis:#3a4f78; --bench:#4d6189;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --gold-ink:#f5c542; --gold-text:#f5c542; --gold-wash:#3a3012;
+  --sky:#5fa8e8; --sky-ink:#7fb8ea; --sky-wash:#1b3356;
+  --green:#7fb352; --green-ink:#9ccf6b; --green-wash:#1f3320;
+  --danger:#e0705a; --danger-ink:#f08a76; --danger-wash:#44231d;
+  --plane:#0f1729; --surface:#16213c; --surface-2:#1c2a4a; --surface-sunk:#111b33;
+  --ink:#eef3fb; --ink-2:#a8b8d4; --ink-3:#8a9bb8; --line:#2a3b5e; --line-2:#3a4f78;
+  --shadow:0 14px 34px -18px rgba(0,0,0,.8);
+  --hl:linear-gradient(transparent 62%, #3a3012 62%);
+  --rose:var(--navy-2); --rose-ink:var(--sky-ink); --rose-wash:var(--sky-wash);
+  --good:#7fb352; --warning:#f5c542; --serious:#e8894a; --critical:#e0705a;
+  --good-ink:#9ccf6b; --warning-ink:#f5c542; --critical-ink:#f08a76;
+  --s1:#4a90d0; --s2:#c94f85; --s3:#5e8f2e; --s4:#8a74e0; --s5:#d6782f; --s6:#1f9484;
+  --grid:#243454; --axis:#3a4f78; --bench:#4d6189;
+}
+
+/* ============ base ============ */
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--plane); color:var(--ink);
+  font-family:var(--fs-body); font-size:15px; line-height:1.6;
+  -webkit-text-size-adjust:100%;
+}
+button{font:inherit;color:inherit;cursor:pointer}
+input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{margin:0;text-wrap:balance}
+.app{max-width:560px;margin:0 auto;min-height:100vh;background:var(--plane);position:relative;overflow:hidden}
+@media (min-width:600px){
+  .app{box-shadow:0 0 0 1px var(--line), 0 30px 80px -40px rgba(42,31,61,.6); border-radius:0}
+}
+
+/* ============ header / marquee ============ */
+.hdr{
+  position:sticky;top:0;z-index:40;
+  background:linear-gradient(180deg,var(--surface) 0%,var(--surface) 72%,var(--surface-2) 100%);
+  border-bottom:1px solid var(--line);
+}
+.marquee{display:flex;gap:5px;padding:5px 12px 0;justify-content:center}
+.marquee i{width:5px;height:5px;border-radius:50%;background:var(--line-2);display:block}
+@media (prefers-reduced-motion:no-preference){
+  .marquee i{animation:blink 1.8s linear infinite}
+  @keyframes blink{0%,100%{background:var(--line-2);transform:scale(1)}45%{background:var(--amber);transform:scale(1.5)}}
+}
+.hdr-row{display:flex;align-items:center;gap:10px;padding:6px 14px 0}
+.hdr-sub{display:flex;align-items:center;gap:10px;padding:3px 15px 9px;font-size:10.5px;color:var(--ink-3)}
+.hdr-sub>span:first-child{letter-spacing:.04em}
+.hdr-sub .save-dot{margin-left:auto}
+.brand{display:flex;align-items:baseline;gap:7px;min-width:0;flex:1}
+.brand b{font-family:var(--fs-display);font-size:17px;font-weight:400;letter-spacing:.01em;white-space:nowrap}
+.brand span{font-size:10.5px;color:var(--ink-3);letter-spacing:.08em;white-space:nowrap}
+.hdr-btn{
+  display:inline-flex;align-items:center;gap:6px;flex:none;
+  background:var(--rose);color:#fff;border:0;border-radius:999px;
+  padding:8px 13px;font-size:12.5px;font-weight:700;
+  box-shadow:0 2px 0 rgba(0,0,0,.18);
+}
+.hdr-btn:active{transform:translateY(1px);box-shadow:none}
+.hdr-btn .cnt{
+  background:#fff;color:var(--rose-ink);border-radius:999px;
+  min-width:19px;padding:0 5px;font-family:var(--fs-mono);font-size:11px;font-weight:700;line-height:17px;text-align:center
+}
+.hdr-btn[data-zero="1"]{background:var(--surface-sunk);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+.hdr-btn[data-zero="1"] .cnt{background:transparent;color:var(--ink-3)}
+.save-dot{font-size:10px;color:var(--ink-3);display:flex;align-items:center;gap:4px;flex:none}
+.save-dot b{width:7px;height:7px;border-radius:50%;background:var(--good);display:block}
+.save-dot[data-mode="local"] b{background:var(--warning)}
+
+/* ============ layout ============ */
+main{padding:14px 13px 96px}
+.panel{display:none}
+.panel.on{display:block}
+@media (prefers-reduced-motion:no-preference){
+  .panel.on{animation:rise .26s cubic-bezier(.2,.9,.3,1)}
+  @keyframes rise{from{opacity:.4;transform:translateY(8px)}to{opacity:1;transform:none}}
+}
+.card{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);
+  padding:14px;margin-bottom:12px;
+}
+.card.flush{padding:0;overflow:hidden}
+.lbl{
+  display:block;font-size:10.5px;font-weight:700;letter-spacing:.11em;
+  color:var(--ink-3);text-transform:uppercase;margin-bottom:8px;
+}
+.lbl .req{color:var(--rose);margin-left:3px}
+.hint{font-size:11.5px;color:var(--ink-3);line-height:1.5;margin:6px 0 0}
+.step{display:flex;align-items:center;gap:8px;margin:0 0 10px}
+.step em{
+  font-family:var(--fs-mono);font-size:11px;font-weight:700;font-style:normal;
+  background:var(--ink);color:var(--surface);width:20px;height:20px;border-radius:6px;
+  display:grid;place-items:center;flex:none;
+}
+.step h3{font-size:14px;font-weight:700}
+.step .sub{font-size:11px;color:var(--ink-3);margin-left:auto;flex:none}
+
+/* ============ chips & inputs ============ */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.chip{
+  background:var(--surface-2);border:1.5px solid var(--line);border-radius:999px;
+  padding:8px 13px;font-size:13px;font-weight:500;white-space:nowrap;
+  transition:transform .12s, background .12s, border-color .12s;
+}
+.chip:active{transform:scale(.95)}
+.chip[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--surface);font-weight:700}
+.chip.mini{padding:6px 10px;font-size:11.5px}
+.chip.ghost{background:transparent;border-style:dashed;color:var(--ink-2)}
+
+.store-row{display:flex;gap:9px;overflow-x:auto;padding:2px 0 7px;scrollbar-width:thin}
+.store{
+  flex:none;width:132px;text-align:left;background:var(--surface-2);
+  border:1.5px solid var(--line);border-radius:var(--r-m);padding:10px 11px;
+  transition:transform .14s cubic-bezier(.2,.9,.3,1), box-shadow .14s, border-color .14s;
+  position:relative;
+}
+.store:active{transform:scale(.96)}
+.store .biz{
+  font-size:9.5px;font-weight:700;letter-spacing:.07em;padding:2px 6px;border-radius:5px;display:inline-block;
+  background:var(--surface);border:1px solid var(--line);color:var(--ink-2);
+}
+.store .nm{display:block;font-size:13px;font-weight:700;line-height:1.35;margin:7px 0 2px}
+.store .ar{display:block;font-size:10.5px;color:var(--ink-3)}
+.store[aria-pressed="true"]{
+  border-color:var(--sc,var(--rose));background:var(--surface);
+  box-shadow:0 0 0 3px color-mix(in srgb,var(--sc,var(--rose)) 20%,transparent), var(--shadow);
+}
+.store[aria-pressed="true"] .biz{background:var(--sc,var(--rose));border-color:var(--sc,var(--rose));color:#fff}
+.store .tick{
+  position:absolute;top:8px;right:9px;font-size:12px;color:var(--good);font-weight:700;
+}
+
+.num-row{display:flex;align-items:stretch;gap:8px}
+.num-row .pad{
+  width:46px;flex:none;background:var(--surface-2);border:1.5px solid var(--line);
+  border-radius:var(--r-s);font-family:var(--fs-mono);font-size:17px;font-weight:700;
+}
+.num-row .pad:active{background:var(--ink);color:var(--surface)}
+input.num{
+  flex:1;min-width:0;text-align:center;background:var(--surface-sunk);
+  border:1.5px solid var(--line);border-radius:var(--r-s);padding:10px 8px;
+  font-family:var(--fs-mono);font-size:26px;font-weight:700;letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+}
+input.num:focus-visible,input.txt:focus-visible,select.txt:focus-visible,textarea.txt:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--violet) 55%,transparent);outline-offset:1px;border-color:var(--violet)
+}
+.chip:focus-visible,.store:focus-visible,.tab:focus-visible,button:focus-visible{
+  outline:3px solid color-mix(in srgb,var(--violet) 55%,transparent);outline-offset:2px
+}
+input.txt,select.txt,textarea.txt{
+  width:100%;background:var(--surface-sunk);border:1.5px solid var(--line);
+  border-radius:var(--r-s);padding:10px 11px;font-size:15px;
+}
+textarea.txt{resize:vertical;min-height:62px;line-height:1.55}
+.quick{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.field{margin-bottom:13px}
+.field:last-child{margin-bottom:0}
+.grid2{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.grid2>.field{min-width:0}
+input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appearance:none;appearance:none;display:block}
+@media (max-width:379px){.grid2{grid-template-columns:1fr}}
+
+/* ============ readouts ============ */
+.read{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line)}
+.read div{background:var(--surface);padding:11px 9px;text-align:center}
+.read .k{font-size:9.5px;letter-spacing:.07em;color:var(--ink-3);font-weight:700;display:block}
+.read .v{font-family:var(--fs-mono);font-size:19px;font-weight:700;display:block;margin-top:3px;font-variant-numeric:tabular-nums}
+.read .u{font-size:11px;color:var(--ink-3);font-weight:400}
+.gaugewrap{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--surface)}
+.gaugewrap svg{flex:none}
+.gmeta{min-width:0}
+.pill{
+  display:inline-flex;align-items:center;gap:5px;border-radius:999px;
+  padding:3px 10px;font-size:11.5px;font-weight:700;
+}
+.pill.ok{background:var(--aqua-wash);color:var(--aqua-ink)}
+.pill.warn{background:var(--amber-wash);color:var(--warning-ink)}
+.pill.bad{background:var(--rose-wash);color:var(--critical-ink)}
+.pill.flat{background:var(--surface-sunk);color:var(--ink-3)}
+.gmeta p{margin:6px 0 0;font-size:11.5px;color:var(--ink-2);line-height:1.5}
+
+/* ============ big save ============ */
+.save{
+  width:100%;border:0;border-radius:var(--r-m);padding:16px;
+  background:var(--rose);color:#fff;font-family:var(--fs-display);font-size:18px;
+  letter-spacing:.03em;box-shadow:0 4px 0 color-mix(in srgb,var(--rose) 70%,#000);
+  transition:transform .1s, box-shadow .1s;
+}
+.save:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--rose) 70%,#000)}
+.save:disabled{background:var(--surface-sunk);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
+.save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
+
+/* ============ tabs ============ */
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;z-index:50;
+  display:grid;grid-template-columns:repeat(4,1fr);
+  background:color-mix(in srgb,var(--surface) 94%,transparent);
+  backdrop-filter:blur(12px);border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+  max-width:560px;margin:0 auto;
+}
+/* iPhone の Safari では下のアドレスバーが出てきてもタブが隠れないよう、バーの下に余白を取る（JS で html.ios-bar を付ける） */
+html.ios-bar .tabbar{padding-bottom:calc(86px + env(safe-area-inset-bottom))}
+html.ios-bar main{padding-bottom:180px}
+html.ios-bar .toast{bottom:176px}
+.tab{
+  background:none;border:0;padding:9px 2px 10px;display:flex;flex-direction:column;
+  align-items:center;gap:3px;color:var(--ink-3);font-size:9.5px;font-weight:700;letter-spacing:.02em;
+}
+.tab i{font-size:19px;font-style:normal;line-height:1;transition:transform .16s cubic-bezier(.2,1.5,.4,1)}
+.tab[aria-selected="true"]{color:var(--ink)}
+.tab[aria-selected="true"] i{transform:translateY(-2px) scale(1.14)}
+.tab[aria-selected="true"]::after{content:"";width:18px;height:3px;border-radius:2px;background:var(--rose);margin-top:1px}
+
+/* ============ lists & tables ============ */
+.rowitem{display:flex;gap:10px;align-items:flex-start;padding:11px 13px;border-top:1px solid var(--line)}
+.rowitem:first-child{border-top:0}
+.rowitem .sw{width:4px;align-self:stretch;border-radius:3px;background:var(--sc,var(--ink-3));flex:none}
+.rowitem .bd{flex:1;min-width:0}
+.rowitem .t1{font-size:13px;font-weight:700;line-height:1.4}
+.rowitem .t2{font-size:11.5px;color:var(--ink-3);margin-top:2px;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+.rowitem .del{background:none;border:0;color:var(--ink-3);font-size:15px;padding:2px 4px;flex:none}
+.tag{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--surface-sunk);color:var(--ink-2);letter-spacing:.04em}
+.tag.sent{background:var(--aqua-wash);color:var(--aqua-ink)}
+.tag.todo{background:var(--rose-wash);color:var(--critical-ink)}
+.empty{padding:26px 16px;text-align:center;color:var(--ink-3);font-size:12.5px;line-height:1.7}
+.empty b{display:block;font-size:26px;margin-bottom:6px;opacity:.5}
+.tblwrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12px}
+th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
+th{font-size:10px;letter-spacing:.06em;color:var(--ink-3);font-weight:700;text-align:right;background:var(--surface-2)}
+th:first-child,td:first-child{text-align:left}
+td{font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+td:first-child{font-family:var(--fs-body)}
+
+/* ============ dashboard ============ */
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-bottom:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:11px 11px 12px}
+.tile .k{font-size:9.5px;letter-spacing:.07em;color:var(--ink-3);font-weight:700}
+.tile .v{font-family:var(--fs-mono);font-size:21px;font-weight:700;line-height:1.1;margin-top:6px;letter-spacing:-.02em}
+.tile .v small{font-size:11px;font-weight:500;color:var(--ink-3);letter-spacing:0}
+.tile.hero{grid-column:1/-1;background:linear-gradient(135deg,var(--rose) 0%,color-mix(in srgb,var(--violet) 72%,var(--rose)) 100%);border:0;color:#fff;padding:15px}
+.tile.hero .k{color:rgba(255,255,255,.78)}
+.tile.hero .v{font-size:36px;margin-top:4px}
+.tile.hero .v small{color:rgba(255,255,255,.8)}
+.tile.hero .sub{font-size:11.5px;color:rgba(255,255,255,.88);margin-top:7px}
+.chartcard{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);padding:14px 13px 10px;margin-bottom:12px}
+.chartcard h3{font-size:13.5px;font-weight:700}
+.chartcard .cap{font-size:11px;color:var(--ink-3);margin:3px 0 11px;line-height:1.5}
+.legend{display:flex;flex-wrap:wrap;gap:5px 12px;margin-top:9px}
+.legend span{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--ink-2)}
+.legend i{width:9px;height:9px;border-radius:3px;display:block;flex:none}
+.recov{display:flex;flex-direction:column;gap:11px}
+.recov .r1{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12.5px}
+.recov .r1 b{font-weight:700}
+.recov .r1 span{font-family:var(--fs-mono);font-size:11.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.bar{height:9px;border-radius:5px;background:var(--surface-sunk);overflow:hidden;margin-top:5px}
+.bar i{display:block;height:100%;border-radius:5px;background:var(--sc,var(--rose));transition:width .7s cubic-bezier(.2,.9,.3,1)}
+
+/* ============ drawer ============ */
+.scrim{position:fixed;inset:0;background:rgba(20,12,32,.55);z-index:60;opacity:0;pointer-events:none;transition:opacity .22s}
+.scrim.on{opacity:1;pointer-events:auto}
+.drawer{
+  position:fixed;left:0;right:0;bottom:0;z-index:61;max-width:560px;margin:0 auto;
+  background:var(--surface);border-radius:var(--r-l) var(--r-l) 0 0;
+  max-height:88vh;overflow-y:auto;transform:translateY(102%);
+  transition:transform .3s cubic-bezier(.2,.9,.3,1);
+  padding-bottom:calc(16px + env(safe-area-inset-bottom));
+  box-shadow:0 -10px 40px -10px rgba(0,0,0,.4);
+}
+.drawer.on{transform:none}
+.dhead{position:sticky;top:0;background:var(--surface);padding:14px 16px 11px;border-bottom:1px solid var(--line);z-index:2}
+.dhead .hd{display:flex;align-items:center;gap:10px}
+.dhead h2{font-family:var(--fs-display);font-size:16px;font-weight:900;flex:1}
+.dclose{background:var(--surface-sunk);border:0;border-radius:999px;width:30px;height:30px;font-size:15px;flex:none}
+.dbody{padding:14px 16px 4px}
+.xblock{border:1px solid var(--line);border-radius:var(--r-m);overflow:hidden;margin-bottom:13px}
+.xhead{display:flex;align-items:center;gap:9px;padding:11px 12px;background:var(--surface-2);border-bottom:1px solid var(--line)}
+.xhead .nm{font-size:13px;font-weight:700;flex:1;min-width:0}
+.xhead .ct{font-family:var(--fs-mono);font-size:11px;color:var(--ink-3)}
+.xwhere{padding:9px 12px;font-size:11.5px;color:var(--ink-2);background:var(--surface);border-bottom:1px solid var(--line);line-height:1.6}
+.xwhere code{font-family:var(--fs-mono);font-size:11px;background:var(--surface-sunk);padding:1px 5px;border-radius:4px}
+.tsv{
+  width:100%;border:0;border-bottom:1px solid var(--line);background:var(--surface-sunk);
+  font-family:var(--fs-mono);font-size:10.5px;line-height:1.7;padding:10px 12px;
+  white-space:pre;overflow-x:auto;resize:vertical;min-height:72px;display:block;
+}
+.xacts{display:flex;gap:8px;padding:10px 12px}
+.btn{
+  flex:1;border:1.5px solid var(--line);background:var(--surface-2);border-radius:var(--r-s);
+  padding:10px;font-size:12.5px;font-weight:700;text-align:center;
+}
+.btn.pri{background:var(--ink);border-color:var(--ink);color:var(--surface)}
+.btn.pri:active{transform:translateY(1px)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.link{text-decoration:none;color:inherit;display:block}
+.steps{margin:0 0 14px;padding:0 0 0 20px;font-size:12px;color:var(--ink-2);line-height:1.75}
+.steps li{margin-bottom:3px}
+
+/* ============ toast ============ */
+.toast{
+  position:fixed;left:50%;bottom:86px;transform:translate(-50%,16px);z-index:80;
+  background:var(--ink);color:var(--surface);padding:11px 18px;border-radius:999px;
+  font-size:13px;font-weight:700;opacity:0;pointer-events:none;transition:all .25s;
+  box-shadow:0 8px 24px -8px rgba(0,0,0,.5);max-width:92vw;text-align:center;
+}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+/* ============ tooltip ============ */
+.tip{
+  position:fixed;z-index:70;background:var(--ink);color:var(--surface);
+  font-size:11px;line-height:1.5;padding:7px 10px;border-radius:8px;pointer-events:none;
+  opacity:0;transition:opacity .13s;max-width:200px;box-shadow:0 6px 18px -6px rgba(0,0,0,.5);
+}
+.tip.on{opacity:1}
+.tip b{font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+
+.warnbox{
+  display:flex;gap:9px;background:var(--amber-wash);border:1px solid color-mix(in srgb,var(--warning) 40%,transparent);
+  border-radius:var(--r-s);padding:10px 12px;font-size:12px;line-height:1.55;margin-top:10px;color:var(--ink);
+}
+.warnbox.bad{background:var(--rose-wash);border-color:color-mix(in srgb,var(--critical) 40%,transparent)}
+.warnbox i{font-style:normal;flex:none}
+.ring{display:flex;align-items:center;gap:11px}
+.ring .txt{font-size:12px;color:var(--ink-2);line-height:1.5}
+.ring .txt b{display:block;font-size:13px;color:var(--ink)}
+/* ---- 部屋（A/B/C/D）入力 ---- */
+.zgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.zgrid.one{grid-template-columns:1fr}
+.rm{
+  background:var(--surface-2);border:1.5px solid var(--line);border-radius:var(--r-m);
+  padding:8px 8px 9px;display:flex;flex-direction:column;gap:5px;min-width:0;
+}
+.rm-top{display:flex;align-items:center;gap:6px;min-width:0}
+.rk{
+  display:inline-grid;place-items:center;width:22px;height:22px;border-radius:7px;flex:none;
+  background:var(--rk,var(--rose));color:#fff;font-family:var(--fs-display);font-size:12px;line-height:1;
+}
+.pname{
+  flex:1;min-width:0;background:none;border:0;border-radius:6px;padding:3px 5px;text-align:left;
+  font-size:12.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.pname:active{background:var(--surface-sunk)}
+.pname .pen{color:var(--ink-3);font-weight:400;font-size:10px;margin-left:4px}
+/* 景品名の候補（4人機用だけ。打った文字で絞り込む） */
+.rm-top,.combo-wrap{position:relative}
+.combo{position:absolute;left:0;right:0;top:100%;z-index:6;margin-top:3px;background:var(--surface);border:1.5px solid var(--line-2);border-radius:var(--r-s);box-shadow:var(--shadow);max-height:190px;overflow-y:auto}
+.combo button{display:block;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:9px 10px;font-size:13px;font-weight:600}
+.combo button:first-child{border-top:0}
+.combo button:active{background:var(--surface-sunk)}
+.combo .none{padding:8px 10px;font-size:11.5px;color:var(--ink-3)}
+.pname.none{color:var(--ink-3);font-weight:500}
+.pedit{
+  flex:1;min-width:0;background:var(--surface);border:1.5px solid var(--violet);border-radius:var(--r-s);
+  padding:6px 8px;font-size:13px;font-weight:700;
+}
+.mini{font-size:9px;font-weight:700;letter-spacing:.08em;color:var(--ink-3);display:block}
+.numin{
+  width:100%;background:var(--surface-sunk);border:1.5px solid var(--line);border-radius:var(--r-s);
+  padding:8px 4px;text-align:center;font-family:var(--fs-mono);font-size:19px;font-weight:700;
+  font-variant-numeric:tabular-nums;margin-top:2px;
+}
+.rm .dif{font-size:9.5px;color:var(--ink-3);text-align:center;font-family:var(--fs-mono);min-height:13px}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:6px;align-items:end}
+.addbtn{
+  width:100%;background:var(--surface);border:1.5px dashed var(--line-2);border-radius:var(--r-s);
+  padding:9px 2px;font-size:11.5px;font-weight:700;color:var(--ink-2);
+}
+.addbtn:active{background:var(--surface-sunk)}
+.swapbtn{
+  background:none;border:0;padding:2px 0 0;font-size:10.5px;color:var(--violet);font-weight:700;text-align:left;
+}
+.pz{font-size:10px;color:var(--ink-3);text-align:center;font-family:var(--fs-mono);min-height:13px}
+.pair{
+  display:flex;align-items:center;gap:8px;margin:8px 0 10px;
+  background:var(--rose-wash);border:1.5px solid color-mix(in srgb,var(--rose) 28%,transparent);
+  border-radius:var(--r-m);padding:8px 11px;
+}
+.pair .pk{font-size:11.5px;font-weight:700;color:var(--rose-ink);flex:none}
+.pair .yen{
+  flex:1;min-width:0;background:var(--surface);border:1.5px solid var(--line);border-radius:var(--r-s);
+  padding:8px 10px;text-align:right;font-family:var(--fs-mono);font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;
+}
+.pair .u{font-size:12px;color:var(--ink-2);flex:none}
+.pair .pp{font-size:10.5px;color:var(--ink-3);font-family:var(--fs-mono);flex:none;min-width:46px;text-align:right}
+/* ---- BOX（鍵式）の枠グリッド ---- */
+.modes{display:flex;gap:6px;margin-bottom:9px}
+.modes .chip{flex:1;text-align:center;padding:9px 6px;font-size:12px}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.slot{
+  position:relative;min-height:62px;border-radius:10px;border:1.5px solid var(--line);
+  background:var(--surface-2);padding:14px 4px 6px;display:flex;align-items:center;justify-content:center;
+}
+.slot .no{position:absolute;top:3px;left:6px;font-size:9px;font-family:var(--fs-mono);color:var(--ink-3)}
+.slot .mk{position:absolute;top:2px;right:5px;font-size:11px}
+.slot .nm{
+  font-size:10.5px;font-weight:700;line-height:1.3;text-align:center;word-break:break-all;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.slot.empty{background:var(--surface-sunk);border-style:dashed}
+.slot.empty .nm{color:var(--ink-3);font-weight:500}
+.slot.out{background:var(--rose-wash);border-color:var(--rose)}
+.slot.out .nm{opacity:.6;text-decoration:line-through}
+.slot.new{background:var(--aqua-wash);border-color:var(--aqua)}
+.slot.moved{background:var(--violet-wash);border-color:var(--violet)}
+.slot.sel{box-shadow:0 0 0 3px color-mix(in srgb,var(--violet) 45%,transparent);border-color:var(--violet)}
+.slot:active{transform:scale(.96)}
+.moverow{background:var(--violet-wash);border:1.5px solid color-mix(in srgb,var(--violet) 35%,transparent);
+  border-radius:var(--r-m);padding:10px 11px;margin-top:9px;font-size:12px;line-height:1.55}
+.slotbar{display:flex;align-items:center;gap:8px;margin:10px 0 2px;flex-wrap:wrap}
+.slotbar .stepper{display:flex;align-items:center;gap:5px;margin-left:auto}
+.slotbar .stepper button{
+  width:28px;height:28px;border-radius:8px;border:1.5px solid var(--line);background:var(--surface-2);
+  font-family:var(--fs-mono);font-weight:700;
+}
+.slotbar .stepper b{font-family:var(--fs-mono);font-size:14px;min-width:22px;text-align:center}
+.fillrow{background:var(--aqua-wash);border:1.5px solid color-mix(in srgb,var(--aqua) 35%,transparent);
+  border-radius:var(--r-m);padding:10px 11px;margin-top:9px}
+.fillrow .lbl{margin-bottom:7px}
+.stockpill{font-size:9.5px;font-family:var(--fs-mono);opacity:.75;margin-left:4px}
+.sumline{
+  display:flex;align-items:center;gap:9px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--ink-2);flex-wrap:wrap;
+}
+.sumline b{font-family:var(--fs-mono);font-size:15px;color:var(--ink);font-variant-numeric:tabular-nums}
+.sumline .fixbtn{
+  margin-left:auto;background:var(--surface-2);border:1.5px solid var(--line);border-radius:999px;
+  padding:5px 12px;font-size:11.5px;font-weight:700;
+}
+svg text{font-family:var(--fs-body)}
+svg text.mn{font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion:reduce){
+  *{animation-duration:.01ms !important;transition-duration:.01ms !important}
+}
+
+/* ============ 動き（数字の弾み・出現） ============ */
+.bump{animation:bump .35s cubic-bezier(.2,.9,.3,1.3)}
+@keyframes bump{0%{transform:scale(1)}45%{transform:scale(1.28)}100%{transform:scale(1)}}
+.popin{animation:popin .5s cubic-bezier(.2,.9,.3,1.3) both}
+@keyframes popin{from{opacity:0;transform:scale(.92) translateY(6px)}to{opacity:1;transform:none}}
+.hl{background:var(--hl);padding:0 .1em}
+@media (prefers-reduced-motion:reduce){
+  .bump,.popin{animation:none!important}
+}
+
+/* ============ 仕上げ（既存部品の見た目だけ） ============ */
+body{font-variant-numeric:tabular-nums}
+.brand b{font-weight:900}
+.dhead h2{font-weight:900}
+.save{font-weight:900}
+.tile.hero{background:var(--hero-glow),var(--hero-grad)}
+.tile.hero .v{color:var(--gold);font-size:44px}
+.tile.hero .v small{color:rgba(255,255,255,.85);font-family:var(--fs-body)}
+.pill.bad{background:var(--danger-wash);color:var(--danger-ink)}
+.warnbox.bad{background:var(--danger-wash);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
+.tag.todo{background:var(--gold-wash);color:var(--gold-text)}
+.slot.out{background:var(--gold-wash);border-color:var(--gold-ink)}
+.hdr-btn .cnt{color:var(--navy)}
+.hdr-btn[data-zero="0"]{background:var(--navy)}
+.tab[aria-selected="true"]{color:var(--navy)}
+.tab[aria-selected="true"]::after{background:var(--navy)}
+:root[data-theme="dark"] .tab[aria-selected="true"]{color:#fff}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tab[aria-selected="true"]{color:#fff}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .tab[aria-selected="true"]::after{background:var(--gold)}}
+:root[data-theme="dark"] .tab[aria-selected="true"]::after{background:var(--gold)}
+.gmeta p b,.hint b,.zhint b,.gNote b{background:var(--hl);padding:0 .1em}
+.step em{background:var(--navy);color:#fff}
+.chip,.tab,.btn,.hdr-btn,.store,.pad,.slot{transition:background-color .15s,color .15s,border-color .15s}
+.chip:active,.store:active,.slot:active,.pad:active,.hdr-btn:active,.save:active{transform:none}
+.tab i{transition:none}
+.tab[aria-selected="true"] i{transform:none}
+.store[aria-pressed="true"]{box-shadow:0 0 0 3px color-mix(in srgb,var(--sky) 28%,transparent)}
+.hdr-btn{box-shadow:none}
+.save{box-shadow:none}
+.save:active{box-shadow:none}
+:focus-visible{outline:3px solid var(--sky)!important;outline-offset:2px}
+.read .v,.tile .v{font-weight:700}
+.marquee i{animation-name:blink}
+@media (prefers-reduced-motion:no-preference){@keyframes blink{0%,100%{background:var(--line-2);transform:scale(1)}45%{background:var(--gold);transform:scale(1.5)}}}
+
+/* ============ 成果一覧（クエスト画面） ============ */
+.gq{font-family:'DotGothic16',var(--fs-body);}
+.gq-screen{
+  background:#0f1b3d;color:#eef3fb;border:3px solid #f5c542;border-radius:6px;
+  box-shadow:0 0 0 3px #0f1b3d,0 0 0 5px #2a4a8c;padding:12px 12px 13px;margin:5px 2px 16px;
+  position:relative;
+}
+.gq-h{font-size:13px;letter-spacing:.06em;color:#f5c542;margin-bottom:9px}
+.gq-sub{font-size:11px;color:#a8b8d4;margin-left:6px}
+.gq-row{display:flex;gap:12px;align-items:flex-start}
+.gq-ava{flex:none;width:64px;height:64px;background:#1b2d5b;border:2px solid #f5c542;border-radius:8px;display:grid;place-items:center}
+.gq-ava svg{image-rendering:pixelated}
+@media (prefers-reduced-motion:no-preference){
+  #gqMon{animation:gqbob 1.6s ease-in-out infinite;transform-origin:32px 40px}
+  @keyframes gqbob{0%,100%{transform:translateY(0)}50%{transform:translateY(-2px) scale(1.02)}}
+  .gq-ava.lvup #gqMon{animation:gqjump .6s cubic-bezier(.2,.9,.3,1.3) 2}
+  @keyframes gqjump{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px) rotate(-6deg)}}
+}
+.gq-who{flex:1;min-width:0}
+.gq-name{font-size:16px;line-height:1.2;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.gq-lv{color:#f5c542;font-size:14px}
+.gq-lv b{font-size:20px}
+.gq-title{font-size:11.5px;color:#a8b8d4;margin:2px 0 6px}
+.gq-barwrap{display:flex;align-items:center;gap:7px}
+.gq-barlbl{font-size:10px;color:#a8b8d4;letter-spacing:.1em;flex:none}
+.gq-bar{flex:1;height:10px;border:2px solid #14203a;background:#243454;border-radius:3px;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.gq-bar i{display:block;height:100%;width:0;transition:width .7s cubic-bezier(.2,.9,.3,1)}
+.gq-bar.exp i{background:linear-gradient(#7fb8ea,#2f7fc6)}
+.gq-bar.hp i{background:linear-gradient(#9ccf6b,#4b7a2a)}
+.gq-bar.hp.low i{background:linear-gradient(#f5c542,#d99a00)}
+.gq-bar.hp.done i{background:linear-gradient(#f5c542,#e0a800)}
+.gq-barnum{font-size:11px;color:#eef3fb;flex:none;font-variant-numeric:tabular-nums}
+.gq-barnum b{font-size:13px}
+.gq-partner{font-size:11.5px;color:#a8b8d4;margin-top:6px}
+.gq-partner b{color:#eef3fb}
+.gq-msg{
+  margin-top:12px;background:#fff;color:#14203a;border:3px solid #14203a;border-radius:4px;
+  padding:9px 26px 9px 12px;font-size:14px;line-height:1.65;position:relative;
+  box-shadow:inset 0 0 0 2px #fff,inset 0 0 0 4px #2a4a8c;
+}
+.gq-msg::after{content:"▼";position:absolute;right:10px;bottom:6px;font-size:11px;color:#1b2d5b}
+@media (prefers-reduced-motion:no-preference){.gq-msg::after{animation:gqblink 1s steps(1) infinite}@keyframes gqblink{50%{opacity:0}}}
+.gq-quest{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:10px 11px}
+.gq-qrow{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:6px}
+.gq-qrow b{font-size:16px;color:#f5c542}
+.gq-qnote{font-size:11.5px;color:#a8b8d4;margin-top:7px;line-height:1.5}
+.gq-clear{display:inline-block;background:#f5c542;color:#14203a;padding:2px 10px;border-radius:999px;font-size:12px;margin-top:4px}
+.gq-goal{margin-top:10px;border-top:1px dashed #2a4a8c;padding-top:10px}
+.gq-goalrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.gq-goalrow label{font-size:11.5px;color:#a8b8d4;display:flex;flex-direction:column;gap:4px}
+.gq-in{
+  width:100%;background:#fff;color:#14203a;border:2px solid #14203a;border-radius:4px;padding:8px;
+  font-family:var(--fs-mono);font-size:18px;font-weight:700;text-align:center;
+}
+.gq-goalcalc{font-size:12.5px;margin-top:8px;color:#eef3fb}
+.gq-goalcalc b{color:#f5c542;font-size:16px}
+.gq-road{overflow-x:auto;scrollbar-width:thin;margin:0 -4px}
+.gq-road>svg{display:block;min-width:420px;width:100%;height:auto}
+.gq-roadnote{font-size:12px;color:#eef3fb;margin-top:6px;line-height:1.5}
+.gq-roadnote b{color:#f5c542}
+.gq-days{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-top:10px;max-width:300px}
+.gq-wd{font-size:9.5px;color:#a8b8d4;text-align:center;letter-spacing:.05em}
+.gq-wd.sat{color:#7fb8ea}
+.gq-wd.sun{color:#f08a76}
+.gq-day{
+  aspect-ratio:1;border:2px solid #2a4a8c;border-radius:4px;background:#14203a;font-size:9.5px;
+  display:grid;place-items:center;color:#a8b8d4;position:relative;
+}
+.gq-day.act{background:#2f7fc6;border-color:#7fb8ea;color:#fff;font-weight:700}
+.gq-day.hit{background:#f5c542;color:#14203a;border-color:#f5c542}
+.gq-day.today{outline:2px solid #fff;outline-offset:1px}
+.gq-day.future{opacity:.35}
+.gq-day{cursor:pointer;-webkit-tap-highlight-color:transparent}
+.gq-datechips{margin-bottom:9px}
+.gq-datechips .chip{background:#14203a;border-color:#2a4a8c;color:#eef3fb;font-family:inherit}
+.gq-datechips .chip[aria-pressed="true"]{background:#f5c542;border-color:#f5c542;color:#14203a}
+.gq-log{display:flex;flex-direction:column;gap:8px}
+.gq-grp{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:9px 11px}
+.gq-grp .t{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.gq-grp .t b{color:#f5c542;font-size:15px}
+.gq-grp .exp{font-size:11px;color:#7fb8ea}
+.gq-grp ul{list-style:none;margin:6px 0 0;padding:0;font-size:12px;color:#c9d6ea;line-height:1.6}
+.gq-grp li::before{content:"・";color:#f5c542}
+.gq-grp .none{font-size:11.5px;color:#8a9bb8;margin-top:4px}
+.gq-sum{font-size:12.5px;color:#eef3fb;background:#1b2d5b;border-radius:6px;padding:8px 11px}
+.gq-sum b{color:#f5c542}
+.gq-badges{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:8px}
+.gq-badge{
+  background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:8px 4px;text-align:center;
+  font-size:10px;color:#a8b8d4;line-height:1.35;
+}
+.gq-badge i{display:block;font-size:22px;font-style:normal;margin-bottom:3px;filter:grayscale(1);opacity:.4}
+.gq-badge.got{border-color:#f5c542;color:#eef3fb;background:#1b2d5b}
+.gq-badge.got i{filter:none;opacity:1}
+/* ジムランク（店舗ごと） */
+.gq-gyms{display:flex;flex-direction:column;gap:6px}
+.gq-gym{display:flex;align-items:center;gap:10px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px}
+.gq-gym.got{border-color:#7fb8ea;background:#1b2d5b}
+.gq-gym.max{border-color:#f5c542;background:#2a2410;box-shadow:0 0 0 2px rgba(245,197,66,.35)}
+.gq-gym svg{flex:none}
+.gq-gym .nm{flex:1;min-width:0}
+.gq-gym .nm b{display:block;font-size:12.5px;color:#eef3fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gq-gym .nm span{font-size:10px;color:#a8b8d4}
+.gq-gym .pg{width:112px;flex:none}
+.gq-gym .pg .gq-bar{height:8px}
+.gq-gym .pg .gq-bar i{background:linear-gradient(#7fb8ea,#2f7fc6)}
+.gq-gym.got .pg .gq-bar i{background:linear-gradient(#f5c542,#e0a800)}
+.gq-gym .pg small{display:block;font-size:9.5px;color:#a8b8d4;text-align:right;margin-top:2px;font-variant-numeric:tabular-nums}
+.gq-gym.got .pg small{color:#f5c542}
+.gq-hall{margin-top:9px;background:#f5c542;color:#14203a;border-radius:6px;padding:7px 10px;font-size:12.5px;text-align:center}
+/* ランキング */
+.gq-ranks{display:flex;flex-direction:column;gap:6px}
+.gq-rank{display:flex;align-items:center;gap:8px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 9px}
+.gq-rank.top{border-color:#f5c542;background:#1b2d5b}
+.gq-rank.me{box-shadow:inset 0 0 0 2px rgba(127,184,234,.55)}
+.gq-rank .pos{width:26px;text-align:center;font-size:16px;flex:none}
+.gq-rank .pos b{font-size:14px;color:#f5c542}
+.gq-rank svg{flex:none}
+.gq-rank .who{flex:1;min-width:0}
+.gq-rank .who b{display:block;font-size:13px;color:#eef3fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gq-rank .who span{font-size:10px;color:#a8b8d4}
+.gq-rank .num{text-align:right;flex:none;font-variant-numeric:tabular-nums}
+.gq-rank .num b{display:block;font-size:15px;color:#f5c542}
+.gq-rank .num span{font-size:9.5px;color:#a8b8d4}
+.gq-rank .sub{display:flex;gap:7px;font-size:10px;color:#a8b8d4;margin-top:2px;flex-wrap:wrap}
+.gq-rank .sub span{white-space:nowrap}
+.gq-rank .sub b{display:inline;color:#eef3fb;font-size:11px}
+.gq-details{margin:4px 2px 0}
+.gq-details summary{
+  cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m);
+  padding:11px 13px;font-size:13px;font-weight:700;color:var(--ink);font-family:var(--fs-body);
+}
+.gq-details[open] summary{border-radius:var(--r-m) var(--r-m) 0 0}
+/* ============ PIN gate ============ */
+.gate{position:fixed;inset:0;z-index:200;background:var(--navy);display:flex;align-items:center;justify-content:center;padding:24px 16px}
+.gate-card{width:100%;max-width:360px;background:var(--surface,#fff);border-radius:18px;padding:26px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.35);text-align:center}
+.gate-logo{font-family:var(--fs-disp,inherit);font-weight:900;font-size:24px;color:var(--navy);letter-spacing:.02em;margin-bottom:6px}
+.gate-lead{margin:0 0 14px;color:var(--ink-2);font-size:13px}
+.gate-pin{width:100%;box-sizing:border-box;text-align:center;font-size:26px;letter-spacing:.35em;padding:12px;margin-bottom:12px}
+.gate-err{min-height:18px;color:var(--danger);font-size:12px;font-weight:700;margin-top:10px}
+.gate-note{margin:12px 0 0;color:var(--ink-3);font-size:11px}
+</style>
+
+<div class="app">
+  <header class="hdr">
+    <div class="marquee" aria-hidden="true">
+      <i style="animation-delay:0s"></i><i style="animation-delay:.15s"></i><i style="animation-delay:.3s"></i>
+      <i style="animation-delay:.45s"></i><i style="animation-delay:.6s"></i><i style="animation-delay:.75s"></i>
+      <i style="animation-delay:.9s"></i><i style="animation-delay:1.05s"></i><i style="animation-delay:1.2s"></i>
+    </div>
+    <div class="hdr-row">
+      <div class="brand"><b>クレーン日報</b></div>
+      <a class="hdr-btn" id="openX" data-zero="1" href="https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit" target="_blank" rel="noopener">📗 シート<span class="cnt" id="xCount" hidden>0</span></a>
+    </div>
+    <div class="hdr-sub">
+      <span id="weekBadge">—</span>
+      <span id="meBadge" style="margin-left:6px"></span>
+      <div class="save-dot" id="saveDot" data-mode="local"><b></b><span id="saveMode">端末保存</span></div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ========================= 巡回ログ入力 ========================= -->
+    <section class="panel on" id="p-log" role="tabpanel" aria-label="巡回報告">
+
+      <div class="card flush">
+        <div class="read">
+          <div><span class="k">売上</span><span class="v" id="rSales">0<span class="u">円</span></span></div>
+          <div><span class="k">獲得率</span><span class="v" id="rRate">—</span></div>
+          <div><span class="k">粗利（見込）</span><span class="v" id="rPer">0<span class="u">円</span></span></div>
+        </div>
+        <div class="gaugewrap">
+          <svg width="76" height="76" viewBox="0 0 76 76" role="img" aria-label="景品原価率メーター">
+            <circle cx="38" cy="38" r="30" fill="none" stroke="var(--surface-sunk)" stroke-width="9"/>
+            <circle id="gArc" cx="38" cy="38" r="30" fill="none" stroke="var(--aqua)" stroke-width="9"
+              stroke-linecap="round" stroke-dasharray="188.5" stroke-dashoffset="188.5"
+              transform="rotate(-90 38 38)" style="transition:stroke-dashoffset .6s cubic-bezier(.2,.9,.3,1),stroke .3s"/>
+            <text id="gTxt" x="38" y="42" text-anchor="middle" font-size="16" font-weight="700"
+              fill="var(--ink)" class="mn">—</text>
+          </svg>
+          <div class="gmeta" hidden>
+            <span class="pill flat" id="gPill">数字を入れてね</span>
+            <p id="gNote">景品原価率は <b>目標30%</b>。超えたら獲得率を下げるか、安い景品に替える。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="step"><em>1</em><h3>どの店舗？</h3><span class="sub" id="storeDone"></span></div>
+        <div class="store-row" id="storeRow"></div>
+        <div class="field" style="margin-top:4px">
+          <span class="lbl">機械<span class="req">*</span></span>
+          <div class="chips" id="machineRow"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="step"><em>2</em><h3>部屋ごとの記録</h3><span class="sub" id="mType"></span></div>
+        <div id="roomGrid"></div>
+        <datalist id="prizeList"></datalist>
+        <p class="hint" id="zhint"></p>
+        <div class="sumline" id="sumLine"></div>
+        <div class="grid2" id="manualBox" hidden style="display:none">
+          <div class="field" style="margin:0">
+            <span class="lbl">払出数（合計）</span>
+            <input class="num" id="paysIn" type="number" inputmode="numeric" min="0" value="0" style="font-size:20px">
+          </div>
+          <div class="field" style="margin:0">
+            <span class="lbl">景品原価（円）</span>
+            <input class="num" id="costIn" type="number" inputmode="numeric" min="0" value="0" style="font-size:20px">
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="step"><em>3</em><h3>訪問の記録</h3></div>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">訪問時間</span>
+            <div class="num-row">
+              <input class="txt" type="time" id="timeIn">
+              <button class="pad" id="timeNow" style="width:auto;padding:0 12px;font-size:12px;font-family:var(--fs-body)">いま</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="lbl">担当</span>
+            <select class="txt" id="staffIn"></select>
+            <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品登録・経費登録にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
+          </div>
+        </div>
+        <div class="field">
+          <span class="lbl">メモ</span>
+          <textarea class="txt" id="memoIn" placeholder="気づいたこと（例：POPを目線の高さに。アーム弱い気がする）"></textarea>
+        </div>
+      </div>
+
+      <button class="save" id="saveLog">巡回を報告</button>
+      <p class="save-note" id="saveNote">店舗・機械・プレイ数を入れると押せます</p>
+
+      <div class="card flush" style="margin-top:12px">
+        <div class="xhead"><span class="nm">最近の巡回ログ</span><span class="ct" id="logCt">0件</span></div>
+        <div id="logList"></div>
+      </div>
+    </section>
+
+    <!-- ========================= 景品マスタ ========================= -->
+    <section class="panel" id="p-prize" role="tabpanel" aria-label="景品マスタ">
+      <div class="card">
+        <h2 style="font-family:var(--fs-display);font-size:16px;font-weight:900">🎁 景品を登録する</h2>
+        <p class="hint" style="margin-top:5px">登録すると、巡回ログの景品チップと原価の自動計算に出てきます。スプレッドシート「景品マスタ」にある景品も、下の一覧とチップに自動で出ます。</p>
+      </div>
+      <div class="card">
+        <div class="field">
+          <span class="lbl">担当</span>
+          <select class="txt staff-sel" id="pzStaff"></select>
+        </div>
+        <div class="field">
+          <span class="lbl">品名<span class="req">*</span></span>
+          <input class="txt" id="pzName" placeholder="例：もちもちぬいぐるみL">
+        </div>
+        <div class="field">
+          <span class="lbl">仕入先<span class="req">*</span></span>
+          <select class="txt" id="pzVendor"></select>
+          <input class="txt" id="pzVendorOther" placeholder="仕入先の名前" style="margin-top:7px" hidden>
+        </div>
+        <div class="field">
+          <span class="lbl">どの機械用？<span class="req">*</span></span>
+          <select class="txt" id="pzUse">
+            <option>カリーノ用</option>
+            <option>4人機用</option>
+          </select>
+          <p class="hint">巡回報告で、その機械のときだけ候補に出ます。</p>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">仕入単価（円・税抜）<span class="req">*</span></span>
+            <input class="txt" id="pzCost" type="number" inputmode="numeric" min="0" placeholder="300">
+          </div>
+          <div class="field">
+            <span class="lbl">買った数量</span>
+            <input class="txt" id="pzQty" type="number" inputmode="numeric" min="0" placeholder="30">
+          </div>
+        </div>
+        <div class="field">
+          <span class="lbl">原価率（この景品で狙う％）<span class="req">*</span></span>
+          <div class="chips" id="pzRateRow"></div>
+          <div class="num-row" style="margin-top:8px">
+            <input class="num" id="pzRateN" type="number" inputmode="numeric" min="1" max="100" value="30" style="font-size:22px">
+            <span style="align-self:center;font-size:13px;color:var(--ink-3);flex:none">％</span>
+          </div>
+          <div class="autoline" style="margin-top:9px">
+            <span class="pill flat" id="pzPill">単価を入れると獲得率が出ます</span>
+          </div>
+          <p class="hint" id="pzNote">原価率 ＝ 仕入単価 × 獲得率 ÷ プレイ単価100円。目標30％。</p>
+        </div>
+        <div class="field">
+          <span class="lbl">メモ</span>
+          <input class="txt" id="pzMemo" placeholder="人気の層、サイズ感など">
+        </div>
+      </div>
+      <button class="save" id="savePrize">景品を登録する</button>
+
+      <div class="card flush" style="margin-top:12px">
+        <div class="xhead"><span class="nm">景品マスタ</span><span class="ct" id="pzCt">0件</span></div>
+        <div id="pzList"></div>
+      </div>
+    </section>
+
+    <!-- ========================= 経費 ========================= -->
+    <section class="panel" id="p-cost" role="tabpanel" aria-label="経費台帳">
+      <div class="card">
+        <h2 style="font-family:var(--fs-display);font-size:16px;font-weight:900">💰 経費を1行ずつ</h2>
+        <p class="hint" style="margin-top:5px">ガソリン代・駐車場代を使った日に、店舗を選んで入れます。</p>
+      </div>
+      <div class="card">
+        <div class="field">
+          <span class="lbl">担当</span>
+          <select class="txt staff-sel" id="exStaff"></select>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">日付<span class="req">*</span></span>
+            <input class="txt" type="date" id="exDate">
+          </div>
+          <div class="field">
+            <span class="lbl">区分<span class="req">*</span></span>
+            <select class="txt" id="exKind">
+              <option>ガソリン代</option><option>駐車場代</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" id="exStoreField">
+          <span class="lbl">店舗<span class="req">*</span></span>
+          <div class="chips scroll" id="exStoreRow"></div>
+        </div>
+        <p class="hint" id="exStoreNote" hidden style="margin:-4px 0 12px">ガソリン代は店舗に属さない経費として登録します（店舗の選択は不要）。</p>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">金額（円・税抜）<span class="req">*</span></span>
+            <input class="txt" id="exNet" type="number" inputmode="numeric" placeholder="3000">
+          </div>
+          <div class="field">
+            <span class="lbl">支払先</span>
+            <input class="txt" id="exPayee" placeholder="例：ENEOS">
+          </div>
+        </div>
+        <div class="field">
+          <span class="lbl">備考</span>
+          <input class="txt" id="exMemo" placeholder="">
+        </div>
+      </div>
+      <button class="save" id="saveCost">台帳に追加する</button>
+
+      <div class="card flush" style="margin-top:12px">
+        <div class="xhead"><span class="nm">経費台帳</span><span class="ct" id="exCt">0件</span></div>
+        <div id="exList"></div>
+      </div>
+    </section>
+
+    <!-- ========================= ダッシュボード ========================= -->
+    <section class="panel" id="p-dash" role="tabpanel" aria-label="成果一覧">
+      <div class="gq">
+
+        <!-- だれの成績を見るか -->
+        <div class="gq-screen" style="padding:9px 10px 6px">
+          <div class="gq-h" style="margin-bottom:6px">▶ トレーナー</div>
+          <div class="chips scroll gq-datechips" id="gqWhoRow" style="margin-bottom:4px"></div>
+        </div>
+
+        <!-- トレーナーカード -->
+        <div class="gq-screen gq-card">
+          <div class="gq-row">
+            <div class="gq-ava" id="gqAva" aria-hidden="true">
+              <svg viewBox="0 0 64 64" width="64" height="64">
+                <g id="gqMon">
+                  <!-- しっぽ＝クレーンのアーム -->
+                  <path d="M48 46 Q58 40 55 22" stroke="#14203a" stroke-width="5" fill="none" stroke-linecap="round"/>
+                  <path d="M48 46 Q58 40 55 22" stroke="#ffd84d" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+                  <path d="M55 21 L49 14 M55 21 L55 11 M55 21 L61 14" stroke="#14203a" stroke-width="2.6" stroke-linecap="round"/>
+                  <circle cx="55" cy="21" r="3" fill="#ffd84d" stroke="#14203a" stroke-width="1.8"/>
+                  <!-- 耳 -->
+                  <ellipse cx="19" cy="15" rx="5.5" ry="10" transform="rotate(-28 19 15)" fill="#ffd84d" stroke="#14203a" stroke-width="2.2"/>
+                  <ellipse cx="45" cy="15" rx="5.5" ry="10" transform="rotate(28 45 15)" fill="#ffd84d" stroke="#14203a" stroke-width="2.2"/>
+                  <ellipse cx="19.5" cy="15.5" rx="2.4" ry="5.5" transform="rotate(-28 19.5 15.5)" fill="#ffb3a7"/>
+                  <ellipse cx="44.5" cy="15.5" rx="2.4" ry="5.5" transform="rotate(28 44.5 15.5)" fill="#ffb3a7"/>
+                  <!-- 足・体 -->
+                  <ellipse cx="23" cy="56" rx="5.5" ry="3.2" fill="#f0b800" stroke="#14203a" stroke-width="2"/>
+                  <ellipse cx="41" cy="56" rx="5.5" ry="3.2" fill="#f0b800" stroke="#14203a" stroke-width="2"/>
+                  <ellipse cx="32" cy="39" rx="20" ry="17.5" fill="#ffd84d" stroke="#14203a" stroke-width="2.5"/>
+                  <ellipse cx="32" cy="47" rx="10.5" ry="7" fill="#fff4c7"/>
+                  <ellipse cx="13.5" cy="45" rx="3" ry="4" transform="rotate(25 13.5 45)" fill="#ffd84d" stroke="#14203a" stroke-width="1.8"/>
+                  <ellipse cx="50.5" cy="45" rx="3" ry="4" transform="rotate(-25 50.5 45)" fill="#ffd84d" stroke="#14203a" stroke-width="1.8"/>
+                  <!-- 顔：キラキラの目・ほっぺ・口 -->
+                  <ellipse cx="24.5" cy="35" rx="3.6" ry="4.8" fill="#14203a"/><ellipse cx="39.5" cy="35" rx="3.6" ry="4.8" fill="#14203a"/>
+                  <circle cx="25.8" cy="33" r="1.6" fill="#fff"/><circle cx="40.8" cy="33" r="1.6" fill="#fff"/>
+                  <circle cx="23.6" cy="37.4" r=".75" fill="#fff"/><circle cx="38.6" cy="37.4" r=".75" fill="#fff"/>
+                  <ellipse cx="17" cy="41" rx="3.4" ry="2.3" fill="#ff7b7b" opacity=".85"/><ellipse cx="47" cy="41" rx="3.4" ry="2.3" fill="#ff7b7b" opacity=".85"/>
+                  <path d="M28.5 40.5 Q32 46 35.5 40.5 Z" fill="#b8323d" stroke="#14203a" stroke-width="1.5" stroke-linejoin="round"/>
+                  <path d="M30.3 43 Q32 44.6 33.7 43" fill="#ff8f9a"/>
+                </g>
+              </svg>
+            </div>
+            <div class="gq-who">
+              <div class="gq-name"><span id="gqTrainer">石原里基</span> <span class="gq-lv">Lv.<b id="gqLv">1</b></span></div>
+              <div class="gq-title" id="gqTitle">かけだしトレーナー</div>
+              <div class="gq-barwrap"><span class="gq-barlbl">EXP</span>
+                <div class="gq-bar exp"><i id="gqExpBar"></i></div>
+                <span class="gq-barnum"><b id="gqExp">0</b>／<span id="gqExpNext">100</span></span></div>
+              <div class="gq-partner"><span id="gqEvo" style="display:block"></span>つかんだ景品 <b id="gqCaught">0</b>こ</div>
+            </div>
+          </div>
+          <div class="gq-msg" id="gqMsg">ツカミンが なかまに なった！<br>きょうも 巡回に でかけよう！</div>
+        </div>
+
+        <!-- 今日のクエスト -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ きょうの クエスト</div>
+          <div class="gq-quest">
+            <div class="gq-qrow"><span>巡回報告</span><b><span id="gqToday">0</span>／<span id="gqDaily">0</span>マシーン</b></div>
+            <div class="gq-bar hp"><i id="gqQuestBar"></i></div>
+            <div class="gq-qnote" id="gqQuestNote">目標を設定すると、1日の巡回マシーン数が出ます</div>
+          </div>
+          <div class="gq-goal">
+            <div class="gq-goalrow">
+              <label>月間 巡回マシーン目標 <input class="gq-in" id="gqMonthly" type="number" inputmode="numeric" min="0" placeholder="40"> マシーン</label>
+              <label>稼働日数 <input class="gq-in" id="gqDays" type="number" inputmode="numeric" min="1" max="31" placeholder="20"> 日</label>
+            </div>
+            <div class="gq-goalcalc" id="gqCalc">→ 1日 <b>—</b> マシーン（逆算）</div>
+          </div>
+        </div>
+
+        <!-- ロードマップ -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ こんげつの ロードマップ <span class="gq-sub" id="gqMonthLbl"></span></div>
+          <div class="gq-road" id="gqRoad"></div>
+          <div class="gq-roadnote" id="gqRoadNote"></div>
+          <div class="gq-days" id="gqDayStrip"></div>
+        </div>
+
+        <!-- 行動日報 -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ こうどう 日報</div>
+          <div class="chips scroll gq-datechips" id="gqDates"></div>
+          <div class="gq-log" id="gqLog"></div>
+        </div>
+
+        <!-- ジムランク（店舗ごと） -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ ジムランク <span class="gq-sub" id="gqGymSub"></span></div>
+          <div class="gq-gyms" id="gqGyms"></div>
+          <div class="gq-qnote" id="gqGymNote"></div>
+        </div>
+
+        <!-- バッジ -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ バッジ</div>
+          <div class="gq-badges" id="gqBadges"></div>
+        </div>
+
+        <!-- ランキング（こんげつ） -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ ランキング <span class="gq-sub" id="gqRankSub"></span></div>
+          <div class="gq-ranks" id="gqRanks"></div>
+          <div class="gq-qnote">こんげつの EXP（売上・景品登録・拠点ボーナス・ジムランク − 経費）で きそう。月末の順位で <b style="color:#f5c542">1位 +300 ／ 2位 +200 ／ 3位 +100 EXP</b>（4位以下は 0）。月が かわると リセット</div>
+        </div>
+
+        <!-- 売上の記録（従来のグラフ） -->
+        <details class="gq-details">
+          <summary>📈 うりあげの きろく（グラフ）</summary>
+          <div class="card" style="padding:12px 13px;margin-top:10px">
+            <span class="lbl">見る月</span>
+            <div class="chips scroll" id="monthRow"></div>
+            <div id="demoBar"></div>
+          </div>
+          <div class="tiles">
+            <div class="tile hero">
+              <span class="k">今月の売上（巡回ログ合計）</span>
+              <span class="v" id="tSales">0<small> 円</small></span>
+              <div class="sub" id="tSalesSub">まだログがありません</div>
+            </div>
+            <div class="tile"><span class="k">粗利</span><span class="v" id="tProfit">0</span>
+              <div style="margin-top:5px"><span class="pill flat" id="tProfitPill">—</span></div></div>
+            <div class="tile"><span class="k">景品原価率</span><span class="v" id="tCost">—</span>
+              <div style="margin-top:5px"><span class="pill flat" id="tCostPill">—</span></div></div>
+            <div class="tile"><span class="k">獲得率</span><span class="v" id="tGet">—</span>
+              <div style="margin-top:5px"><span class="pill flat" id="tGetPill">—</span></div></div>
+          </div>
+          <div class="chartcard">
+            <h3>引継ぎ前の実績に、追いついたか</h3>
+            <p class="cap">色付きが<b>いまの月売上</b>、グレーが<b>前の運営者の月平均</b>（2026年4〜8月／メーカー提供実績）。超えたら勝ち。</p>
+            <div id="chBench"></div>
+            <div class="legend">
+              <span><i style="background:var(--ink-3)"></i>引継ぎ前 月平均</span>
+              <span><i style="background:var(--s1)"></i>いまの月売上（店舗ごとの色）</span>
+            </div>
+          </div>
+          <div class="chartcard">
+            <h3>週ごとの売上</h3>
+            <p class="cap">店舗を積み上げ。棒をタップすると内訳が出ます。</p>
+            <div id="chWeek"></div>
+            <div class="legend" id="chWeekLeg"></div>
+          </div>
+          <div class="chartcard">
+            <h3>景品原価率の推移</h3>
+            <p class="cap">全店合計。<b>目標30%</b>より下をキープ。</p>
+            <div id="chCost"></div>
+          </div>
+          <div class="card flush">
+            <div class="xhead"><span class="nm">月次サマリー（店舗別）</span><span class="ct" id="sumMonth">—</span></div>
+            <div class="tblwrap">
+              <table id="sumTbl">
+                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価</th><th>原価率</th><th>場所代</th><th>経費</th><th>粗利</th><th>粗利率</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  data-p="p-log"><i>🕹️</i>巡回報告</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-prize"><i>🎁</i>景品登録</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-cost"><i>💰</i>経費登録</button>
+    <button class="tab" role="tab" aria-selected="false" data-p="p-dash"><i>🎮</i>成果一覧</button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim"></div>
+<aside class="drawer" id="drawer" aria-label="スプレッドシートへ転記">
+  <div class="dhead">
+    <div class="hd">
+      <h2>スプレッドシートへ転記</h2>
+      <button class="dclose" id="closeX" aria-label="閉じる">✕</button>
+    </div>
+  </div>
+  <div class="dbody">
+    <ol class="steps">
+      <li>「コピー」を押す（スマホは長押しでも選択できます）</li>
+      <li>「シートを開く」→ 該当タブの<b>最終行のすぐ下のA列</b>をタップ</li>
+      <li>貼り付け。計算列（グレーの列）は自動で埋まります</li>
+      <li>最後に「転記済みにする」を押すと、この一覧から消えます</li>
+    </ol>
+    <a class="btn link pri" id="sheetLink" href="https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit" target="_blank" rel="noopener" style="margin-bottom:14px">📗 スプレッドシートを開く</a>
+    <div id="xBlocks"></div>
+  </div>
+</aside>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <div class="gate-logo">クレーン日報</div>
+    <p class="gate-lead">スタッフ番号（PIN）を入れてください</p>
+    <input class="txt gate-pin" id="gatePin" type="password" inputmode="numeric" pattern="[0-9]*" autocomplete="off" maxlength="12" placeholder="PIN" aria-label="PIN">
+    <button class="btn pri" id="gateGo" style="width:100%">はじめる</button>
+    <div class="gate-err" id="gateErr" role="alert"></div>
+    <p class="gate-note">PINが分からないときは管理者（菊地さん）に聞いてください。</p>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<div class="tip" id="tip"></div>
+
+<script id="sheetMaster" type="application/json">{"updatedAt": "2026-10-05T19:56:19+09:00", "source": "クレーンゲーム日報／景品マスタ", "rows": [{"name": "バースデーシマエナガ", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 7.0, "stock": 7.0, "memo": "", "kind": "4人機用"}, {"name": "FUGGLER", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 8.0, "stock": 8.0, "memo": "", "kind": "4人機用"}, {"name": "もちふわころころらいふ", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 30.0, "stock": 30.0, "memo": "", "kind": "4人機用"}, {"name": "しろたん海の生き物シリーズ", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 13.0, "stock": 13.0, "memo": "", "kind": "4人機用"}, {"name": "ころはむコロンフルーツリボン", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 22.0, "stock": 22.0, "memo": "", "kind": "4人機用"}, {"name": "kirbyぷかぷかドームキーホルダー3", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 12.0, "stock": 12.0, "memo": "", "kind": "4人機用"}, {"name": "プラッシュブラインドボック", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 6.0, "stock": 6.0, "memo": "", "kind": "カリーノ用"}, {"name": "ベイビースリー", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 2.0, "stock": 2.0, "memo": "", "kind": "カリーノ用"}, {"name": "スクエアドライブレコーダー", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 3.0, "stock": 3.0, "memo": "", "kind": "カリーノ用"}, {"name": "丸型電気グリル", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 2.0, "stock": 2.0, "memo": "", "kind": "カリーノ用"}, {"name": "とびだすロケットキャッチゲーム", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "鬼退治（目覚まし時計）", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "アニマルデスクランプ", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "アニマルデスクランプSUBMARINE", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "スタイリッシュ羽なしハンディファン", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "はたらく建設車", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 1.0, "stock": 1.0, "memo": "", "kind": "カリーノ用"}, {"name": "ウマ娘カップ", "vendor": "株式会社エスプラン", "cost": 0, "rate": 0.3, "qty": 7.0, "stock": 7.0, "memo": "", "kind": "カリーノ用"}]}</script>
+<script>
+(() => {
+"use strict";
+
+/* ===================== 前提（スプレッドシート「ルール・前提」と同じ） ===================== */
+const PLAY_PRICE = 100;      // プレイ単価（円）
+const PLACE_RATE = 0.30;     // 場所代率（標準）
+const COST_TARGET = 0.30;    // 景品原価率 管理目標（上限は設けない）
+const PRIZE_PRICE_CAP = 1000;// 景品の小売価格上限
+
+/* 店舗マスタ（スプレッドシート「店舗マスタ」より） */
+const STORES = [
+  {n:"博多東平尾1丁目店", kana:"はかたひがしひらお1ちょうめてん", biz:"セブン", area:"福岡市博多区", machines:["4人機①","4人機②"],
+   bench:[189500,186600,138400,162600,140200]},
+  {n:"博多竹下2丁目店",   kana:"はかたたけした2ちょうめてん",   biz:"セブン", area:"福岡市博多区", machines:["4人機（キャッチャー）","BOX（カリーノ4）"],
+   bench:[99000,127600,149500,93800,100900]},
+  {n:"福岡平尾山荘通り店", kana:"ふくおかひらおさんそうどおりてん", biz:"セブン", area:"福岡市中央区", machines:["BOX（カリーノ8）"],
+   bench:[96700,188100,136400,89600,95700]},
+  {n:"福大工学部前店",    kana:"ふくだいこうがくぶまえてん",    biz:"ファミマ", area:"福岡市城南区", machines:["カリーノIII","カリーノミニSP（4人機）"],
+   bench:[28800,53600,55200,47200,31700]},
+  {n:"福岡下山門通り店",  kana:"ふくおかしもやまとどおりてん",  biz:"ファミマ", area:"福岡市西区",  machines:["カリーノIII","カリーノミニSP（4人機）"],
+   bench:[76900,73600,72500,71700,88800]},
+];
+/* 店舗の表示順：今月の売上（全員分）が高い順。同額なら あいうえお順 */
+function storesBySales(){
+  const mon = iso(new Date()).slice(0,7), sum = {};
+  Store.data.weekly.forEach(r=>{ if (monthOf(r.week)===mon) sum[r.store]=(sum[r.store]||0)+(num(r.sales)||num(r.plays)*PLAY_PRICE); });
+  return STORES.slice().sort((a,b)=> (sum[b.n]||0)-(sum[a.n]||0) || a.kana.localeCompare(b.kana,"ja"));
+}
+const BENCH_MONTHS = ["2026-04","2026-05","2026-06","2026-07","2026-08"];
+const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6"];
+const storeColor = n => `var(${SERIES[Math.max(0, STORES.findIndex(s=>s.n===n)) % SERIES.length]})`;
+const storeOf = n => STORES.find(s=>s.n===n);
+const benchAvg = s => s.bench ? Math.round(s.bench.reduce((a,b)=>a+b,0)/s.bench.length) : null;
+
+const SHEET_URL = "https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit";
+
+/* 担当（トレーナー）。「わたし」は端末に記憶し、巡回・景品・経費のすべてに付ける */
+const STAFF = ["石原里基","菊地翔平","キャスト1"];
+function me(){ let v=""; try{ v=localStorage.getItem("crane-lab-me")||""; }catch(e){} return STAFF.includes(v) ? v : STAFF[0]; }
+function setMe(v){ if (!STAFF.includes(v)) return; try{ localStorage.setItem("crane-lab-me", v); }catch(e){} gqWho = v; renderStaffSelect(); }
+function renderStaffSelect(){
+  $$("#staffIn, .staff-sel").forEach(s=>{ s.innerHTML = STAFF.map(n=>`<option>${esc(n)}</option>`).join(""); s.value = me(); });
+  const b=$("#meBadge"); if (b) b.textContent = "担当："+me();
+}
+let gqWho = me();                                                      // 成果一覧で見ている人
+
+/* 本人確認（PIN）。スタッフごとの PIN はスプレッドシート「スタッフ」タブで管理。
+   PIN で入ると担当が固定される（管理者だけ切り替え可）。 */
+let ME = null;                                   // {name, role:"admin"|"staff"}
+function lockStaff(on){
+  $$("#staffIn, .staff-sel").forEach(s=>s.disabled = on);
+  const b=$("#meBadge"); if (b) b.textContent = "担当："+me()+(on ? "" : "（管理者）");
+  const h=$("#staffHint"); if (h) h.textContent = on ? `PINで「${me()}」として記録されます。変えたいときは管理者（菊地さん）に連絡してください。` : "管理者は担当を切り替えて記録できます。";
+}
+async function rememberAccountStaff(name){}      // 旧：アカウント連携（PIN 方式では不要）
+const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];   // 担当なしの古いデータは最初の担当者の分として扱う
+const mine = rows => (rows||[]).filter(r=>staffOf(r)===gqWho);
+
+/* ===================== utils ===================== */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+const yen = n => (n||0).toLocaleString("ja-JP");
+const pct = (x,d=1) => (x===null||x===undefined||!isFinite(x)) ? "—" : (x*100).toFixed(d)+"%";
+const num = v => { const x = parseFloat(v); return isFinite(x) ? x : 0; };
+const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const clean = s => String(s==null?"":s).replace(/[\t\r\n]+/g," ").trim();
+
+function toMonday(d){
+  const x = new Date(d+"T00:00:00");
+  if (isNaN(x)) return "";
+  const w = x.getDay();              // 0=日
+  const shift = (w===0) ? -6 : (1-w); // 月曜へ
+  x.setDate(x.getDate()+shift);
+  return iso(x);
+}
+function iso(d){
+  return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+}
+const monthOf = wk => (wk||"").slice(0,7);
+function addDays(isoStr,n){ const d=new Date(isoStr+"T00:00:00"); d.setDate(d.getDate()+n); return iso(d); }
+function jpDate(isoStr){ const p=(isoStr||"").split("-"); return p.length===3 ? `${+p[1]}/${+p[2]}` : isoStr; }
+function jpMonth(m){ const p=(m||"").split("-"); return p.length===2 ? `${p[0]}年${+p[1]}月` : m; }
+function addMonth(m){ const [y,mm]=(m||"").split("-").map(Number); if(!y) return ""; const d=new Date(y,mm,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+
+const costStatus = r =>
+  (r===null||!isFinite(r)) ? "flat" : r > COST_TARGET ? "warn" : "ok";
+const STATUS_WORD = {ok:"◎ 目標内", warn:"△ 目標こえ", flat:"—"};
+
+let toastT;
+function toast(msg){
+  const t=$("#toast"); t.textContent=msg; t.classList.add("on");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),2300);
+}
+
+/* ===================== API（Google Apps Script → スプレッドシート） =====================
+   config.js の CRANE_CONFIG.api に Apps Script ウェブアプリのURLを入れる。
+   すべての呼び出しは PIN 付き。保存はその場でスプレッドシートの各タブに書かれる。 */
+const CFG = (window.CRANE_CONFIG||{});
+const API_URL = String(CFG.api||"").trim();
+const PIN_KEY = "crane-lab-pin", CACHE_KEY = "crane-lab-cache-v1";
+let PIN = ""; try{ PIN = localStorage.getItem(PIN_KEY)||""; }catch(e){}
+function apiError(code,msg){ const e=new Error(msg||code); e.code=code; return e; }
+async function api(action, payload){
+  if (!API_URL) throw apiError("no_api","APIが設定されていません");
+  const body = JSON.stringify(Object.assign({action, pin:PIN}, payload||{}));
+  let res;
+  try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store"}); }
+  catch(e){ throw apiError("network","通信できませんでした"); }
+  let j=null; try { j = await res.json(); } catch(e){ throw apiError("network","サーバーの応答が読めませんでした"); }
+  if (!j || !j.ok) throw apiError((j&&j.error)||"error", (j&&j.message)||"エラーが発生しました");
+  return j;
+}
+const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になっています。入り直してください"
+  : e && e.code==="network" ? "通信できませんでした。電波のよい所でもう一度試してください"
+  : (e && e.message) || "エラーが発生しました";
+
+/* PIN 入力画面 */
+function showGate(msg){
+  const g=$("#gate"); if (!g) return;
+  g.hidden=false; $("#gateErr").textContent = msg||""; $("#gatePin").value="";
+  setTimeout(()=>{ try{ $("#gatePin").focus(); }catch(e){} }, 50);
+}
+function hideGate(){ const g=$("#gate"); if (g) g.hidden=true; }
+async function submitGate(){
+  const v = clean($("#gatePin").value);
+  if (!v){ $("#gateErr").textContent="PINを入れてください"; return; }
+  const btn=$("#gateGo"); btn.disabled=true; $("#gateErr").textContent="確認中…";
+  PIN = v;
+  try {
+    const r = await api("bootstrap");
+    try{ localStorage.setItem(PIN_KEY, PIN); }catch(e){}
+    Store.applyBootstrap(r); hideGate(); toast(`ようこそ、${ME.name}さん`);
+  } catch(e){
+    PIN = "";
+    $("#gateErr").textContent = e.code==="unauthorized" ? "PINが違います" : errMsg(e);
+  } finally { btn.disabled=false; }
+}
+function signOut(){
+  PIN=""; ME=null; try{ localStorage.removeItem(PIN_KEY); localStorage.removeItem(CACHE_KEY); }catch(e){}
+  Store.data={weekly:[],prizes:[],expenses:[],settings:[]}; Store.mode="offline"; Store.paintMode(); render(); showGate("");
+}
+
+/* ===================== データ層（Apps Script 経由でスプレッドシートに保存） ===================== */
+const COLS = ["weekly","prizes","expenses","settings"];
+const Store = {
+  db:null, canWrite:true, mode:"local", live:false, syncing:false, pollT:null,
+  data:{weekly:[],prizes:[],expenses:[],settings:[]},
+  async init(){
+    if (!API_URL){                                  // API 未設定（開発プレビュー）：従来どおり端末保存
+      this.mode="local"; this.loadLocal(); this.paintMode(); return;
+    }
+    this.canWrite = true;
+    this.loadCache();                               // 前回の内容で先に描く
+    this.paintMode();
+    if (!PIN){ showGate(""); return; }
+    await this.sync(true);
+    this.startPolling();
+  },
+  startPolling(){
+    clearInterval(this.pollT);
+    this.pollT = setInterval(()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); }, 60000);
+    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); });
+  },
+  async sync(first){
+    if (this.syncing || !PIN) return; this.syncing=true;
+    try { const r = await api("bootstrap"); this.applyBootstrap(r); }
+    catch(e){
+      if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; this.mode="offline"; this.paintMode(); showGate("PINが無効です。入り直してください"); }
+      else { this.mode="offline"; this.paintMode(); if (first) toast(errMsg(e)); }
+    } finally { this.syncing=false; }
+  },
+  applyBootstrap(r){
+    if (Array.isArray(r.staff) && r.staff.length){ STAFF.splice(0, STAFF.length, ...r.staff); }
+    ME = r.me || ME;
+    if (ME && ME.name){ if (STAFF.indexOf(ME.name)<0) STAFF.push(ME.name); setMe(ME.name); lockStaff(ME.role!=="admin"); }
+    const d = r.docs||{};
+    COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+    applySheetData(r.sheet_master, r.stores);
+    this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
+    if (!this.pollT) this.startPolling();
+    render();
+  },
+  paintMode(){
+    const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
+    $("#saveMode").textContent = this.mode==="cloud" ? "スプレッドシートに保存"
+      : this.mode==="offline" ? "オフライン（表示のみ・再接続待ち）"
+      : "この端末に保存（API未設定）";
+  },
+  loadCache(){
+    try{ const raw=localStorage.getItem(CACHE_KEY); if (!raw) return; const r=JSON.parse(raw);
+      const d=r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+      if (Array.isArray(r.staff) && r.staff.length) STAFF.splice(0, STAFF.length, ...r.staff);
+      ME = r.me||null; if (ME && ME.name && STAFF.includes(ME.name)){ setMe(ME.name); lockStaff(ME.role!=="admin"); }
+      applySheetData(r.sheet_master, r.stores); this.mode="offline"; }catch(e){}
+  },
+  saveCache(r){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({docs:r.docs, staff:r.staff, me:r.me, sheet_master:r.sheet_master, stores:r.stores})); }catch(e){} },
+  loadLocal(){
+    try{
+      const raw = localStorage.getItem("crane-lab-v1");
+      if (raw) this.data = Object.assign({weekly:[],prizes:[],expenses:[],settings:[]}, JSON.parse(raw));
+    }catch(e){}
+  },
+  saveLocal(){ try{ localStorage.setItem("crane-lab-v1", JSON.stringify(this.data)); }catch(e){} },
+  isLocal(c,id){ const r=(this.data[c]||[]).find(x=>x.id===id); return !!(r&&r._local); },
+  rows(c){
+    return (this.data[c]||[]).slice().sort((a,b)=> String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  },
+  online(){ return API_URL && PIN && this.mode==="cloud"; },
+  async add(c,obj){
+    const rec = Object.assign({createdAt:new Date().toISOString(), sentAt:null}, obj);
+    if (API_URL){
+      if (!this.online()){ toast("いまは保存できません（オフライン）。電波のある所でもう一度押してください"); return false; }
+      try {
+        const r = await api("add", {col:c, rec});
+        this.data[c] = (this.data[c]||[]).filter(x=>x.id!==r.rec.id).concat(r.rec); render(); return true;
+      } catch(e){ if (e.code==="unauthorized") this.sync(false); toast(errMsg(e)); return false; }
+    }
+    rec.id = "l"+Date.now().toString(36)+Math.random().toString(36).slice(2,6); rec._local = true;
+    this.data[c] = (this.data[c]||[]).concat(rec); this.saveLocal(); render(); return true;
+  },
+  async patch(c,id,obj){
+    if (API_URL){
+      if (!this.online()){ toast("いまは保存できません（オフライン）"); return; }
+      try { const r = await api("patch", {col:c, id, obj}); this.data[c]=(this.data[c]||[]).map(x=> x.id===id ? r.rec : x); render(); }
+      catch(e){ toast(errMsg(e)); }
+      return;
+    }
+    this.data[c] = (this.data[c]||[]).map(r=> r.id===id ? Object.assign({},r,obj) : r);
+    this.saveLocal(); render();
+  },
+  async remove(c,id){
+    if (API_URL){
+      if (!this.online()){ toast("いまは削除できません（オフライン）"); return; }
+      try { await api("remove", {col:c, id}); this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id); render(); }
+      catch(e){ toast(errMsg(e)); }
+      return;
+    }
+    this.data[c] = (this.data[c]||[]).filter(r=>r.id!==id);
+    this.saveLocal(); render();
+  },
+  async put(c,id,obj){                       // 固定IDの文書をまるごと保存（設定用）
+    if (API_URL){
+      if (!this.online()){ toast("いまは保存できません（オフライン）"); return; }
+      try { const r = await api("put", {col:c, id, obj}); this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id).concat(r.rec); render(); }
+      catch(e){ toast(errMsg(e)); }
+      return;
+    }
+    const rest=(this.data[c]||[]).filter(r=>r.id!==id);
+    this.data[c]=rest.concat([Object.assign({id, _local:true},obj)]); this.saveLocal(); render();
+  },
+  goal(who){                                  // 人ごとの月間目標（goal-<名前>）。無ければ旧「goal」を最初の担当者の分として使う
+    const s=this.data.settings||[];
+    const g = s.find(r=>r.id==="goal-"+who) || (who===STAFF[0] ? s.find(r=>r.id==="goal") : null) || {};
+    return {monthly:num(g.monthly), days:num(g.days)}; },
+  unsent(c){ return (this.data[c]||[]).filter(r=>!r.sentAt && !r._local_hidden); },
+  unsentAll(){ return ["weekly","prizes","expenses"].reduce((n,c)=>n+this.unsent(c).length,0); }
+};
+
+/* ===================== スプレッドシートの景品マスタ（読み取り専用で取り込む） =====================
+   取り込み元：クレーンゲーム日報「景品マスタ」タブ。
+   直接入力・アプリから転記・仕入れ想定商品（EXAmuse）からの自動追加、どの経路で入った景品もここに出る。
+   ページに埋め込んだスナップショット → Apps Script が返す最新（景品マスタタブそのもの）の新しい方を使う。 */
+let SHEET_MASTER = {updatedAt:"", source:"", rows:[]};
+(function(){ try{ const el=document.getElementById("sheetMaster"); if (el) SHEET_MASTER = JSON.parse(el.textContent)||SHEET_MASTER; }catch(e){} })();
+function sheetRows(){ return (SHEET_MASTER.rows||[]).filter(r=>r && r.name); }
+function sheetPrize(name){ return sheetRows().find(r=>r.name===name)||null; }
+function allPrizes(){                       // アプリ登録 ＋ シート景品（同名はアプリ登録を優先）
+  const app = Store.rows("prizes"); const names = new Set(app.map(p=>p.name));
+  return app.concat(sheetRows().filter(r=>!names.has(r.name)).map(r=>({
+    id:"sheet:"+r.name, name:r.name, vendor:r.vendor||"", cost:num(r.cost), qty:num(r.qty), stock:r.stock,
+    memo:r.memo||"", use:r.kind||"", rateN:0, costRate:0, _sheet:true })));
+}
+function sheetStamp(){
+  const d = new Date(SHEET_MASTER.updatedAt||""); if (isNaN(d)) return "";
+  return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
+}
+function applySheetData(master, stores){
+  try {
+    if (stores && stores.rows){ const rows = stores.rows||{};        // 過去他社データ（引継ぎ前の月売上）
+      STORES.forEach(s=>{ const b=rows[s.n]; if (Array.isArray(b) && b.length && b.every(x=>typeof x==="number")) s.bench=b; }); }
+    if (master && Array.isArray(master.rows) && String(master.updatedAt||"") >= String(SHEET_MASTER.updatedAt||"")) SHEET_MASTER = master;
+  } catch(e){}
+}
+
+/* ===================== chips ヘルパ ===================== */
+function chipRow(el, items, selected, onPick, cls){
+  el.innerHTML = items.map(v =>
+    `<button class="chip ${cls||""}" aria-pressed="${v===selected}" data-v="${esc(v)}">${esc(v)}</button>`).join("");
+  el.onclick = e => { const b=e.target.closest(".chip"); if(b) onPick(b.dataset.v); };
+}
+
+/* ===================== 巡回ログ入力 ===================== */
+/* 4人機は「Z」の書き順で A=左上 B=右上 C=左下 D=右下。売上は A+B / C+D のペアで集金。 */
+const ROOMS = ["A","B","C","D"];
+const PAIRS = [["A","B","sAB"],["C","D","sCD"]];
+const ROOM_COLOR = {A:"var(--s1)", B:"var(--s3)", C:"var(--s2)", D:"var(--s4)", "-":"var(--s1)"};
+function machineType(name){ return /4人機|キャッチャー|ミニSP/.test(name||"") ? "4p" : "box"; }
+
+const F = { week:"", store:"", machine:"", staff:"" };
+let R = null;                 // 入力中の筐体データ
+let paysTouched=false, costTouched=false;
+
+const blankRoom = k => ({k, counter:"", prize:"", before:"", addPrize:"", add:""});
+
+function lastVisit(){
+  if(!F.store || !F.machine) return null;
+  return Store.data.weekly
+    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots) && String(r.week) < String(F.week))
+    .sort((a,b)=>String(b.week).localeCompare(String(a.week)))[0] || null;
+}
+function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
+function prevStock(k){ const pr=prevRoom(k); return pr ? num(pr.before)+num(pr.add) : null; }
+function prevPrize(k){
+  const pr=prevRoom(k); if(!pr) return "";
+  return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
+}
+const addPrizeOf = rm => clean(rm.addPrize) || clean(rm.prize);
+function roomPays(rm){
+  const st = prevStock(rm.k);
+  if (st===null || rm.before==="") return null;
+  return Math.max(0, Math.round(st - num(rm.before)));
+}
+
+function resetRooms(keep){
+  const t = machineType(F.machine);
+  const old = (keep && R && R.type===t) ? R : null;
+  R = { type:t, rooms:ROOMS.map(blankRoom), slots:[], sAB:"", sCD:"", sBox:"",
+        mode:"out", fillPrize:"", swapFrom:null };
+  if (old){ R.rooms=old.rooms; R.slots=old.slots; R.sAB=old.sAB; R.sCD=old.sCD; R.sBox=old.sBox;
+            R.mode=old.mode; R.fillPrize=old.fillPrize; R.swapFrom=old.swapFrom; }
+  if (t==="4p"){
+    R.rooms.forEach(rm=>{
+      const pp = prevPrize(rm.k);
+      if (!rm.prize && pp) rm.prize = pp;
+      rm.prizeWas = rm.prize;
+      if (!rm.addPrize) rm.addPrize = rm.prize;
+    });
+  } else if (!R.slots.length){
+    const lv = lastVisit();
+    if (lv && lv.slots && lv.slots.length){
+      R.slots = lv.slots.map(sl=>({i:sl.i, prize:sl.filled||"", out:false, filled:sl.filled||""}));
+    } else {
+      const n = defaultSlotCount();
+      R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, filled:""}));
+    }
+  }
+}
+
+/* --- 画面は機械を変えたときだけ作り直す（入力中にフォーカスを飛ばさないため） --- */
+let builtFor = "";
+
+/* ========== 景品の在庫（買った数量 − 補充に使った数） ==========
+   BOXは枠の入れ替え（移動）で在庫が減らないよう、
+   「新しく入れた数 ＝ 帰るときの数 − 着いたときに残っていた数」で数える。 */
+function boxRefill(slots){
+  const start={}, end={}, r={};
+  (slots||[]).forEach(x=>{
+    if (x.prize && !x.out) start[x.prize]=(start[x.prize]||0)+1;
+    if (x.filled)          end[x.filled]=(end[x.filled]||0)+1;
+  });
+  Object.keys(end).forEach(n=>{ const d = end[n]-(start[n]||0); if (d>0) r[n]=d; });
+  return r;
+}
+function addInto(dst, src){ Object.keys(src).forEach(k=>dst[k]=(dst[k]||0)+src[k]); return dst; }
+function refillUsed(){
+  const r = {};
+  Store.data.weekly.forEach(w=>{
+    (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); });
+    if ((w.slots||[]).length) addInto(r, boxRefill(w.slots));
+  });
+  return r;
+}
+function stockOf(name){
+  const p = Store.rows("prizes").find(p=>p.name===name);
+  if (p){ if (!num(p.qty)) return null; return Math.max(0, num(p.qty) - (refillUsed()[name]||0)); }
+  const sh = sheetPrize(name);
+  if (sh && sh.stock!==null && sh.stock!==undefined && sh.stock!=="") return Math.max(0, num(sh.stock));
+  return null;
+}
+
+/* ========== 4人機のセル ========== */
+function roomCell(rm){
+  const letter = rm.k==="-" ? "" : `<span class="rk" style="--rk:${ROOM_COLOR[rm.k]}">${rm.k}</span>`;
+  return `<div class="rm" data-cell="${rm.k}">
+    <div class="rm-top">
+      ${letter}
+      <button class="pname ${rm.prize?"":"none"}" data-act="rename" data-k="${rm.k}">
+        ${esc(rm.prize||"景品を選ぶ")}<span class="pen">✎</span></button>
+    </div>
+    <div>
+      <span class="mini">カウンター</span>
+      <input class="numin" type="text" inputmode="decimal" data-k="${rm.k}" data-f="counter" placeholder="0.00" aria-label="${rm.k}のカウンター数">
+      <span class="dif" data-d="${rm.k}"></span>
+    </div>
+    <div class="row2">
+      <div><span class="mini">残り</span>
+        <input class="numin" type="text" inputmode="numeric" data-k="${rm.k}" data-f="before" placeholder="0" aria-label="補充前に残っていた景品の数"></div>
+      <div data-addslot="${rm.k}">
+        <button class="addbtn" data-act="open-add" data-k="${rm.k}">＋ 補充</button></div>
+    </div>
+    <button class="swapbtn" data-act="swap" data-k="${rm.k}" hidden>補充した景品が別景品の場合</button>
+    <span class="pz" data-y="${rm.k}"></span>
+  </div>`;
+}
+
+/* ========== BOX（鍵式）の枠 ========== */
+function defaultSlotCount(){
+  return 15;   // 機械名の数字は型番なので枠数には使わない。初回に枠数ボタンで合わせる。
+}
+function slotMoved(sl){ return !sl.out && !!sl.prize && !!sl.filled && sl.filled!==sl.prize; }
+function slotClass(sl){
+  let c = "slot";
+  if (!sl.filled)            c = sl.out ? "slot out" : "slot empty";
+  else if (sl.out)           c = "slot out";
+  else if (!sl.prize)        c = "slot new";
+  else if (slotMoved(sl))    c = "slot moved";
+  if (R && R.swapFrom===sl.i) c += " sel";
+  return c;
+}
+function slotLabel(sl){
+  if (sl.out && !sl.filled) return `<span class="nm">${esc(sl.prize||"")}</span>`;
+  return `<span class="nm">${esc(sl.filled||"空き")}</span>`;
+}
+function slotMark(sl){
+  if (sl.out && sl.filled) return "🔁";
+  if (sl.out) return "🎉";
+  if (!sl.prize && sl.filled) return "＋";
+  if (slotMoved(sl)) return "↔";
+  return "";
+}
+function drawSlots(){
+  const g = $("#slotGrid"); if(!g) return;
+  g.innerHTML = R.slots.map(sl=>`
+    <button class="${slotClass(sl)}" data-act="slot" data-i="${sl.i}">
+      <span class="no">${sl.i}</span><span class="mk">${slotMark(sl)}</span>${slotLabel(sl)}
+    </button>`).join("");
+  $("#slotCount").textContent = R.slots.length;
+  $$("#roomGrid .modes .chip").forEach(c=>c.setAttribute("aria-pressed", String(c.dataset.mode===R.mode)));
+  const fr = $("#fillRow"); if (fr) fr.hidden = R.mode!=="fill";
+  const mr = $("#moveRow"); if (mr) mr.hidden = R.mode!=="move";
+  if (R.mode==="fill"){
+    const names = Array.from(new Set(
+      allPrizes().filter(p=>p.use!=="4人機用").map(p=>p.name).concat(R.slots.map(x=>x.prize).filter(Boolean))
+    )).filter(Boolean);
+    $("#fillChips").innerHTML = names.length
+      ? names.map(n=>{ const st=stockOf(n);
+          return `<button class="chip mini" data-act="fillprize" data-v="${esc(n)}" aria-pressed="${n===R.fillPrize}">${esc(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`;
+        }).join("")
+      : `<span class="hint" style="margin:0">「🎁 景品登録」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`;
+    const fn = $("#fillNote");
+    if (fn){ const k = sheetRows().length;
+      fn.innerHTML = k ? `📗 スプレッドシートの景品マスタ <b>${k}件</b> を含みます（${esc(sheetStamp())} 取り込み）` : ""; }
+  }
+}
+
+function buildRooms(force){
+  const key = F.store+"|"+F.machine+"|"+F.week;
+  const changed = key!==builtFor;
+  if (!force && !changed) {
+    if (R && R.type==="box") drawSlots();   // 景品登録・シート取り込みが届いたら、補充チップを即座に更新
+    updateDerived(); return;
+  }
+  builtFor = key;
+  const grid=$("#roomGrid");
+  if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; }
+  if (!F.machine){
+    grid.innerHTML = `<p class="hint" style="margin:0">先に店舗と機械を選んでください</p>`;
+    $("#mType").textContent=""; $("#zhint").textContent=""; $("#sumLine").innerHTML="";
+    R=null; updateReadouts();            // 「押せるまで」の案内も更新する
+    return;
+  }
+  resetRooms(!changed);
+  const t=R.type;
+  $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
+  $("#zhint").innerHTML = t==="4p"
+    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアで集金した額。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+    : "枠の中身は前回のまま出ています。<b>① 空いていた枠をタップ</b>（＝出た景品）→ <b>② 補充した枠をタップ</b>。写真を撮らなくても、何が何個出たかが残ります。";
+
+  if (t==="4p"){
+    grid.innerHTML = PAIRS.map(([a,b,f])=>`
+      <div class="zgrid">${R.rooms.filter(rm=>rm.k===a||rm.k===b).map(roomCell).join("")}</div>
+      <div class="pair">
+        <span class="pk">${a}＋${b} 売上</span>
+        <input class="yen" type="text" inputmode="numeric" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
+        <span class="u">円</span><span class="pp" data-p="${f}"></span>
+      </div>`).join("");
+    setVal('[data-f="sAB"]', R.sAB); setVal('[data-f="sCD"]', R.sCD);
+    R.rooms.forEach(rm=>{
+      setVal(`[data-k="${rm.k}"][data-f="counter"]`, rm.counter);
+      setVal(`[data-k="${rm.k}"][data-f="before"]`,  rm.before);
+      if (num(rm.add)>0) openAdd(rm.k, true);
+    });
+  } else {
+    grid.innerHTML = `
+      <div class="pair">
+        <span class="pk">売上金額</span>
+        <input class="yen" type="text" inputmode="numeric" data-f="sBox" placeholder="0" aria-label="売上金額">
+        <span class="u">円</span><span class="pp" data-p="sBox"></span>
+      </div>
+      <div class="modes">
+        <button class="chip" data-act="mode" data-mode="out">① 出た枠</button>
+        <button class="chip" data-act="mode" data-mode="fill">② 補充</button>
+        <button class="chip" data-act="mode" data-mode="move">③ 並べ替え</button>
+      </div>
+      <div class="slots" id="slotGrid"></div>
+      <div class="fillrow" id="fillRow" hidden>
+        <span class="lbl">入れる景品を選んでから、枠をタップ</span>
+        <div class="chips" id="fillChips"></div>
+        <button class="btn" data-act="fillall" style="margin-top:9px">空いた枠をぜんぶこれで埋める</button>
+        <p class="hint" id="fillNote" style="margin:7px 0 0"></p>
+      </div>
+      <div class="moverow" id="moveRow" hidden>
+        <b>動かす枠</b> → <b>移動先の枠</b> の順にタップすると入れ替わります。<br>
+        空いている枠に動かせば「移動」、景品が入っている枠なら「交換」になります。在庫は減りません。
+      </div>
+      <div class="slotbar">
+        <span class="hint" style="margin:0">🎉＝出た　🔁＝補充した　＋＝空き枠に追加　↔＝中身が変わった</span>
+        <span class="stepper"><span class="mini" style="display:inline">枠数</span>
+          <button data-act="slots-" aria-label="枠を減らす">−</button><b id="slotCount">0</b><button data-act="slots+" aria-label="枠を増やす">＋</button></span>
+      </div>`;
+    setVal('[data-f="sBox"]', R.sBox);
+    drawSlots();
+  }
+  updateDerived();
+}
+function setVal(sel,v){ const el=document.querySelector("#roomGrid "+sel); if(el) el.value = v===undefined?"":v; }
+
+/* 補充欄をひらく（4人機） */
+function openAdd(k, silent){
+  const slot = document.querySelector(`#roomGrid [data-addslot="${k}"]`);
+  if (!slot || slot.dataset.open==="1") return;
+  const rm = R.rooms.find(x=>x.k===k) || {};
+  slot.dataset.open="1";
+  slot.innerHTML = `<span class="mini">補充した数</span>
+    <input class="numin" type="text" inputmode="numeric" data-k="${k}" data-f="add" placeholder="0" aria-label="補充した数" value="${rm.add||""}">`;
+  const sw = document.querySelector(`#roomGrid [data-act="swap"][data-k="${k}"]`);
+  if (sw) sw.hidden = false;
+  if (!silent) slot.querySelector("input").focus();
+}
+function openSwap(k){
+  const rm = R.rooms.find(x=>x.k===k); if(!rm) return;
+  const sw = document.querySelector(`#roomGrid [data-act="swap"][data-k="${k}"]`);
+  if (!sw || sw.dataset.open==="1") return;
+  sw.dataset.open="1";
+  sw.outerHTML = `<div class="combo-wrap"><span class="mini">補充した景品</span>
+    <input class="pedit" style="width:100%;margin-top:2px" type="text" autocomplete="off"
+      data-k="${k}" data-f="addPrize" placeholder="新しい景品名（打つと絞り込み）" value="${esc(rm.addPrize===rm.prize?"":rm.addPrize||"")}"></div>`;
+  const el = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`);
+  if (el){ attachCombo(el); el.focus(); }
+}
+/* 4人機の景品名：機械タイプ「4人機用」の景品をプルダウンで出し、打った文字で絞り込む */
+function prizeNames4p(){
+  return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name))).filter(Boolean);
+}
+function attachCombo(inp, onPick){
+  const box = document.createElement("div"); box.className="combo";
+  inp.insertAdjacentElement("afterend", box);
+  const draw = () => {
+    const q = clean(inp.value).toLowerCase();
+    const names = prizeNames4p().filter(n=>!q || n.toLowerCase().includes(q)).slice(0,30);
+    box.innerHTML = names.length
+      ? names.map(n=>`<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("")
+      : `<div class="none">${q?"候補なし（このまま新しい名前で登録できます）":"景品登録で「4人機用」の景品を登録すると出ます"}</div>`;
+  };
+  box.addEventListener("pointerdown", e=>{
+    const b = e.target.closest("[data-pick]"); if(!b) return;
+    e.preventDefault();                                  // 先に blur させない
+    inp.value = b.dataset.pick;
+    inp.dispatchEvent(new Event("input",{bubbles:true}));
+    box.remove(); onPick && onPick();
+  });
+  inp.addEventListener("input", draw);
+  inp.addEventListener("blur", ()=>setTimeout(()=>box.remove(), 150));
+  draw();
+}
+function editPrize(k){
+  const btn = document.querySelector(`#roomGrid .pname[data-k="${k}"]`); if(!btn) return;
+  const rm = R.rooms.find(x=>x.k===k) || {};
+  const inp = document.createElement("input");
+  inp.className="pedit"; inp.type="text"; inp.setAttribute("autocomplete","off");
+  inp.value = rm.prize||""; inp.placeholder="景品名（打つと絞り込み）";
+  inp.dataset.k=k; inp.dataset.f="prize";
+  btn.replaceWith(inp);
+  let finished = false;
+  const done = () => {
+    if (finished) return; finished = true;
+    if (rm){ rm.prize = clean(inp.value); if (!rm.addPrize || rm.addPrize===rm.prizeWas) rm.addPrize = rm.prize; }
+    const b = document.createElement("button");
+    b.className = "pname "+(rm.prize?"":"none"); b.dataset.act="rename"; b.dataset.k=k;
+    b.innerHTML = esc(rm.prize||"景品を選ぶ")+'<span class="pen">✎</span>';
+    inp.replaceWith(b); updateDerived();
+  };
+  attachCombo(inp, done); inp.focus(); inp.select();
+  inp.addEventListener("blur", done, {once:true});
+  inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
+}
+
+function onRoomClick(e){
+  const b = e.target.closest("[data-act]"); if(!b || !R) return;
+  e.preventDefault();
+  const a = b.dataset.act;
+  if (a==="rename")   return editPrize(b.dataset.k);
+  if (a==="open-add") return openAdd(b.dataset.k);
+  if (a==="swap")     return openSwap(b.dataset.k);
+  if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
+  if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
+  if (a==="fillall"){
+    if (!R.fillPrize){ toast("先に景品を選んでください"); return; }
+    R.slots.forEach(sl=>{ if (sl.out || !sl.prize) sl.filled = R.fillPrize; });
+    drawSlots(); return updateDerived();
+  }
+  if (a==="slots+" || a==="slots-"){
+    const n = R.slots.length + (a==="slots+"?1:-1);
+    if (n<1 || n>40) return;
+    if (n<R.slots.length) R.slots.pop();
+    else R.slots.push({i:n, prize:"", out:false, filled:""});
+    R.slots.forEach((sl,ix)=>sl.i=ix+1);
+    drawSlots(); return updateDerived();
+  }
+  if (a==="slot"){
+    const sl = R.slots.find(x=>x.i===+b.dataset.i); if(!sl) return;
+    if (R.mode==="out"){
+      if (sl.prize){ sl.out = !sl.out; sl.filled = sl.out ? "" : sl.prize; }
+      else toast("空いている枠です。②の補充で景品を入れてください");
+    } else if (R.mode==="move"){
+      if (R.swapFrom===null){
+        if (!sl.filled){ toast("動かす景品が入っている枠を選んでください"); return; }
+        R.swapFrom = sl.i;
+      } else if (R.swapFrom===sl.i){
+        R.swapFrom = null;
+      } else {
+        const from = R.slots.find(x=>x.i===R.swapFrom);
+        const tmp = from.filled; from.filled = sl.filled; sl.filled = tmp;
+        R.swapFrom = null;
+        toast(`枠${from.i} ↔ 枠${sl.i} を入れ替えました`);
+      }
+    } else {
+      if (!R.fillPrize){ toast("先に入れる景品を選んでください"); return; }
+      sl.filled = (sl.filled===R.fillPrize) ? "" : R.fillPrize;
+    }
+    drawSlots(); return updateDerived();
+  }
+}
+function onRoomInput(e){
+  const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
+  const f = el.dataset.f, k = el.dataset.k;
+  if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
+  else R[f] = el.value;
+  updateDerived();
+}
+
+/* ========== 集計 ========== */
+function prizeCostUnit(name){
+  const p = allPrizes().find(p=>p.name && name && p.name===name);
+  return p ? num(p.cost) : null;
+}
+function totals(){
+  if (!R) return {sales:0,plays:0,pays:0,cost:0,known:false,refill:0};
+  if (R.type==="box"){
+    const sales = num(R.sBox), out = R.slots.filter(sl=>sl.out);
+    const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0), 0);
+    const rf = boxRefill(R.slots);
+    const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0);
+    return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill};
+  }
+  const sales = num(R.sAB)+num(R.sCD);
+  let pays=0, known=false, cost=0, refill=0;
+  R.rooms.forEach(rm=>{
+    const p = roomPays(rm);
+    if (p!==null){ pays+=p; known=true; const u=prizeCostUnit(rm.prize); if(u) cost += p*u; }
+    refill += num(rm.add);
+  });
+  return {sales, plays:Math.round(sales/PLAY_PRICE), pays, cost, known, refill};
+}
+function mainPrize(){
+  if(!R) return "";
+  if (R.type==="box"){
+    const c={}; R.slots.filter(sl=>sl.out&&sl.prize).forEach(sl=>c[sl.prize]=(c[sl.prize]||0)+1);
+    let top = Object.keys(c).sort((a,b)=>c[b]-c[a])[0];
+    if (!top){ const f={}; R.slots.forEach(sl=>{ const n=sl.filled||sl.prize; if(n) f[n]=(f[n]||0)+1; });
+               top = Object.keys(f).sort((a,b)=>f[b]-f[a])[0]; }
+    return top || "";
+  }
+  let best=null, bp=-1;
+  R.rooms.forEach(rm=>{ const p=roomPays(rm)||0; if(rm.prize && p>bp){bp=p;best=rm.prize;} });
+  return best || (R.rooms.find(rm=>rm.prize)||{}).prize || "";
+}
+function autoMemo(){
+  if(!R) return "";
+  if (R.type==="box"){
+    const out={};
+    R.slots.forEach(sl=>{ if (sl.out && sl.prize) out[sl.prize]=(out[sl.prize]||0)+1; });
+    const fil = boxRefill(R.slots);
+    const o = Object.keys(out).map(k=>`${k}${out[k]}`).join(" ");
+    const f = Object.keys(fil).map(k=>`${k}${fil[k]}`).join(" ");
+    const seats = R.slots.filter(sl=>sl.out).map(sl=>sl.i).join(",");
+    const mv = R.slots.filter(slotMoved).length;
+    return [`売上${yen(num(R.sBox))}円`, o?`出 ${o}`:"", f?`補充 ${f}`:"",
+            mv?`配置変更 ${mv}枠`:"", seats?`出た枠 ${seats}`:""].filter(Boolean).join(" ｜ ");
+  }
+  const money = `AB${yen(num(R.sAB))}/CD${yen(num(R.sCD))}円`;
+  const parts = R.rooms.filter(rm=>rm.prize||rm.before!=="").map(rm=>{
+    const head = rm.k==="-" ? "" : rm.k+" ";
+    const ap = addPrizeOf(rm);
+    const add = num(rm.add)>0 ? (ap && ap!==clean(rm.prize) ? `＋${ap}${num(rm.add)}` : `＋${num(rm.add)}`) : "";
+    return `${head}${rm.prize||"?"}${rm.before===""?"":num(rm.before)}${add}`;
+  });
+  const cnt = R.rooms.filter(rm=>rm.counter!=="").map(rm=>`${rm.k==="-"?"":rm.k}${rm.counter}`).join(" ");
+  return [money, parts.join(" / "), cnt?("カウンター "+cnt):""].filter(Boolean).join(" ｜ ");
+}
+
+function updateDerived(){
+  if (!R) return;
+  const t = totals();
+  if (R.type==="4p"){
+    R.rooms.forEach(rm=>{
+      const d = document.querySelector(`#roomGrid [data-d="${rm.k}"]`);
+      if (d){
+        const pr = prevRoom(rm.k);
+        const prevC = pr && pr.counter!=="" ? num(pr.counter) : null;
+        d.textContent = (prevC!==null && rm.counter!=="")
+          ? `前回 ${pr.counter} → +${(+((num(rm.counter)-prevC).toFixed(3)))}`
+          : (prevC!==null ? `前回 ${pr.counter}` : "");
+      }
+      const y = document.querySelector(`#roomGrid [data-y="${rm.k}"]`);
+      if (y){
+        const pays = roomPays(rm), st = prevStock(rm.k);
+        const swapped = addPrizeOf(rm)!==clean(rm.prize) && num(rm.add)>0;
+        y.innerHTML = (pays===null ? "" : `払出 <b style="color:var(--ink)">${pays}</b>`)
+          + (swapped ? `　→ ${esc(addPrizeOf(rm))}` : "");
+      }
+    });
+  }
+  [["sAB",R.sAB],["sCD",R.sCD],["sBox",R.sBox]].forEach(([f,v])=>{
+    const el=document.querySelector(`#roomGrid [data-p="${f}"]`);
+    if (el) el.textContent = num(v)>0 ? `${Math.round(num(v)/PLAY_PRICE)}プレイ` : "";
+  });
+  if (!paysTouched) $("#paysIn").value = t.pays;
+  if (!costTouched) $("#costIn").value = Math.round(t.cost);
+  const noMaster = (R.type==="box" ? R.slots.filter(sl=>sl.out).map(sl=>sl.prize) : R.rooms.map(rm=>rm.prize))
+    .some(n=>n && prizeCostUnit(n)===null);
+  const low = R.type==="box"
+    ? Array.from(new Set(R.slots.filter(sl=>sl.filled).map(sl=>sl.filled)))
+        .map(n=>({n, s:stockOf(n)})).filter(x=>x.s!==null && x.s<=3)
+    : [];
+  $("#sumLine").innerHTML = `
+    <span>${R.type==="box"?"出た":"払出"} <b>${num($("#paysIn").value)}</b> 個</span>
+    ${R.type==="box"?`<span>補充 <b>${t.refill}</b> 個</span>`:""}
+    <span>景品原価 <b>${yen(num($("#costIn").value))}</b> 円</span>
+    ${t.known?"":`<span class="hint" style="margin:0;flex-basis:100%">払出は、次回から「前回の残り＋補充 − 今回の残り」で自動計算されます。</span>`}
+    ${noMaster?`<span class="hint" style="margin:0;flex-basis:100%">景品マスタに無い景品があるので、原価は0で計算しています。</span>`:""}
+    ${low.length?`<span class="hint" style="margin:0;flex-basis:100%;color:var(--warning-ink)">在庫が少ない景品：${low.map(x=>esc(x.n)+" 残"+x.s).join("・")}</span>`:""}`;
+
+  updateReadouts();
+}
+
+function renderPrizeDatalist(){
+  const names = Array.from(new Set(
+    allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name)
+      .concat(Store.rows("weekly").flatMap(r=>(r.rooms||[]).flatMap(x=>[x.prize,x.addPrize])))
+  )).filter(Boolean);
+  $("#prizeList").innerHTML = names.map(n=>`<option value="${esc(n)}"></option>`).join("");
+}
+function initWeek(){
+  F.week = toMonday(iso(new Date()));       // 週は常に「今週（月曜）」
+}
+function setWeek(v){
+  const m = toMonday(v);
+  F.week = m;
+  $("#weekBadge").textContent = m ? `${jpDate(m)}の週` : "";
+  renderStoreRow(); renderLogStatus(); buildRooms(true);
+}
+
+function renderStoreRow(){
+  const doneKeys = new Set(Store.data.weekly.filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
+  $("#storeRow").innerHTML = storesBySales().map(s=>{
+    const total = s.machines.length;
+    const done = s.machines.filter(m=>doneKeys.has(s.n+"|"+m)).length;
+    return `<button class="store" data-v="${esc(s.n)}" aria-pressed="${s.n===F.store}" style="--sc:${storeColor(s.n)}">
+      ${done===total ? '<span class="tick">✓</span>' : ''}
+      <span class="biz">${esc(s.biz)}</span>
+      <span class="nm">${esc(s.n)}</span>
+      <span class="ar">${esc(s.area)}・${done}/${total}台 入力済</span>
+    </button>`;
+  }).join("");
+  $("#storeRow").onclick = e => {
+    const b = e.target.closest(".store"); if(!b) return;
+    F.store = b.dataset.v;
+    const st = storeOf(F.store);
+    if (st && !st.machines.includes(F.machine)) F.machine = st.machines.length===1 ? st.machines[0] : "";
+    renderStoreRow(); renderMachineRow(); renderLogStatus(); buildRooms(true);
+  };
+}
+function renderMachineRow(){
+  const st = storeOf(F.store);
+  const el = $("#machineRow");
+  if (!st){ el.innerHTML = `<span class="hint" style="margin:0">先に店舗を選んでください</span>`; el.onclick=null; return; }
+  chipRow(el, st.machines, F.machine, v => { F.machine=v; renderMachineRow(); renderLogStatus(); buildRooms(true); });
+}
+function renderLogStatus(){
+  const st = storeOf(F.store);
+  if (!st){ $("#storeDone").textContent=""; return; }
+  const doneKeys = new Set(Store.data.weekly.filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
+  const done = st.machines.filter(m=>doneKeys.has(st.n+"|"+m)).length;
+  $("#storeDone").textContent = `この週 ${done}/${st.machines.length}台`;
+}
+
+function updateReadouts(){
+  const t = totals();
+  const pays = num($("#paysIn").value), cost = num($("#costIn").value);
+  $("#rSales").innerHTML = yen(t.sales)+'<span class="u">円</span>';
+  $("#rRate").textContent = t.plays>0 ? (pays>0 ? `1/${(t.plays/pays).toFixed(0)}` : "0") : "—";
+  $("#rPer").innerHTML = yen(Math.round(t.sales*(1-PLACE_RATE)-cost))+'<span class="u">円</span>';
+
+  const ratio = t.sales>0 ? cost/t.sales : null;
+  const arc = $("#gArc"), C=188.5;
+  arc.style.strokeDashoffset = String(C - C*(ratio===null?0:Math.min(ratio/0.5,1)));
+  const stt = costStatus(ratio);
+  arc.style.stroke = stt==="bad" ? "var(--critical)" : stt==="warn" ? "var(--warning)" : "var(--aqua)";
+  $("#gTxt").textContent = ratio===null ? "—" : pct(ratio,0);
+  const pill = $("#gPill");
+  pill.className = "pill "+(ratio===null?"flat":stt);
+  pill.textContent = ratio===null ? "数字を入れてね" : STATUS_WORD[stt];
+  $("#gNote").innerHTML = ratio===null
+    ? "景品原価率は <b>目標30%</b>。超えたら獲得率を下げるか、安い景品に替える。"
+    : stt==="warn" ? `目標30%を <b>${pct(ratio-COST_TARGET,1)}</b> 超えています。あと <b>${yen(Math.round(cost-t.sales*COST_TARGET))}円</b> 原価を削れば目標内。`
+    : `粗利は <b>${yen(Math.round(t.sales*(1-PLACE_RATE)-cost))}円</b>（場所代30%を引いた後）。いいペース。`;
+
+  const ok = F.store && F.machine && t.sales>0;
+  $("#saveLog").disabled = !ok;
+  const missing = [];
+  if (!F.store) missing.push("①で店舗を選ぶ");
+  else if (!F.machine) missing.push("①で機械を選ぶ");
+  if (F.machine && !(t.sales>0)) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の売上金額を入れる（1円以上）" : "②で売上金額を入れる（1円以上）");
+  $("#saveNote").textContent = ok
+    ? `${F.store}／${F.machine}／${jpDate(F.week)}の週　売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
+    : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
+    : (F.machine && R && R.type==="4p") ? ""
+    : "押せるようになるまで：" + missing.join(" → ");
+}
+
+/* クレーン演出は撤去（保存の流れはそのまま） */
+function playCatch(){}
+function confetti(){}
+
+async function saveLog(){
+  const t = totals();
+  if (!F.store || !F.machine || t.sales<=0) return;
+  const rooms = R.type==="4p" ? R.rooms.map(rm=>({
+    k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
+    before:rm.before===""?"":num(rm.before), addPrize:addPrizeOf(rm), add:num(rm.add),
+    pays: roomPays(rm)
+  })) : [];
+  const slots = R.type==="box" ? R.slots.map(sl=>({
+    i:sl.i, prize:clean(sl.prize), out:!!sl.out, filled:clean(sl.filled)
+  })) : [];
+  const rec = {
+    week:F.week, store:F.store, machine:F.machine, mtype:R.type,
+    rooms, slots, sAB:num(R.sAB), sCD:num(R.sCD), sBox:num(R.sBox),
+    sales:t.sales, plays:t.plays,
+    pays:num($("#paysIn").value), cost:num($("#costIn").value),
+    prize:mainPrize(), auto:autoMemo(),
+    time:$("#timeIn").value||"", staff:clean($("#staffIn").value), memo:clean($("#memoIn").value)
+  };
+  const btn=$("#saveLog"); btn.disabled=true;
+  if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
+  playCatch();
+  toast(`GET! ${F.store} ${yen(t.sales)}円 を記録`);
+  $("#memoIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
+  F.machine=""; R=null; builtFor="";
+  renderMachineRow(); buildRooms(true); render();
+}
+
+function renderLogList(){
+  const rows = Store.rows("weekly").slice(0,14);
+  $("#logCt").textContent = Store.data.weekly.length+"件";
+  const el=$("#logList");
+  if(!rows.length){ el.innerHTML=`<div class="empty"><b>🕹️</b>まだログがありません。<br>上のフォームで最初の1件をキャッチしましょう。</div>`; return; }
+  el.innerHTML = rows.map(r=>{
+    const sales = num(r.sales) || num(r.plays)*PLAY_PRICE;
+    const ratio = sales>0 ? num(r.cost)/sales : null, stt=costStatus(ratio);
+    let roomLine;
+    if (r.mtype==="box" || (r.slots||[]).length){
+      const out={}; (r.slots||[]).forEach(x=>{ if(x.out&&x.prize) out[x.prize]=(out[x.prize]||0)+1; });
+      const names = Object.keys(out);
+      roomLine = names.length ? "出た："+names.map(n=>`${esc(n)}×${out[n]}`).join("　") : "";
+    } else {
+      roomLine = (r.rooms||[]).filter(x=>x.prize||x.counter!=="").map(x=>
+        `${x.k==="-"?"":x.k+":"}${esc(x.prize||"—")}${x.before===""?"":" "+x.before}${num(x.add)>0?` +${esc(x.addPrize)}${x.add}`:""}`).join("　");
+    }
+    return `<div class="rowitem" style="--sc:${storeColor(r.store)}">
+      <span class="sw"></span>
+      <div class="bd">
+        <div class="t1">${esc(r.store)}　<span style="font-weight:400;color:var(--ink-3)">${esc(r.machine)}</span></div>
+        <div class="t2">${jpDate(r.week)}の週　${yen(sales)}円＝${yen(r.plays)}プレイ　払出${yen(r.pays)}</div>
+        ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
+        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>
+          ${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
+        </div>
+      </div>
+      ${r.source==="sheet"?"":`<button class="del" data-c="weekly" data-id="${esc(r.id)}" aria-label="削除">🗑</button>`}
+    </div>`;
+  }).join("");
+}
+
+/* ===================== 景品マスタ ===================== */
+const PZ_RATES = [15,20,25,30,35,40,45,50,55,60,70,80,90,100];   // 狙う原価率（％）
+const PZ_VENDORS_BASE = ["株式会社エスプラン"];    // よく使う仕入先。登録した仕入先は自動で候補に増える
+let pzCostRate = 30;
+const vendorName = v => v==="エスプラン" ? "株式会社エスプラン" : v;    // 旧表記はシートと同じ正式名に寄せる
+function pzVendors(){
+  const used = allPrizes().map(p=>vendorName(p.vendor)).filter(Boolean);
+  return Array.from(new Set(PZ_VENDORS_BASE.concat(used)));
+}
+function pzDerived(){
+  const cost = num($("#pzCost").value);
+  const n = (cost>0 && pzCostRate>0) ? Math.max(1, Math.ceil(cost / pzCostRate)) : null;    // 1/N（切り上げ＝狙いの原価率を超えない）
+  const exp = n ? cost/n/PLAY_PRICE : (pzCostRate>0 ? pzCostRate/100 : null);
+  return {cost, n, exp};
+}
+function renderPrizeForm(){
+  const sel=$("#pzVendor"), cur=sel.value;
+  const opts = pzVendors();
+  sel.innerHTML = opts.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join("") + `<option value="__other">その他（入力する）</option>`;
+  if (cur && (opts.includes(cur)||cur==="__other")) sel.value=cur;
+  $("#pzVendorOther").hidden = sel.value!=="__other";
+  chipRow($("#pzRateRow"), PZ_RATES.map(n=>`${n}%`), `${pzCostRate}%`, v=>{
+    pzCostRate = +v.replace("%",""); $("#pzRateN").value = pzCostRate; renderPrizeForm(); updatePzGauge();
+  }, "mini");
+  const vendor = sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value;
+  $("#savePrize").disabled = !(clean($("#pzName").value) && vendor && num($("#pzCost").value)>0 && pzCostRate>0);
+}
+function updatePzGauge(){
+  const {cost,n,exp} = pzDerived();
+  const stt = costStatus(exp);
+  const pill=$("#pzPill"); pill.className="pill "+(exp===null?"flat":stt);
+  pill.textContent = n ? `獲得率 1／${n}（${n}回に1回）　${STATUS_WORD[stt]}` : "単価を入れると獲得率が出ます";
+  $("#pzNote").innerHTML = n
+    ? `${yen(cost)}円 ÷ ${pzCostRate}％ ＝ <b>${n}回に1回</b> 出す設定にすると、原価率はほぼ ${pct(exp,1)}。` +
+      (stt==="warn" ? ` 目標30％を超えています。原価率を下げると回数が増えます。` : ` 100プレイで景品原価 ${yen(Math.round(exp*PLAY_PRICE*100))}円。`)
+    : "原価率 ＝ 仕入単価 × 獲得率 ÷ プレイ単価100円。目標30％。";
+}
+async function savePrize(){
+  const {n} = pzDerived();
+  const sel=$("#pzVendor");
+  const rec = {
+    name:clean($("#pzName").value),
+    vendor: sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value,
+    cost:num($("#pzCost").value), qty:num($("#pzQty").value), use:$("#pzUse").value,
+    costRate:pzCostRate, rateN:n||0, retail:0, proof:"", memo:clean($("#pzMemo").value), staff:me()
+  };
+  $("#savePrize").disabled=true;
+  if (await Store.add("prizes", rec)){
+    toast(`${rec.name} を登録！`);
+    ["#pzName","#pzMemo","#pzQty","#pzVendorOther"].forEach(s=>$(s).value="");
+    if (rec.vendor && sel.value==="__other"){ renderPrizeForm(); sel.value=rec.vendor; }
+  }
+  renderPrizeForm(); updatePzGauge(); render();
+}
+function renderPrizeList(){
+  const rows = Store.rows("prizes").filter(r=>staffOf(r)===me());        // 担当（わたし）の分だけ
+  const sheetOnly = allPrizes().filter(p=>p._sheet);
+  $("#pzCt").textContent = `${me()} ${rows.length}件` + (sheetOnly.length ? `＋シート${sheetOnly.length}件` : "");
+  const el=$("#pzList");
+  if(!rows.length && !sheetOnly.length){ el.innerHTML=`<div class="empty"><b>🎁</b>景品を登録すると、原価率の自動計算と巡回ログのチップに出てきます。</div>`; return; }
+  const sheetHtml = sheetOnly.length ? `
+    <div class="xhead" style="border-top:1px solid var(--line)"><span class="nm">📗 スプレッドシートの景品マスタ</span><span class="ct">${sheetOnly.length}件・${esc(sheetStamp())} 取り込み</span></div>
+    <div class="xwhere">クレーンゲーム日報の「景品マスタ」タブにある景品です（直接入力・アプリから転記・仕入れ想定商品からの自動追加）。ここでは編集できません。シート側で直してください。</div>
+    ${sheetOnly.map(r=>`<div class="rowitem" style="--sc:var(--s1)">
+      <span class="sw"></span>
+      <div class="bd">
+        <div class="t1">${esc(r.name)}</div>
+        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}${num(r.cost)>0?`仕入 ${yen(r.cost)}円（税抜）`:"仕入単価 未入力"}${r.vendor?"　"+esc(r.vendor):""}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          ${r.stock!==null&&r.stock!==undefined&&r.stock!==""?`<span class="pill ${num(r.stock)>0?"flat":"bad"}">残り ${num(r.stock)}${num(r.qty)>0?`／${num(r.qty)}個`:"個"}</span>`:""}
+          ${r.memo?`<span class="tag">${esc(r.memo).slice(0,40)}</span>`:""}
+          <span class="tag sent">📗 シート</span>
+        </div>
+      </div>
+    </div>`).join("")}` : "";
+  if(!rows.length){ el.innerHTML = sheetHtml; return; }
+  const used = {}, refill = refillUsed();
+  Store.data.weekly.forEach(r=>{
+    (r.rooms||[]).forEach(x=>{ if (x.prize && x.pays) used[x.prize]=(used[x.prize]||0)+num(x.pays); });
+    (r.slots||[]).forEach(x=>{ if (x.out && x.prize) used[x.prize]=(used[x.prize]||0)+1; });
+  });
+  el.innerHTML = rows.map(r=>{
+    const exp = num(r.cost)>0 && r.rateN>0 ? num(r.cost)/r.rateN/PLAY_PRICE : null;
+    const stt = costStatus(exp);
+    const rate = r.costRate ? `${r.costRate}％` : (exp!==null ? pct(exp,0) : "—");
+    return `<div class="rowitem" style="--sc:var(--s3)">
+      <span class="sw"></span>
+      <div class="bd">
+        <div class="t1">${esc(r.name)}</div>
+        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}仕入 ${yen(r.cost)}円（税抜）${r.vendor?"　"+esc(r.vendor):""}${r.staff?"　"+esc(r.staff):""}</div>
+        <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <span class="pill ${exp===null?"flat":stt}">原価率 ${rate}${r.rateN?`＝1／${r.rateN}`:""}</span>
+          ${num(r.qty)>0?`<span class="pill ${Math.max(0,num(r.qty)-(refill[r.name]||0))>0?"flat":"bad"}">残り ${Math.max(0,num(r.qty)-(refill[r.name]||0))}／${num(r.qty)}個</span>`:""}
+          ${used[r.name]?`<span class="tag">払出 ${used[r.name]}個</span>`:""}
+          <span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>
+        </div>
+      </div>
+      <button class="del" data-c="prizes" data-id="${esc(r.id)}" aria-label="削除">🗑</button>
+    </div>`;
+  }).join("") + sheetHtml;
+}
+
+/* ===================== 経費 ===================== */
+let exStore = "";
+const EX_STORES = () => STORES.map(s=>s.n).concat(["その他"]);
+function lastPayee(kind){
+  const r = Store.rows("expenses").find(x=>x.kind===kind && x.payee); return r ? r.payee : "";
+}
+const exNoStore = () => $("#exKind").value==="ガソリン代";           // ガソリン代は店舗に属さない（store は「共通」で保存）
+function renderCostForm(){
+  chipRow($("#exStoreRow"), EX_STORES(), exStore, v=>{exStore=v;renderCostForm();});
+  const gas = exNoStore();
+  $("#exStoreField").hidden = gas; $("#exStoreNote").hidden = !gas;
+  const pe=$("#exPayee"); if (pe && !pe.value && !pe.dataset.touched) pe.value = lastPayee($("#exKind").value);
+  const ok = $("#exDate").value && (gas || exStore) && num($("#exNet").value)!==0;
+  $("#saveCost").disabled = !ok;
+}
+async function saveCost(){
+  const net = num($("#exNet").value);
+  const rec = {
+    date:$("#exDate").value, store: exNoStore() ? "共通" : exStore, kind:$("#exKind").value,
+    item:"", net, gross:0, payee:clean($("#exPayee").value), slip:"", memo:clean($("#exMemo").value), staff:me()
+  };
+  $("#saveCost").disabled=true;
+  if (await Store.add("expenses", rec)){
+    toast(`${rec.kind} ${yen(rec.net)}円 を記録`);
+    ["#exNet","#exMemo"].forEach(s=>$(s).value=""); $("#exPayee").dataset.touched="";
+  }
+  renderCostForm(); render();
+}
+function renderCostList(){
+  const rows = Store.rows("expenses").filter(r=>staffOf(r)===me());      // 担当（わたし）の分だけ
+  $("#exCt").textContent = `${me()} ${rows.length}件`;
+  const el=$("#exList");
+  if(!rows.length){ el.innerHTML=`<div class="empty"><b>💰</b>まだ経費がありません。<br>ガソリン代・駐車場代を使った日に1行ずつ入れます。</div>`; return; }
+  el.innerHTML = rows.map(r=>`<div class="rowitem" style="--sc:${r.store==="共通"?"var(--ink-3)":storeColor(r.store)}">
+      <span class="sw"></span>
+      <div class="bd">
+        <div class="t1">${esc(r.kind)}${r.item?"　"+esc(r.item):""}</div>
+        <div class="t2">${esc(r.date)}　${esc(r.store)}${r.payee?"　"+esc(r.payee):""}${r.staff?"　"+esc(r.staff):""}</div>
+        <div class="t2">${yen(r.net)}円（税抜）${r.memo?"　"+esc(r.memo):""}</div>
+        <div style="margin-top:6px">${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}</div>
+      </div>
+      ${r.source==="sheet"?"":`<button class="del" data-c="expenses" data-id="${esc(r.id)}" aria-label="削除">🗑</button>`}
+    </div>`).join("");
+}
+
+/* ===================== ダッシュボード ===================== */
+let selMonth = "";
+let demoWanted = true;              // 実データが1件も無いときだけ効く
+let DEMO = null;
+function buildDemo(){
+  if (DEMO) return DEMO;
+  const base = toMonday(iso(new Date()));
+  const weeks = [5,4,3,2,1,0].map(i=>addDays(base,-7*i));
+  const plan = [
+    {store:STORES[0].n, machine:STORES[0].machines[0], prize:"もちもちベアL",  plays:[520,560,610,590,680,720], pays:[26,27,29,28,31,33], unit:320},
+    {store:STORES[1].n, machine:STORES[1].machines[0], prize:"スイーツマスコット", plays:[380,410,395,450,470,505], pays:[21,22,20,24,25,26], unit:280},
+    {store:STORES[2].n, machine:STORES[2].machines[0], prize:"ふわふわクッション", plays:[300,290,340,360,355,400], pays:[15,14,17,19,18,20], unit:360},
+  ];
+  const weekly=[];
+  plan.forEach(p=>weeks.forEach((w,i)=>weekly.push({
+    id:"demo"+p.store+i, week:w, store:p.store, machine:p.machine, prize:p.prize,
+    plays:p.plays[i], pays:p.pays[i], cost:p.pays[i]*p.unit, time:"10:30", staff:"サンプル", memo:"", sentAt:"demo"
+  })));
+  const expenses = [];
+  DEMO = {weekly, expenses};
+  return DEMO;
+}
+const demoOn = () => demoWanted && Store.data.weekly.length===0 && Store.data.expenses.length===0;
+const activeWeekly   = () => demoOn() ? buildDemo().weekly   : mine(Store.data.weekly);     // 成果一覧は見ている人の分だけ
+const activeExpenses = () => demoOn() ? buildDemo().expenses : mine(Store.data.expenses);
+function monthsAvailable(){
+  const set = new Set(activeWeekly().map(r=>monthOf(r.week)).filter(Boolean));
+  set.add(iso(new Date()).slice(0,7));
+  return Array.from(set).sort().reverse();
+}
+function agg(rows){
+  const plays = rows.reduce((a,r)=>a+num(r.plays),0);
+  const pays  = rows.reduce((a,r)=>a+num(r.pays),0);
+  const cost  = rows.reduce((a,r)=>a+num(r.cost),0);
+  const sales = plays*PLAY_PRICE;
+  const place = Math.round(sales*PLACE_RATE);
+  return {plays,pays,cost,sales,place, gross:sales-cost-place,
+          ratio:sales>0?cost/sales:null, getRate:plays>0?pays/plays:null,
+          grossRate:sales>0?(sales-cost-place)/sales:null, n:rows.length};
+}
+function renderDash(){
+  const months = monthsAvailable();
+  if (!selMonth || months.indexOf(selMonth)<0) selMonth = months[0];
+  chipRow($("#monthRow"), months.map(jpMonth), jpMonth(selMonth), v=>{
+    const i = months.map(jpMonth).indexOf(v); if(i>=0){ selMonth=months[i]; renderDash(); }
+  }, "mini");
+
+  $("#demoBar").innerHTML = demoOn()
+    ? `<div class="warnbox" style="margin-top:10px"><i>👀</i><div><b>いまはサンプル表示です</b>（架空の数字）。<br>「🕹️ 入力」で1件保存すると、ここは本物のデータに切り替わります。
+       <button class="chip mini" id="demoOff" style="margin-top:7px">サンプルを消す</button></div></div>`
+    : "";
+  const off = $("#demoOff"); if (off) off.onclick = () => { demoWanted = false; renderDash(); };
+  const rows = activeWeekly().filter(r=>monthOf(r.week)===selMonth);
+  const a = agg(rows);
+  $("#tSales").innerHTML = yen(a.sales)+'<small> 円</small>';
+  const withBench = STORES.filter(s=>s.bench);
+  const benchTotal = withBench.reduce((x,st)=>x+benchAvg(st),0);
+  const nowSame = rows.filter(r=>withBench.some(s=>s.n===r.store)).reduce((x,r)=>x+num(r.plays)*PLAY_PRICE,0);
+  $("#tSalesSub").innerHTML = a.sales>0
+    ? `${a.plays.toLocaleString()}プレイ・${a.n}件のログ　／　引継ぎ前実績がある${withBench.length}店で比べると <b>${pct(nowSame/benchTotal,0)}</b>（${yen(benchTotal)}円 → ${yen(nowSame)}円）`
+    : `${jpMonth(selMonth)}のログはまだありません。入力すると、ここが埋まります。`;
+  if (demoOn()) $("#tSalesSub").innerHTML = "サンプルの数字です。入力を始めると本物に変わります。";
+  const exMonthAll = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
+  const grossM = a.gross - exMonthAll;                                   // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費
+  $("#tProfit").textContent = yen(grossM);
+  const gp=$("#tProfitPill");
+  gp.className="pill "+(a.sales===0?"flat":grossM>0?"ok":"bad");
+  gp.textContent = a.sales===0 ? "—" : `粗利率 ${pct(grossM/a.sales,0)}${exMonthAll?`・経費 ${yen(exMonthAll)}円 ひき`:""}`;
+  $("#tCost").textContent = a.ratio===null?"—":pct(a.ratio,1);
+  const cp=$("#tCostPill"); const cs=costStatus(a.ratio);
+  cp.className="pill "+(a.ratio===null?"flat":cs); cp.textContent=STATUS_WORD[cs];
+  $("#tGet").textContent = a.getRate===null?"—":`1/${(1/a.getRate).toFixed(0)}`;
+  const gr=$("#tGetPill"); gr.className="pill flat"; gr.textContent = a.pays?`払出 ${a.pays}個`:"—";
+
+  drawBench(rows);
+  drawWeek();
+  drawCostTrend();
+  drawSummary(rows);
+}
+
+/* --- chart 1: 引継ぎ前ベンチマーク比較（横棒・2系列） --- */
+function drawBench(rows){
+  const per = STORES.map(s=>{
+    const now = rows.filter(r=>r.store===s.n).reduce((x,r)=>x+num(r.plays)*PLAY_PRICE,0);
+    return {s, now, bench:benchAvg(s)};
+  });
+  const max = Math.max(1, ...per.map(p=>Math.max(p.now, p.bench||0)));
+  const BW = 168, X0 = 4, H = 60;
+  const body = per.map((p,i)=>{
+    const y = i*H + 14;
+    const wB = p.bench ? Math.max(2, p.bench/max*BW) : 0;
+    const wN = p.now   ? Math.max(2, p.now/max*BW)   : 0;
+    const over = p.bench && p.now > p.bench;
+    return `
+      <text x="${X0}" y="${y}" font-size="11" font-weight="700" fill="var(--ink)">${esc(p.s.n)}</text>
+      ${p.bench ? `<rect x="${X0}" y="${y+6}" width="${wB}" height="8" rx="4" fill="var(--bench)"/>
+        <text x="${X0+wB+6}" y="${y+13}" font-size="9.5" fill="var(--ink-3)" class="mn">${yen(p.bench)}</text>`
+      : `<text x="${X0}" y="${y+13}" font-size="9.5" fill="var(--ink-3)">引継ぎ前データなし</text>`}
+      <rect x="${X0}" y="${y+18}" width="${wN}" height="11" rx="5" fill="${storeColor(p.s.n)}"/>
+      ${p.now>0
+        ? `<text x="${X0+wN+6}" y="${y+27}" font-size="10" font-weight="700" fill="var(--ink)" class="mn">${yen(p.now)}${over?" 🏆":""}</text>`
+        : `<text x="${X0}" y="${y+27}" font-size="9.5" fill="var(--ink-3)">まだ入力なし</text>`}
+      ${p.bench ? `<line x1="${X0+wB}" y1="${y+4}" x2="${X0+wB}" y2="${y+31}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 2"/>`:""}
+    `;
+  }).join("");
+  $("#chBench").innerHTML =
+    `<svg viewBox="0 0 320 ${per.length*H+10}" style="width:100%;height:auto" role="img"
+      aria-label="店舗別 いまの月売上と引継ぎ前の月平均の比較">${body}</svg>`;
+}
+
+/* --- chart 2: 週次売上（店舗で積み上げ） --- */
+function drawWeek(){
+  const weeks = Array.from(new Set(activeWeekly().map(r=>r.week).filter(Boolean))).sort().slice(-8);
+  const el=$("#chWeek");
+  if(!weeks.length){
+    el.innerHTML = `<div class="empty"><b>📊</b>巡回ログを入れると、ここに週ごとの棒グラフが出ます。</div>`;
+    $("#chWeekLeg").innerHTML=""; return;
+  }
+  const used = STORES.filter(s=>activeWeekly().some(r=>r.store===s.n));
+  const data = weeks.map(w=>{
+    const seg = used.map(s=>({name:s.n,
+      v:activeWeekly().filter(r=>r.week===w&&r.store===s.n).reduce((a,r)=>a+num(r.plays)*PLAY_PRICE,0)}));
+    return {w, seg, total:seg.reduce((a,x)=>a+x.v,0)};
+  });
+  const max = Math.max(1, ...data.map(d=>d.total));
+  const W=320,H=180,PL=40,PR=8,PT=16,PB=26;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  const bw=Math.min(34, iw/weeks.length*0.62), gap=iw/weeks.length;
+  const ty=v=>PT+ih-(v/max)*ih;
+  let g="";
+  for(let i=0;i<=3;i++){
+    const v=max*i/3, y=ty(v);
+    g+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="var(--grid)" stroke-width="1"/>
+        <text x="${PL-5}" y="${y+3}" text-anchor="end" font-size="8.5" fill="var(--ink-3)" class="mn">${v>=1000?Math.round(v/1000)+"k":Math.round(v)}</text>`;
+  }
+  let bars="";
+  data.forEach((d,i)=>{
+    const cx=PL+gap*i+gap/2, x=cx-bw/2;
+    let acc=0;
+    d.seg.forEach(sg=>{
+      if(sg.v<=0) return;
+      const h=(sg.v/max)*ih, y=ty(acc+sg.v);
+      bars+=`<rect x="${x}" y="${y}" width="${bw}" height="${Math.max(1,h-2)}" rx="3"
+        fill="${storeColor(sg.name)}" class="hit"
+        data-tip="${esc(jpDate(d.w))}の週 ・ ${esc(sg.name)}&#10;${yen(sg.v)}円"/>`;
+      acc+=sg.v;
+    });
+    bars+=`<text x="${cx}" y="${ty(d.total)-5}" text-anchor="middle" font-size="9" font-weight="700"
+      fill="var(--ink)" class="mn">${d.total>=1000?Math.round(d.total/1000)+"k":d.total}</text>`;
+    bars+=`<text x="${cx}" y="${H-9}" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" class="mn">${jpDate(d.w)}</text>`;
+  });
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
+    aria-label="週ごとの売上（店舗別の積み上げ棒グラフ）">
+    ${g}<line x1="${PL}" y1="${PT+ih}" x2="${W-PR}" y2="${PT+ih}" stroke="var(--axis)" stroke-width="1"/>${bars}</svg>`;
+  $("#chWeekLeg").innerHTML = used.map(s=>`<span><i style="background:${storeColor(s.n)}"></i>${esc(s.n)}</span>`).join("");
+  bindTips(el);
+}
+
+/* --- chart 3: 原価率の推移（折れ線＋基準線） --- */
+function drawCostTrend(){
+  const weeks = Array.from(new Set(activeWeekly().map(r=>r.week).filter(Boolean))).sort().slice(-10);
+  const el=$("#chCost");
+  const pts = weeks.map(w=>{
+    const rs=activeWeekly().filter(r=>r.week===w);
+    const sales=rs.reduce((a,r)=>a+num(r.plays)*PLAY_PRICE,0);
+    const cost=rs.reduce((a,r)=>a+num(r.cost),0);
+    return {w, v: sales>0?cost/sales:null};
+  }).filter(p=>p.v!==null);
+  if(pts.length<1){
+    el.innerHTML=`<div class="empty"><b>📈</b>プレイ数と景品原価を入れると、原価率の折れ線が出ます。</div>`; return;
+  }
+  const W=320,H=160,PL=36,PR=10,PT=14,PB=26;
+  const iw=W-PL-PR, ih=H-PT-PB;
+  const max=Math.max(0.4, ...pts.map(p=>p.v))*1.08;
+  const ty=v=>PT+ih-(v/max)*ih;
+  const tx=i=>pts.length===1 ? PL+iw/2 : PL+(i/(pts.length-1))*iw;
+  let g="";
+  [0,0.1,0.2,0.3,0.4].filter(v=>v<=max).forEach(v=>{
+    g+=`<line x1="${PL}" y1="${ty(v)}" x2="${W-PR}" y2="${ty(v)}" stroke="var(--grid)" stroke-width="1"/>
+        <text x="${PL-5}" y="${ty(v)+3}" text-anchor="end" font-size="8.5" fill="var(--ink-3)" class="mn">${Math.round(v*100)}%</text>`;
+  });
+  const refs = `
+    <line x1="${PL}" y1="${ty(COST_TARGET)}" x2="${W-PR}" y2="${ty(COST_TARGET)}" stroke="var(--warning)" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <text x="${W-PR}" y="${ty(COST_TARGET)-4}" text-anchor="end" font-size="8.5" font-weight="700" fill="var(--warning-ink)">目標 30%</text>`;
+  const d = pts.map((p,i)=>`${i?"L":"M"}${tx(i).toFixed(1)} ${ty(p.v).toFixed(1)}`).join(" ");
+  const area = pts.length>1
+    ? `<path d="${d} L${tx(pts.length-1).toFixed(1)} ${PT+ih} L${tx(0).toFixed(1)} ${PT+ih} Z" fill="var(--s3)" opacity=".10"/>` : "";
+  const line = pts.length>1 ? `<path d="${d}" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round"/>` : "";
+  const dots = pts.map((p,i)=>{
+    const last=i===pts.length-1;
+    return `<circle cx="${tx(i)}" cy="${ty(p.v)}" r="${last?5.5:4}" fill="${last?"var(--s3)":"var(--surface)"}"
+      stroke="var(--s3)" stroke-width="2" class="hit" data-tip="${esc(jpDate(p.w))}の週&#10;原価率 ${pct(p.v,1)}"/>`;
+  }).join("");
+  const labels = pts.map((p,i)=> (i===0||i===pts.length-1||pts.length<=5)
+    ? `<text x="${tx(i)}" y="${H-9}" text-anchor="middle" font-size="8.5" fill="var(--ink-3)" class="mn">${jpDate(p.w)}</text>`:"").join("");
+  const lastV = pts[pts.length-1].v;
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto" role="img"
+      aria-label="景品原価率の週ごとの推移。目標30%の基準線つき">
+      ${g}${refs}${area}${line}${dots}${labels}
+      <text x="${tx(pts.length-1)}" y="${ty(lastV)-11}" text-anchor="end" font-size="10" font-weight="700"
+        fill="var(--ink)" class="mn">${pct(lastV,1)}</text></svg>`;
+  bindTips(el);
+}
+
+/* --- 月次サマリー表 --- */
+function drawSummary(rows){
+  $("#sumMonth").textContent = jpMonth(selMonth);
+  const tb = $("#sumTbl tbody");
+  // 経費（経費台帳の日付がその月のもの）。店舗ごと＋「共通」
+  const exRows = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth);
+  const exOf = store => exRows.filter(x=>x.store===store).reduce((a,x)=>a+num(x.net),0);
+  const exCommon = exOf("共通"), exAll = exRows.reduce((a,x)=>a+num(x.net),0);
+  const used = STORES.filter(s=>rows.some(r=>r.store===s.n) || exOf(s.n)>0);
+  if(!used.length && !exCommon){
+    tb.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ink-3);padding:20px 8px">${jpMonth(selMonth)}のログがありません</td></tr>`;
+    return;
+  }
+  // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費
+  const line = (label,a,color,ex)=>{ const gross=a.gross-ex, gr=a.sales>0?gross/a.sales:null; return `<tr>
+    <td>${color?`<span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:${color};margin-right:6px"></span>`:""}${esc(label)}</td>
+    <td>${yen(a.plays)}</td><td>${yen(a.sales)}</td><td>${yen(a.cost)}</td>
+    <td style="color:${a.ratio>COST_TARGET?"var(--warning-ink)":"var(--ink)"}">${pct(a.ratio,1)}</td>
+    <td>${yen(a.place)}</td><td>${yen(ex)}</td><td style="color:${gross<0?"var(--critical-ink)":"var(--ink)"}">${yen(gross)}</td><td>${pct(gr,1)}</td></tr>`; };
+  tb.innerHTML = used.map(s=>line(s.n, agg(rows.filter(r=>r.store===s.n)), storeColor(s.n), exOf(s.n))).join("")
+    + (exCommon ? `<tr><td>共通（店舗なし）</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${yen(exCommon)}</td><td>${yen(-exCommon)}</td><td>—</td></tr>` : "")
+    + `<tr style="font-weight:700;background:var(--surface-2)">${line("全店 合計", agg(rows), null, exAll).replace(/^<tr>|<\/tr>$/g,"")}</tr>`;
+}
+
+/* --- tooltip --- */
+let tipT;
+function bindTips(root){
+  const tip=$("#tip");
+  const show=(e,txt)=>{
+    tip.innerHTML = esc(txt).replace(/&#10;|\n/g,"<br>");
+    tip.classList.add("on");
+    const r=tip.getBoundingClientRect();
+    let x=e.clientX-r.width/2, y=e.clientY-r.height-12;
+    x=Math.max(8,Math.min(x, innerWidth-r.width-8));
+    if(y<8) y=e.clientY+16;
+    tip.style.left=x+"px"; tip.style.top=y+"px";
+    clearTimeout(tipT); tipT=setTimeout(()=>tip.classList.remove("on"),2600);
+  };
+  root.querySelectorAll(".hit").forEach(n=>{
+    n.style.cursor="pointer";
+    n.addEventListener("pointerenter",e=>show(e,n.dataset.tip));
+    n.addEventListener("pointerdown",e=>show(e,n.dataset.tip));
+  });
+}
+
+/* ===================== 転記（スプレッドシートへ貼る） ===================== */
+const SHEETS = [
+  { key:"weekly", name:"巡回ログ", blocks:[
+    { range:"A〜J列", note:"K〜O列（週キー・売上・原価率・獲得率・月）は自動で埋まります",
+      cols:r=>[r.week,r.store,r.machine,r.prize||"",r.plays,r.pays,r.cost,r.time||"",r.staff||"",sheetMemo(r)] }]},
+  { key:"weekly", name:"部屋別ログ（任意・新しいタブ）", optional:true, blocks:[
+    { range:"見出し行（初回だけA1に貼る）", note:"スプレッドシートに「部屋別ログ」タブを作って、A1に貼ってください",
+      tsvAll:()=>ROOM_HEAD.join("\t") },
+    { range:"データ行（2行目以降）", note:"A〜L列。カウンター数と部屋ごとの景品は、ここだけに残ります",
+      tsvAll:rows=>roomLines(rows).map(l=>l.map(v=>clean(v)).join("\t")).join("\n") }]},
+  { key:"prizes", name:"景品マスタ", blocks:[
+    { range:"A〜F列", note:"C列＝機械タイプ（カリーノ用／4人機用）。G〜J列（期待原価率・累計払出・補充に使った数・残り在庫）は自動",
+      cols:r=>[r.name,r.vendor||"",r.use||"",r.cost,r.rateN>0?(100/r.rateN).toFixed(2)+"%":"",r.qty||""] },
+    { range:"K列（メモ）", note:"メモだけ、同じ行のK列に貼ってください", when:rows=>rows.some(r=>r.memo),
+      cols:r=>[r.memo||""] }]},
+  { key:"expenses", name:"経費台帳", blocks:[
+    { range:"A〜F列", note:"G列（月キー）は自動",
+      cols:r=>[(r.date||"").replace(/-/g,"/"),r.store,r.kind,r.net,r.payee||"",r.memo||""] }]},
+];
+const ROOM_HEAD = ["週","店舗","機械","部屋","カウンター数","カウンター差","ペア売上","景品","補充前数","補充景品","補充数","払出数"];
+function sheetMemo(r){
+  return [r.auto||"", r.memo||""].filter(Boolean).join(" ｜ ");
+}
+function roomLines(rows){
+  const out=[];
+  rows.forEach(r=>{
+    (r.slots||[]).forEach(x=>{
+      if (!x.out && x.filled===(x.prize||"")) return;   // 動きのあった枠だけ
+      out.push([r.week,r.store,r.machine,"枠"+x.i,"","",r.sBox,
+                x.prize||"", x.prize&&!x.out?1:0, x.filled||"", x.filled?1:0, x.out?1:0]);
+    });
+    (r.rooms||[]).forEach(x=>{
+      const pair = r.mtype==="4p" ? (x.k==="A"||x.k==="B" ? r.sAB : r.sCD) : r.sBox;
+      const prevR = Store.data.weekly
+        .filter(o=>o.store===r.store && o.machine===r.machine && String(o.week)<String(r.week) && o.rooms)
+        .sort((a,b)=>String(b.week).localeCompare(String(a.week)))[0];
+      const pv = prevR ? (prevR.rooms||[]).find(y=>y.k===x.k) : null;
+      const dif = (pv && pv.counter!=="" && x.counter!=="") ? (num(x.counter)-num(pv.counter)).toFixed(2) : "";
+      out.push([r.week,r.store,r.machine,x.k==="-"?"本体":x.k,x.counter,dif,pair,
+                x.prize||"",x.before,x.addPrize||"",x.add||0,(x.pays===null||x.pays===undefined)?"":x.pays]);
+    });
+  });
+  return out;
+}
+function tsv(rows, colsFn){
+  return rows.map(r=>colsFn(r).map(v=>clean(v)).join("\t")).join("\n");
+}
+function renderDrawer(){
+  const host=$("#xBlocks");
+  const any = Store.unsentAll();
+  if(!any){
+    host.innerHTML=`<div class="empty" style="border:1px solid var(--line);border-radius:var(--r-m)">
+      <b>✅</b>未転記はゼロです。<br>入力したものは全部スプレッドシートに入っています。</div>`;
+    return;
+  }
+  host.innerHTML = SHEETS.map((sh,si)=>{
+    const rows = Store.unsent(sh.key).slice().sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt)));
+    if(!rows.length) return "";
+    const blocks = sh.blocks.filter(b=>!b.when || b.when(rows));
+    return `<div class="xblock">
+      <div class="xhead"><span class="nm">${esc(sh.name)}</span><span class="ct">${rows.length}行</span></div>
+      ${blocks.map((b,bi)=>`
+        <div class="xwhere">貼り付け先：<code>${esc(sh.name)}</code> タブの <code>${esc(b.range)}</code>・最終行の下<br>${esc(b.note)}</div>
+        <textarea class="tsv" readonly rows="${Math.min(7,rows.length+1)}" id="tsv-${sh.key}-${bi}-${si}">${esc(b.tsvAll?b.tsvAll(rows):tsv(rows,b.cols))}</textarea>
+        <div class="xacts"><button class="btn pri" data-copy="tsv-${sh.key}-${bi}-${si}">📋 コピー</button></div>`).join("")}
+      ${sh.optional ? `<div class="xwhere" style="border-top:1px solid var(--line)">このタブは任意です。作らなくても大丈夫（カウンターの数字は「巡回ログ」のメモ列にも入ります）。<br><b>先にこちらをコピーしてください</b>。下の「巡回ログを転記済みにする」を押すと、この欄も消えます。</div>`
+        : `<div class="xacts" style="padding-top:0"><button class="btn" data-sent="${sh.key}">✓ ${esc(sh.name)} を転記済みにする</button></div>`}
+    </div>`;
+  }).join("");
+  host.onclick = async e => {
+    const c = e.target.closest("[data-copy]");
+    if (c){
+      const ta = document.getElementById(c.dataset.copy);
+      ta.focus(); ta.select();
+      let done=false;
+      try { await navigator.clipboard.writeText(ta.value); done=true; } catch(err){
+        try { done = document.execCommand("copy"); } catch(e2){}
+      }
+      toast(done ? "コピーしました。シートに貼り付けてください" : "長押しして「コピー」を選んでください");
+      return;
+    }
+    const s = e.target.closest("[data-sent]");
+    if (s){
+      const key=s.dataset.sent, now=new Date().toISOString();
+      s.disabled=true;
+      for (const r of Store.unsent(key)) await Store.patch(key, r.id, {sentAt:now});
+      toast(`${SHEETS.find(x=>x.key===key).name} を転記済みにしました`);
+      renderDrawer(); render();
+    }
+  };
+}
+function openDrawer(){ $("#scrim").classList.add("on"); $("#drawer").classList.add("on"); renderDrawer(); }
+function closeDrawer(){ $("#scrim").classList.remove("on"); $("#drawer").classList.remove("on"); }
+
+
+/* ===================== 成果一覧（クエスト画面） ===================== */
+/* EXP：巡回報告の売上 100円 = +1 EXP、経費 100円 = −1 EXP（景品登録は 0）。合計は 0 未満にしない。
+   Lv：Lv1〜9 は 1,000 EXP ごと、Lv10〜19 は 2,000 ごと、Lv20〜29 は 3,000 ごと…（10レベルごとに必要量が +1,000） */
+const YEN_PER_EXP = 100;
+const expOf = r => Math.floor((num(r.sales) || num(r.plays)*PLAY_PRICE) / YEN_PER_EXP);
+const expCostOf = r => Math.floor(num(r.net) / YEN_PER_EXP);
+const expSum = rows => rows.reduce((a,r)=>a+expOf(r),0);
+const expCostSum = rows => rows.reduce((a,r)=>a+expCostOf(r),0);
+const EXP_PER_PRIZE = 100;                                            // 景品登録 1件 = +100 EXP
+const expTotal = (weekly, expenses, prizes) => Math.max(0, expSum(weekly) + (prizes||[]).length*EXP_PER_PRIZE - expCostSum(expenses));
+const expFmt = n => (n<0 ? "−" : "+") + Math.abs(n).toLocaleString();
+/* 称号：5レベルごとに変わり、Lv100 で最高位 */
+const TITLES = [
+  [1,"かけだしトレーナー"],   [5,"みならいトレーナー"],   [10,"いちにんまえ"],          [15,"クレーンハンター"],
+  [20,"ベテラントレーナー"],  [25,"クレーンスナイパー"],   [30,"エーストレーナー"],      [35,"エリートトレーナー"],
+  [40,"クレーンマスター"],    [45,"ゴールドマスター"],     [50,"クレーンチャンピオン"],  [55,"しろの あるじ"],
+  [60,"おうこくの えいゆう"], [65,"でんせつの トレーナー"],[70,"クレーンエンペラー"],    [75,"しんわの トレーナー"],
+  [80,"クレーンの けんじゃ"], [85,"ほしの つかみて"],      [90,"ぎんがの トレーナー"],   [95,"てんかいちの トレーナー"],
+  [100,"クレーンの かみさま"],
+];
+const MILESTONES = [[0,"⛺","スタート"],[.25,"🏘️","むら"],[.5,"🏙️","まち"],[.75,"🏯","とりで"],[1,"🏰","しろ"]];
+const MILESTONE_EXP = 100;                                            // 拠点（むら・まち・とりで・しろ）に到達するたび +100 EXP
+function milestoneHits(W, goal){                                      // 月ごとに到達した拠点と、到達した日
+  const out=[]; if (!(goal>0)) return out;
+  const byMonth={};
+  W.forEach(r=>{ const d=localDay(r.createdAt); if(!d) return; const m=d.slice(0,7); (byMonth[m]=byMonth[m]||[]).push(d); });
+  Object.keys(byMonth).forEach(m=>{
+    const days=byMonth[m].sort();
+    MILESTONES.forEach(([f,ic,nm])=>{ if (f===0) return; const need=Math.ceil(goal*f); if (days.length>=need) out.push({month:m, icon:ic, name:nm, day:days[need-1]}); });
+  });
+  return out;
+}
+let gqDate = "";           // 日報で見る日（YYYY-MM-DD, ローカル）
+let gqLastLv = null;
+const localDay = iso => { const d=new Date(iso); return isNaN(d) ? "" : iso_(d); };
+const iso_ = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
+const todayStr = () => iso_(new Date());
+const nonLocalHidden = r => !r._local_hidden;
+
+function expStep(L){ return 1000 * (Math.floor(L/10) + 1); }          // Lv L → L+1 に必要な EXP
+function expForLv(L){ let t=0; for (let k=1; k<L; k++) t += expStep(k); return t; }   // Lv L になる累計 EXP
+function lvFromExp(exp){ let L=1; while (exp >= expForLv(L+1)) L++; return L; }
+function titleFor(L){ let t=TITLES[0][1]; TITLES.forEach(([l,n])=>{ if(L>=l) t=n; }); return t; }
+
+/* ===== ツカミンの進化：Lv1〜5 は1レベルごと、以降は Lv10,15,20…100 で5レベルごと（全24段階） ===== */
+const EVO_MAX = 24;
+function evoStage(L){ return L<=5 ? L : Math.min(EVO_MAX, 5 + Math.floor(L/5) - 1); }
+function nextEvoLv(L){ if (L<5) return L+1; if (L<10) return 10; const n=Math.floor(L/5)*5+5; return n<=100 ? n : null; }
+let gqStage = 4;
+function monSVG(s, uid){
+  const ink="#14203a";
+  const body  = s>=24 ? "#fff3c4" : s>=22 ? "#9b7bff" : s>=13 ? "#f5b400" : s>=8 ? "#ffc33d" : "#ffd84d";
+  const belly = s>=24 ? "#ffffff" : s>=22 ? "#e4dbff" : s>=13 ? "#fff3bd" : "#fff4c7";
+  const dark  = s>=24 ? "#f0d060" : s>=22 ? "#6f4fd6" : s>=13 ? "#d49a00" : "#f0b800";
+  const earIn = s>=22 ? "#ffb3e6" : "#ffb3a7";
+  const tail  = s>=13 ? "#ffe06b" : body;
+  const sc = (0.76 + Math.min(1,(s-1)/(EVO_MAX-1))*0.3).toFixed(3);
+  const star=(x,y,r,f)=>{ const p=[]; for(let i=0;i<10;i++){ const a=-Math.PI/2+i*Math.PI/5, rr=i%2?r*.45:r; p.push((x+rr*Math.cos(a)).toFixed(1)+","+(y+rr*Math.sin(a)).toFixed(1)); } return `<polygon points="${p.join(" ")}" fill="${f}"/>`; };
+  let o = `<defs><linearGradient id="rb${uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7b7b"/><stop offset=".5" stop-color="#ffd84d"/><stop offset="1" stop-color="#5fa8e8"/></linearGradient></defs>`;
+  o += `<g transform="translate(32 40) scale(${sc}) translate(-32 -40)">`;
+  // 後光・オーラ・星（いちばん後ろ）
+  if (s>=24) for (let i=0;i<12;i++){ if (i>=2&&i<=4) continue; const a=i*Math.PI/6;
+    o+=`<line x1="32" y1="40" x2="${(32+31*Math.cos(a)).toFixed(1)}" y2="${(40+31*Math.sin(a)).toFixed(1)}" stroke="#ffd84d" stroke-width="2.5" opacity=".55" stroke-linecap="round"/>`; }
+  if (s>=17) o+=`<circle cx="32" cy="40" r="28" fill="${s>=23?`url(#rb${uid})`:"#ffd84d"}" opacity="${s>=23?".4":".2"}"/>`;
+  if (s>=21) o+= star(8,20,3.2,"#fff")+star(57,30,2.6,"#fff")+star(10,56,2.4,"#fff");
+  // 翼（Lv40〜。Lv60〜で大きく）
+  if (s>=12){ const w = s>=16 ? 1.45 : 1;
+    o+=`<g transform="translate(14 36) scale(${w}) translate(-14 -36)"><path d="M14 36 Q2 26 6 16 Q12 24 16 30 Z" fill="#fff" stroke="${ink}" stroke-width="1.8" stroke-linejoin="round"/></g>`
+      +`<g transform="translate(50 36) scale(${w}) translate(-50 -36)"><path d="M50 36 Q62 26 58 16 Q52 24 48 30 Z" fill="#fff" stroke="${ink}" stroke-width="1.8" stroke-linejoin="round"/></g>`; }
+  // マント（Lv30〜。Lv70〜で紫）
+  if (s>=10) o+=`<path d="M16 30 Q10 48 15 58 L49 58 Q54 48 48 30 Z" fill="${s>=18?"#7a2fb5":"#2f7fc6"}" stroke="${ink}" stroke-width="2" stroke-linejoin="round"/>`;
+  // しっぽ（Lv2 で生え、Lv3 でクレーンのアームに）
+  if (s===2) o+=`<path d="M48 46 Q56 44 55 36" stroke="${ink}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M48 46 Q56 44 55 36" stroke="${body}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+  if (s>=3) o+=`<path d="M48 46 Q58 40 55 22" stroke="${ink}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M48 46 Q58 40 55 22" stroke="${tail}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`
+    +`<path d="M55 21 L49 14 M55 21 L55 11 M55 21 L61 14" stroke="${ink}" stroke-width="2.6" stroke-linecap="round"/><circle cx="55" cy="21" r="3" fill="${tail}" stroke="${ink}" stroke-width="1.8"/>`;
+  // 耳（Lv1 は小さい）
+  if (s===1) o+=`<ellipse cx="21" cy="21" rx="4" ry="6" transform="rotate(-20 21 21)" fill="${body}" stroke="${ink}" stroke-width="2"/><ellipse cx="43" cy="21" rx="4" ry="6" transform="rotate(20 43 21)" fill="${body}" stroke="${ink}" stroke-width="2"/>`;
+  else o+=`<ellipse cx="19" cy="15" rx="5.5" ry="10" transform="rotate(-28 19 15)" fill="${body}" stroke="${ink}" stroke-width="2.2"/><ellipse cx="45" cy="15" rx="5.5" ry="10" transform="rotate(28 45 15)" fill="${body}" stroke="${ink}" stroke-width="2.2"/>`
+    +`<ellipse cx="19.5" cy="15.5" rx="2.4" ry="5.5" transform="rotate(-28 19.5 15.5)" fill="${earIn}"/><ellipse cx="44.5" cy="15.5" rx="2.4" ry="5.5" transform="rotate(28 44.5 15.5)" fill="${earIn}"/>`;
+  // 足・体・おなか・手
+  o+=`<ellipse cx="23" cy="56" rx="5.5" ry="3.2" fill="${dark}" stroke="${ink}" stroke-width="2"/><ellipse cx="41" cy="56" rx="5.5" ry="3.2" fill="${dark}" stroke="${ink}" stroke-width="2"/>`;
+  o+=`<ellipse cx="32" cy="39" rx="20" ry="17.5" fill="${body}" stroke="${ink}" stroke-width="2.5"/>`;
+  if (s>=4) o+=`<ellipse cx="32" cy="47" rx="10.5" ry="7" fill="${belly}"/>`;
+  if (s>=2) o+=`<ellipse cx="13.5" cy="45" rx="3" ry="4" transform="rotate(25 13.5 45)" fill="${body}" stroke="${ink}" stroke-width="1.8"/><ellipse cx="50.5" cy="45" rx="3" ry="4" transform="rotate(-25 50.5 45)" fill="${body}" stroke="${ink}" stroke-width="1.8"/>`;
+  // 顔
+  if (s===1) o+=`<circle cx="25" cy="36" r="2.6" fill="${ink}"/><circle cx="39" cy="36" r="2.6" fill="${ink}"/><circle cx="26" cy="35" r=".9" fill="#fff"/><circle cx="40" cy="35" r=".9" fill="#fff"/><path d="M29.5 42 Q32 44.5 34.5 42" stroke="${ink}" stroke-width="1.6" fill="none" stroke-linecap="round"/>`;
+  else {
+    o+=`<ellipse cx="24.5" cy="35" rx="3.6" ry="4.8" fill="${ink}"/><ellipse cx="39.5" cy="35" rx="3.6" ry="4.8" fill="${ink}"/><circle cx="25.8" cy="33" r="1.6" fill="#fff"/><circle cx="40.8" cy="33" r="1.6" fill="#fff"/>`;
+    if (s>=4) o+=`<circle cx="23.6" cy="37.4" r=".75" fill="#fff"/><circle cx="38.6" cy="37.4" r=".75" fill="#fff"/>`;
+    o+=`<path d="M28.5 40.5 Q32 46 35.5 40.5 Z" fill="#b8323d" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/><path d="M30.3 43 Q32 44.6 33.7 43" fill="#ff8f9a"/>`;
+  }
+  if (s>=2) o+=`<ellipse cx="17" cy="41" rx="3.4" ry="2.3" fill="#ff7b7b" opacity="${s>=3?".85":".5"}"/><ellipse cx="47" cy="41" rx="3.4" ry="2.3" fill="#ff7b7b" opacity="${s>=3?".85":".5"}"/>`;
+  if (s>=11) o+=`<path d="M16 38 L18.5 41 L16.5 41.5 L18.5 44.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M48 38 L45.5 41 L47.5 41.5 L45.5 44.5" stroke="#fff" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (s>=5 && s<20) o+= star(32,26.5,3,"#ff9f1c");
+  if (s>=20) o+=`<circle cx="32" cy="26.5" r="3" fill="#5fe0ff" stroke="${ink}" stroke-width="1.2"/>`;
+  // マフラー（Lv10〜）・バッジ（Lv25〜）・メダル（Lv50〜）
+  if (s>=6) o+=`<path d="M14 49 Q32 58 50 49 Q32 54 14 49 Z" fill="#e33f3f" stroke="${ink}" stroke-width="1.6" stroke-linejoin="round"/><path d="M46 51 L52 60 L48 60 Z" fill="#e33f3f" stroke="${ink}" stroke-width="1.4" stroke-linejoin="round"/>`;
+  if (s>=9 && s<14) o+=`<circle cx="32" cy="52" r="3.2" fill="#fff" stroke="${ink}" stroke-width="1.2"/><path d="M32 49.4 V54.6 M29.4 52 H34.6" stroke="${ink}" stroke-width="1"/>`;
+  if (s>=14) o+=`<path d="M29 50 L32 55 L35 50 Z" fill="#e33f3f"/><circle cx="32" cy="55" r="3.4" fill="#ffd84d" stroke="${ink}" stroke-width="1.3"/>${star(32,55,1.8,"#b57f00")}`;
+  // ゴーグル（Lv15〜54）・けんじゃのめがね（Lv80〜）
+  if (s>=7 && s<15) o+=`<path d="M19 23 Q32 17 45 23" stroke="${ink}" stroke-width="2.2" fill="none"/><circle cx="25" cy="23" r="3.6" fill="#5fa8e8" stroke="${ink}" stroke-width="1.6"/><circle cx="39" cy="23" r="3.6" fill="#5fa8e8" stroke="${ink}" stroke-width="1.6"/>`;
+  if (s>=20) o+=`<circle cx="24.5" cy="35" r="5.6" fill="none" stroke="#f5c542" stroke-width="1.4"/><circle cx="39.5" cy="35" r="5.6" fill="none" stroke="#f5c542" stroke-width="1.4"/><path d="M30.1 35 H33.9" stroke="#f5c542" stroke-width="1.4"/>`;
+  // 輪っか（Lv75〜）・王冠（Lv55〜。Lv70〜で大きく）
+  if (s>=19) o+=`<ellipse cx="32" cy="6" rx="11" ry="2.6" fill="none" stroke="#fff" stroke-width="2" opacity=".9"/>`;
+  if (s>=15 && s<18) o+=`<path d="M25 22 L27 15 L30.5 19.5 L32 13 L33.5 19.5 L37 15 L39 22 Z" fill="#ffd84d" stroke="${ink}" stroke-width="1.5" stroke-linejoin="round"/>`;
+  if (s>=18) o+=`<path d="M21 23 L23 11 L28 17.5 L32 8 L36 17.5 L41 11 L43 23 Z" fill="#ffd84d" stroke="${ink}" stroke-width="1.6" stroke-linejoin="round"/><circle cx="23" cy="11" r="1.6" fill="#e33f3f"/><circle cx="32" cy="8" r="1.8" fill="#5fa8e8"/><circle cx="41" cy="11" r="1.6" fill="#e33f3f"/>`;
+  return o + `</g>`;
+}
+function byDay(col, day){ return mine(Store.data[col]).filter(r=>localDay(r.createdAt)===day); }
+function dailyTarget(){ const g=Store.goal(gqWho); return (g.monthly>0 && g.days>0) ? Math.ceil(g.monthly/g.days) : 0; }
+
+function renderQuest(){
+  if (!$("#gqLv")) return;
+  chipRow($("#gqWhoRow"), STAFF, gqWho, v=>{ gqWho=v; renderDash(); renderQuest(); }, "mini");
+  $("#gqTrainer").textContent = gqWho;
+  const W=mine(Store.data.weekly), P=mine(Store.data.prizes), X=mine(Store.data.expenses);   // 見ている人の分だけ
+  const g=Store.goal(gqWho), daily=dailyTarget();
+  const today=todayStr(), todayN=byDay("weekly",today).length;
+  const mon = today.slice(0,7);
+  const monthN = W.filter(r=>localDay(r.createdAt).slice(0,7)===mon).length;
+  // EXP ＝ 売上・景品登録・拠点ボーナス − 経費 ＋ バッジ（1こ +100）。バッジ「Lv.5」はレベルに依存するので、数が落ち着くまで数回計算する
+  const gymRanks = gymRankTotal(W), rankBonus = rankBonusFor(gqWho);
+  const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonus;
+  let exp=baseExp, L=lvFromExp(exp), badges=badgeList(W, L, g, monthN);
+  for (let i=0;i<3;i++){ const e2 = baseExp + badges.filter(b=>b[2]).length*BADGE_EXP; if (e2===exp) break; exp=e2; L=lvFromExp(exp); badges=badgeList(W, L, g, monthN); }
+  const badgeN = badges.filter(b=>b[2]).length;
+  const base=expForLv(L), next=expForLv(L+1);
+  $("#gqLv").textContent=L; $("#gqTitle").textContent=titleFor(L);
+  $("#gqExp").textContent=(exp-base).toLocaleString(); $("#gqExpNext").textContent=(next-base).toLocaleString();
+  $("#gqExpBar").style.width = Math.min(100,(exp-base)/(next-base)*100).toFixed(1)+"%";
+  const caught = W.reduce((a,r)=>a+num(r.pays),0);
+  $("#gqCaught").textContent = caught.toLocaleString();
+
+  // 進化（すがたはレベルで決まる）
+  const stage = evoStage(L); gqStage = stage;
+  const monEl = $("#gqMon");
+  if (monEl && monEl.dataset.stage!==String(stage)){ monEl.innerHTML = monSVG(stage,"a"); monEl.dataset.stage = String(stage); }
+  const nx = nextEvoLv(L);
+  $("#gqEvo").innerHTML = (nx ? `つぎの しんか Lv.${nx}` : "さいしゅう しんか！") + `・すがた ${stage}／${EVO_MAX}<br>ジムランク ${gymRanks}（+${(gymRanks*GYM_EXP).toLocaleString()} EXP）・バッジ ${badgeN}こ（+${(badgeN*BADGE_EXP).toLocaleString()} EXP）${rankBonus?`・順位ボーナス +${rankBonus.toLocaleString()}`:""}`;
+
+  // レベルアップ・進化の演出（表示だけ）
+  let stored=null, storedStage=null;
+  try{ stored=+localStorage.getItem("crane-lab-lv:"+gqWho)||null; storedStage=+localStorage.getItem("crane-lab-evo:"+gqWho)||null; }catch(e){}
+  if (stored && L>stored){ $("#gqAva").classList.remove("lvup"); void $("#gqAva").offsetWidth; $("#gqAva").classList.add("lvup"); gqLastLv="up"; }
+  if (storedStage && stage>storedStage) gqLastLv="evo";
+  try{ localStorage.setItem("crane-lab-lv:"+gqWho, String(L)); localStorage.setItem("crane-lab-evo:"+gqWho, String(stage)); }catch(e){}
+
+  // きょうのクエスト
+  $("#gqMonthly").value = g.monthly||""; $("#gqDays").value = g.days||"";
+  $("#gqCalc").innerHTML = daily ? `→ 1日 <b>${daily}</b> マシーン（${g.monthly}マシーン ÷ ${g.days}日・切り上げ）` : `→ 1日 <b>—</b> マシーン（逆算）`;
+  $("#gqToday").textContent=todayN; $("#gqDaily").textContent=daily||"—";
+  const bar=$("#gqQuestBar"), wrap=bar.parentElement;
+  const ratio = daily ? Math.min(1,todayN/daily) : 0;
+  bar.style.width=(ratio*100).toFixed(1)+"%";
+  wrap.classList.toggle("done", daily>0 && todayN>=daily);
+  wrap.classList.toggle("low", daily>0 && todayN<daily && ratio<.5);
+  const cleared = daily>0 && todayN>=daily;
+  $("#gqQuestNote").innerHTML = !daily ? "目標を設定すると、1日の巡回マシーン数が出ます"
+    : cleared ? `<span class="gq-clear">★ クエスト クリア！</span>　きょうの ノルマ たっせい！`
+    : `あと <b style="color:#f5c542">${daily-todayN}</b> マシーンで きょうの クエスト クリア`;
+
+  // メッセージ
+  const msg = $("#gqMsg");
+  if (gqLastLv==="evo"){ msg.innerHTML=`おや…？ ツカミンの ようすが…！<br>ツカミンは あたらしい すがたに しんかした！（Lv.${L}）`; gqLastLv=null; }
+  else if (gqLastLv==="up"){ msg.innerHTML=`レベルアップ！<br>${esc($("#gqTrainer").textContent)}は Lv.${L} に なった！`; gqLastLv=null; }
+  else if (!W.length) msg.innerHTML="ツカミンが なかまに なった！<br>きょうも 巡回に でかけよう！";
+  else if (cleared) msg.innerHTML="クエスト クリア！<br>ツカミンは とても よろこんでいる！";
+  else if (daily) msg.innerHTML=`きょうは あと ${daily-todayN}マシーン。<br>ツカミンが そわそわしている…`;
+  else msg.innerHTML="月間目標と 稼働日数を 入れると<br>きょうの クエストが はじまる！";
+
+  // ロードマップ（今月の巡回数 vs 月間目標）
+  $("#gqMonthLbl").textContent = `${+mon.slice(5)}月：${monthN}／${g.monthly||"—"}マシーン`;
+  drawRoad(monthN, g.monthly);
+  drawDayStrip(mon, daily);
+
+  // こうどう日報（日付チップ）
+  const days = Array.from(new Set(["weekly","prizes","expenses"].flatMap(c=>Store.data[c].map(r=>localDay(r.createdAt))).filter(Boolean)));
+  if (!days.includes(today)) days.push(today);
+  days.sort().reverse();
+  const shown = days.slice(0,10);
+  if (!gqDate || !days.includes(gqDate)) gqDate = today;
+  const lbl = d => d===today ? "きょう" : (d===iso_(new Date(Date.now()-864e5)) ? "きのう" : `${+d.slice(5,7)}/${+d.slice(8)}`);
+  chipRow($("#gqDates"), shown.map(lbl), lbl(gqDate), v=>{ const i=shown.map(lbl).indexOf(v); if(i>=0){ gqDate=shown[i]; renderQuest(); } }, "mini");
+  drawDayLog(gqDate, daily);
+
+  // バッジ
+  drawBadges(badges);
+  drawGyms(W, mon);                                                     // ジムランクも見ている人の売上で
+  drawRanking(mon);
+}
+
+function drawRoad(n, target){
+  const el=$("#gqRoad");
+  const W=440,H=110;
+  const pts=[[28,78],[128,42],[228,78],[328,42],[412,70]];
+  const prog = target>0 ? Math.min(1,n/target) : 0;
+  // 進捗位置（折れ線上を補間）
+  const segs=pts.length-1, t=prog*segs, i=Math.min(segs-1,Math.floor(t)), f=t-i;
+  const px=pts[i][0]+(pts[i+1][0]-pts[i][0])*f, py=pts[i][1]+(pts[i+1][1]-pts[i][1])*f;
+  const path=pts.map((p,k)=>(k?"L":"M")+p[0]+" "+p[1]).join(" ");
+  el.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="今月の巡回の進みぐあい">
+    <path d="${path}" stroke="#2a4a8c" stroke-width="10" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="${path}" stroke="#f5c542" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${(prog*520).toFixed(0)} 999" opacity=".95"/>
+    ${pts.map((p,k)=>{ const m=MILESTONES[k]; const got = target>0 && n>=Math.ceil(target*m[0]) && (k>0||true);
+      return `<circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${got?"#f5c542":"#14203a"}" stroke="${got?"#fff":"#2a4a8c"}" stroke-width="2"/>
+        <text x="${p[0]}" y="${p[1]+5}" text-anchor="middle" font-size="14">${m[1]}</text>
+        <text x="${p[0]}" y="${p[1]+28}" text-anchor="middle" font-size="9" fill="#a8b8d4" style="font-family:'DotGothic16',sans-serif">${m[2]}${target>0?" "+Math.ceil(target*m[0]):""}</text>`; }).join("")}
+    <g transform="translate(${px.toFixed(1)},${(py-26).toFixed(1)})">
+      <svg x="-16" y="-16" width="32" height="32" viewBox="0 0 64 64" overflow="visible">${monSVG(gqStage,"r")}</svg>
+    </g></svg>`;
+  $("#gqRoadNote").innerHTML = !target ? "月間目標を入れると、ロードマップが はじまります。拠点に つくたびに ボーナス +100 EXP！"
+    : n>=target ? `<b>ゴール！</b> こんげつの 目標 ${target}マシーンを たっせい！`
+    : `しろまで あと <b>${target-n}</b>マシーン。つぎの 拠点は ${(()=>{const m=MILESTONES.find(m=>n<Math.ceil(target*m[0]));return m?`${m[1]}${m[2]}（${Math.ceil(target*m[0])}マシーン）`:"しろ";})()}`;
+}
+function drawDayStrip(mon, daily){
+  const el=$("#gqDayStrip");
+  const [y,m]=mon.split("-").map(Number); const last=new Date(y,m,0).getDate(); const today=todayStr();
+  const cnt={}; mine(Store.data.weekly).forEach(r=>{ const d=localDay(r.createdAt); if(d.startsWith(mon)) cnt[d]=(cnt[d]||0)+1; });
+  // その日に稼いだ EXP（売上・景品登録・拠点ボーナス − 経費）。1 以上なら色を塗る
+  const ex = expByDay();
+  const head =["月","火","水","木","金","土","日"].map((w,i)=>`<div class="gq-wd ${i===5?"sat":i===6?"sun":""}">${w}</div>`).join("");
+  const lead = (new Date(y,m-1,1).getDay()+6)%7;                      // 1日が月曜なら 0、火曜なら 1…（月曜はじまり）
+  const blanks = Array.from({length:lead},()=>`<div></div>`).join("");
+  el.innerHTML = head + blanks + Array.from({length:last},(_,i)=>{
+    const d=`${mon}-${String(i+1).padStart(2,"0")}`; const c=cnt[d]||0, e=ex[d]||0;
+    const cls = ["gq-day", e>=1?"act":"", (daily&&c>=daily)?"hit":"", d===today?"today":"", d>today?"future":""].filter(Boolean).join(" ");
+    return `<div class="${cls}" title="${d}：巡回${c}マシーン・${expFmt(e)} EXP">${i+1}</div>`;
+  }).join("");
+}
+function drawDayLog(day, daily){
+  const w=byDay("weekly",day), p=byDay("prizes",day), x=byDay("expenses",day);
+  const bonus = milestoneHits(mine(Store.data.weekly), Store.goal(gqWho).monthly).filter(h=>h.day===day);
+  const gained = expSum(w), prizeExp = p.length*EXP_PER_PRIZE, bonusExp = bonus.length*MILESTONE_EXP, spent = expCostSum(x), exp = gained + prizeExp + bonusExp - spent;
+  const hit = daily>0 && w.length>=daily;
+  const grp=(name,rows,expN,lines,empty,unit="件")=>`<div class="gq-grp">
+      <div class="t"><span>${name}　<b>${rows.length}</b>${unit}</span>${expN===null?"":`<span class="exp">${expFmt(expN)} EXP</span>`}</div>
+      ${rows.length?`<ul>${lines.map(l=>`<li>${l}</li>`).join("")}</ul>`:`<div class="none">${empty}</div>`}</div>`;
+  $("#gqLog").innerHTML =
+    `<div class="gq-sum">この日の EXP <b>${expFmt(exp)}</b>（売上100円＝+1／景品登録1件＝+100／拠点とうちゃく＝+100／経費100円＝−1）　${daily?(hit?`／ 日間目標 <b>たっせい ★</b>`:`／ 日間目標 ${w.length}／${daily}`):""}</div>` +
+    bonus.map(h=>`<div class="gq-sum">${h.icon} <b>${h.name}</b> に とうちゃく！　ボーナス <b>+${MILESTONE_EXP} EXP</b></div>`).join("") +
+    grp("🕹️ 巡回報告", w, gained, w.map(r=>`${esc(r.store)}／${esc(r.machine)}　売上${yen(num(r.sales)||num(r.plays)*PLAY_PRICE)}円 → ${expFmt(expOf(r))} EXP${r.pays?`　出${r.pays}`:""}`), "まだ 巡回報告が ありません", "マシーン") +
+    grp("🎁 景品登録", p, prizeExp, p.map(r=>`${esc(r.name)}　${yen(r.cost)}円${r.qty?`×${r.qty}`:""} → +${EXP_PER_PRIZE} EXP`), "景品登録は ありません") +
+    grp("💰 経費登録", x, -spent, x.map(r=>`${esc(r.kind)}　${yen(r.net)}円${r.payee?`（${esc(r.payee)}）`:""} → ${expFmt(-expCostOf(r))} EXP`), "経費登録は ありません");
+}
+/* ===== ジムランク：店舗ごと。今月の売上でランクが決まる（5万・10万・15万・20万・25万・30万=MAX。月が変わるとリセット）。
+   ランクが上がるほどバッジが豪華になる。5店すべて獲得で殿堂入り ===== */
+const GYM_TIERS = [50000,100000,150000,200000,250000,300000];
+const gymTier = best => GYM_TIERS.filter(t=>best>=t).length;        // 0〜6
+const GYM_EXP = 100;                                                  // ジムランク 1ランクにつき +100 EXP（月ごと・店ごとに積み上がる）
+function gymRankTotal(W){
+  const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
+  const bySM={}; W.forEach(r=>{ const m=monthOf(r.week); if(m){ const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r); } });
+  return Object.values(bySM).reduce((a,v)=>a+gymTier(v),0);
+}
+function gymIcon(color, t){
+  const got = t>=1, ink="#14203a";
+  const fill = got ? color : "#243454";
+  const edge = t>=3 ? "#f5c542" : got ? "#eef3fb" : "#3a4f78";
+  let o = `<svg width="40" height="40" viewBox="0 0 40 40" overflow="visible" aria-hidden="true">`;
+  if (t>=6) o += `<circle cx="20" cy="21" r="19" fill="#f5c542" opacity=".28"/>`;                                   // MAX：後光
+  if (t>=4) o += `<path d="M7 31 Q1 21 7 11" stroke="#f5c542" stroke-width="2.2" fill="none" stroke-linecap="round"/>`  // 20万〜：月桂樹
+             + `<path d="M33 31 Q39 21 33 11" stroke="#f5c542" stroke-width="2.2" fill="none" stroke-linecap="round"/>`
+             + `<circle cx="4.5" cy="16" r="1.6" fill="#f5c542"/><circle cx="3.5" cy="22" r="1.6" fill="#f5c542"/><circle cx="4.5" cy="28" r="1.6" fill="#f5c542"/>`
+             + `<circle cx="35.5" cy="16" r="1.6" fill="#f5c542"/><circle cx="36.5" cy="22" r="1.6" fill="#f5c542"/><circle cx="35.5" cy="28" r="1.6" fill="#f5c542"/>`;
+  o += `<path d="M20 7 L32 14 L32 28 L20 35 L8 28 L8 14 Z" fill="${fill}" stroke="${edge}" stroke-width="${t>=5?3:2.2}" stroke-linejoin="round"/>`;
+  if (t>=5) [[20,7],[32,14],[32,28],[20,35],[8,28],[8,14]].forEach(([x,y],i)=>{                                    // 25万〜：宝石
+    o += `<circle cx="${x}" cy="${y}" r="2.3" fill="${i%2?"#5fa8e8":"#e33f3f"}" stroke="${ink}" stroke-width="1"/>`; });
+  if (t===0)      o += `<circle cx="20" cy="21" r="5" fill="none" stroke="#3a4f78" stroke-width="2"/>`;
+  else if (t===1) o += `<circle cx="20" cy="21" r="4.5" fill="#fff" opacity=".95"/>`;                                   // 5万：しるし
+  else            o += `<path d="M20 12.5 L22.4 18 L28.3 18.6 L23.8 22.6 L25.2 28.4 L20 25.4 L14.8 28.4 L16.2 22.6 L11.7 18.6 L17.6 18 Z" fill="#fff" ${t>=3?`stroke="#f5c542" stroke-width="1.2"`:""} opacity=".95"/>`;  // 10万〜：星（15万〜で金ぶち）
+  if (t>=6) o += `<path d="M13 8 L15 1.5 L18 5.5 L20 0 L22 5.5 L25 1.5 L27 8 Z" fill="#f5c542" stroke="${ink}" stroke-width="1.2" stroke-linejoin="round"/>`;  // MAX：王冠
+  return o + `</svg>`;
+}
+function drawGyms(W, mon){
+  const el=$("#gqGyms"); if(!el) return;
+  const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
+  const bySM={}; W.forEach(r=>{ const m=monthOf(r.week); if(m){ const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r); } });
+  const man = v => (Math.floor(v/1000)/10).toLocaleString("ja-JP",{maximumFractionDigits:1});   // 千円単位で切り捨て（19,500円 → 1.9万）
+  let got=0, maxed=0;
+  el.innerHTML = STORES.map((s,i)=>{
+    const now = bySM[s.n+"|"+mon]||0;                                            // 今月の売上でランクが決まる（月が変わるとリセット）
+    const t = gymTier(now); if (t>=1) got++; if (t>=6) maxed++;
+    const nextT = GYM_TIERS[Math.min(t, GYM_TIERS.length-1)];                       // 次のランクの金額（MAX なら 30万）
+    const pct = Math.min(100, now/nextT*100);
+    const rank = t>=6 ? "MAX（30万）" : t>=1 ? `ランク ${t}（${man(GYM_TIERS[t-1])}万）` : "5万で 獲得";
+    return `<div class="gq-gym ${t>=1?"got":""} ${t>=6?"max":""}">
+      ${gymIcon(`var(${SERIES[i%SERIES.length]})`, t)}
+      <div class="nm"><b>${esc(s.n)}</b><span>${esc(s.biz)}・${rank}</span></div>
+      <div class="pg"><div class="gq-bar"><i style="width:${pct.toFixed(1)}%"></i></div><small>今月 ${man(now)}万／${man(nextT)}万</small></div>
+    </div>`;
+  }).join("") + (maxed>=STORES.length ? `<div class="gq-hall">👑 グランド でんどういり！ 5店 すべて MAX！</div>`
+                : got>=STORES.length ? `<div class="gq-hall">👑 でんどういり！ 5店 すべて ジムランク 獲得！</div>` : "");
+  $("#gqGymSub").textContent = `獲得 ${got}／${STORES.length}・MAX ${maxed}／${STORES.length}`;
+  $("#gqGymNote").textContent = `月売上 5万円で 獲得、5万円ごとに ランクアップ（30万円で MAX）`;
+}
+
+/* ===== ランキング：担当ごとの「こんげつの EXP」で順位。見ている人（gqWho）を一時的に切り替えて同じ計算を使う ===== */
+const RANK_EXP = [300,200,100];                                       // 月末の順位で 1位 +300 / 2位 +200 / 3位 +100（4位以下 0）
+function monthExpFor(who, mon){                                       // その月に稼いだ EXP（売上・景品登録・拠点ボーナス・ジムランク − 経費）
+  const keep = gqWho; gqWho = who;
+  try {
+    const W=mine(Store.data.weekly);
+    const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
+    const ex = expByDay();
+    const dayExp = Object.keys(ex).filter(d=>d.startsWith(mon)).reduce((a,d)=>a+ex[d],0);
+    const bySM={}; W.forEach(r=>{ if(monthOf(r.week)===mon){ bySM[r.store]=(bySM[r.store]||0)+salesOf(r); } });
+    return dayExp + Object.values(bySM).reduce((a,v)=>a+gymTier(v),0)*GYM_EXP;
+  } finally { gqWho = keep; }
+}
+function monthStanding(mon){                                          // その月の順位表（EXP が 0 以下の人は順位なし）
+  return STAFF.map(w=>({who:w, monthExp:monthExpFor(w, mon)})).filter(s=>s.monthExp>0).sort((a,b)=>b.monthExp-a.monthExp);
+}
+function pastMonths(){                                                // データのある「終わった月」
+  const cur = todayStr().slice(0,7); const set = new Set();
+  ["weekly","prizes","expenses"].forEach(c=>(Store.data[c]||[]).forEach(r=>{ const m=localDay(r.createdAt).slice(0,7); if (m && m<cur) set.add(m); }));
+  return Array.from(set).sort();
+}
+function rankBonusFor(who){                                           // 終わった月の順位ボーナスの合計
+  return pastMonths().reduce((a,m)=>{ const i=monthStanding(m).findIndex(s=>s.who===who); return a + (i>=0 ? (RANK_EXP[i]||0) : 0); }, 0);
+}
+function statsFor(who, mon){
+  const keep = gqWho; gqWho = who;
+  try {
+    const W=mine(Store.data.weekly), P=mine(Store.data.prizes), X=mine(Store.data.expenses);
+    const g=Store.goal(who);
+    const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
+    const Wm = W.filter(r=>localDay(r.createdAt).startsWith(mon));
+    const monthN = Wm.length;
+    const gymRanks = gymRankTotal(W);
+    const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonusFor(who);
+    let exp=baseExp, L=lvFromExp(exp), badges=badgeList(W, L, g, monthN);
+    for (let i=0;i<3;i++){ const e2 = baseExp + badges.filter(b=>b[2]).length*BADGE_EXP; if (e2===exp) break; exp=e2; L=lvFromExp(exp); badges=badgeList(W, L, g, monthN); }
+    return { who, L, exp, stage: evoStage(L), monthExp: monthExpFor(who, mon),
+             sales: Wm.reduce((a,r)=>a+salesOf(r),0), machines: monthN, badgeN: badges.filter(b=>b[2]).length };
+  } finally { gqWho = keep; }
+}
+function drawRanking(mon){
+  const el=$("#gqRanks"); if(!el) return;
+  const rows = STAFF.map(w=>statsFor(w, mon)).sort((a,b)=> b.monthExp-a.monthExp || b.sales-a.sales || b.machines-a.machines);
+  const medal = ["👑","🥈","🥉"];
+  el.innerHTML = rows.map((s,i)=>{
+    const gap = i>0 ? rows[i-1].monthExp - s.monthExp : 0;
+    return `<div class="gq-rank ${i===0&&s.monthExp>0?"top":""} ${s.who===gqWho?"me":""}">
+      <div class="pos">${i===0&&s.monthExp>0 ? medal[0] : `<b>${i+1}</b>`}</div>
+      <svg width="30" height="30" viewBox="0 0 64 64" overflow="visible" aria-hidden="true">${monSVG(s.stage,"rk"+i)}</svg>
+      <div class="who"><b>${esc(s.who)}</b><span>Lv.${s.L}　${esc(titleFor(s.L))}</span>
+        <div class="sub"><span>売上 <b>${yen(s.sales)}</b>円</span><span><b>${s.machines}</b>マシーン</span><span>バッジ <b>${s.badgeN}</b></span>${i>0&&gap>0?`<span>↑あと <b>${gap.toLocaleString()}</b></span>`:""}</div></div>
+      <div class="num"><b>${s.monthExp.toLocaleString()}</b><span>EXP</span></div>
+    </div>`;
+  }).join("");
+  const top = rows[0];
+  const prev = pastMonths().slice(-1)[0], prevTop = prev ? monthStanding(prev)[0] : null;   // 先月のチャンピオン
+  $("#gqRankSub").textContent = `${+mon.slice(5)}月` + (top && top.monthExp>0 ? `　1位 ${top.who}` : "") + (prevTop ? `　／ ${+prev.slice(5)}月の チャンピオン：${prevTop.who}` : "");
+}
+
+const BADGE_EXP = 100;                                                // バッジ 1こ = +100 EXP
+function expByDay(){                                                  // 日ごとの EXP（売上・景品登録・拠点ボーナス − 経費）
+  const ex={}; const add=(d,v)=>{ if(d) ex[d]=(ex[d]||0)+v; };
+  mine(Store.data.weekly).forEach(r=>add(localDay(r.createdAt), expOf(r)));
+  mine(Store.data.prizes).forEach(r=>add(localDay(r.createdAt), EXP_PER_PRIZE));
+  mine(Store.data.expenses).forEach(r=>add(localDay(r.createdAt), -expCostOf(r)));
+  milestoneHits(mine(Store.data.weekly), Store.goal(gqWho).monthly).forEach(h=>add(h.day, MILESTONE_EXP));
+  return ex;
+}
+function drawBadges(list){
+  $("#gqBadges").innerHTML = list.map(([ic,n,ok])=>`<div class="gq-badge ${ok?"got":""}"><i>${ic}</i>${esc(n)}</div>`).join("");
+}
+function badgeList(W, L, g, monthN){
+  const daily=dailyTarget();
+  const cnt={}; W.forEach(r=>{ const d=localDay(r.createdAt); cnt[d]=(cnt[d]||0)+1; });
+  const hitDays = daily ? Object.values(cnt).filter(c=>c>=daily).length : 0;
+  const stores = new Set(W.map(r=>r.store)).size;
+  const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
+  // 店舗×月の売上・原価（引継ぎ超え／原価率の判定用）
+  const bySM = {}, byM = {};
+  W.forEach(r=>{ const m=monthOf(r.week); if(!m) return;
+    const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r);
+    byM[m] = byM[m] || {sales:0,cost:0}; byM[m].sales += salesOf(r); byM[m].cost += num(r.cost); });
+  // 前月超え：全店合計の月売上が、前の月（売上あり）を上回った月がある
+  const months = Object.keys(byM).sort();
+  const beatPrev = months.some((m,i)=>{ if (i===0) return false; const pv=byM[months[i-1]]; return pv.sales>0 && byM[m].sales>pv.sales && addMonth(months[i-1])===m; });
+  const store150k = Object.values(bySM).some(v=>v>150000);
+  // 2店舗で25万：同じ月の上位2店舗の売上合計が 25万円を超えた
+  const top2={}; Object.keys(bySM).forEach(k=>{ const m=k.split("|")[1]; (top2[m]=top2[m]||[]).push(bySM[k]); });
+  const two250k = Object.values(top2).some(a=>{ const s=a.sort((x,y)=>y-x); return s.length>=2 && s[0]+s[1]>250000; });
+  // EXP 獲得回数：その日の EXP が 1 以上だった日の数（累計）
+  const exDay = expByDay();
+  const expDays = Object.values(exDay).filter(v=>v>=1).length;
+  // 月でLv.3UP：月末時点のレベルが、前月末より3以上上がった月がある（バッジ分の EXP は含めない）
+  const exMon = {}; Object.keys(exDay).forEach(d=>{ const m=d.slice(0,7); exMon[m]=(exMon[m]||0)+exDay[d]; });
+  let cum=0, prevLv=1, lv3up=false;
+  Object.keys(exMon).sort().forEach(m=>{ cum=Math.max(0,cum+exMon[m]); const lv=lvFromExp(cum); if (lv-prevLv>=3) lv3up=true; prevLv=lv; });
+  const list = [
+    ["🥇","はじめの一歩", W.length>=1],
+    ["⭐","日間目標 5回", hitDays>=5],
+    ["🌟","日間目標 10回", hitDays>=10],
+    ["🏘️","むら 到達", g.monthly>0 && monthN>=Math.ceil(g.monthly*.25)],
+    ["🏯","とりで 到達", g.monthly>0 && monthN>=Math.ceil(g.monthly*.75)],
+    ["🏰","しろ 到達", g.monthly>0 && monthN>=g.monthly],
+    ["✨","EXP獲得 10回", expDays>=10],
+    ["🌠","EXP獲得 20回", expDays>=20],
+    ["🚀","月で Lv.3 UP", lv3up],
+    ["💰","1店舗で 15万円", store150k],
+    ["🏬","2店舗で 25万円", two250k],
+    ["📈","前月超え", beatPrev],
+  ];
+  return list;
+}
+async function saveGoal(){
+  const monthly=num($("#gqMonthly").value), days=num($("#gqDays").value);
+  await Store.put("settings","goal-"+gqWho,{monthly, days});
+  toast(days&&monthly ? `目標をセット：1日 ${Math.ceil(monthly/days)}マシーン` : "目標を保存しました");
+  renderQuest();
+}
+
+/* ===================== 全体 render ===================== */
+function render(){
+  renderStoreRow(); renderMachineRow(); renderLogStatus();
+  renderPrizeDatalist(); buildRooms(); renderLogList();
+  renderPrizeForm(); renderPrizeList(); renderCostForm(); renderCostList();
+  renderDash(); renderQuest();
+  if ($("#drawer").classList.contains("on")) renderDrawer();
+}
+
+/* ===================== イベント配線 ===================== */
+function wire(){
+  // タブ
+  $$(".tab").forEach(t=>t.onclick=()=>{
+    $$(".tab").forEach(x=>x.setAttribute("aria-selected", String(x===t)));
+    $$(".panel").forEach(p=>p.classList.toggle("on", p.id===t.dataset.p));
+    window.scrollTo({top:0,behavior:"smooth"});
+  });
+
+  // 部屋（A/B/C/D）の入力
+  $("#roomGrid").addEventListener("input", onRoomInput);
+  $("#roomGrid").addEventListener("click", onRoomClick);
+  $("#paysIn").oninput = () => { paysTouched = true; updateDerived(); };
+  $("#costIn").oninput = () => { costTouched = true; updateDerived(); };
+  $$("#staffIn, .staff-sel").forEach(s=>s.onchange = e => { F.staff = clean(e.target.value); setMe(F.staff); toast(`担当を ${F.staff} にしました`); rememberAccountStaff(F.staff); render(); });
+  $("#timeNow").onclick = () => {
+    const d=new Date();
+    $("#timeIn").value = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0");
+  };
+  $("#saveLog").onclick = saveLog;
+
+  // 景品
+  ["#pzName","#pzCost","#pzVendorOther"].forEach(s=>$(s).oninput=()=>{renderPrizeForm();updatePzGauge();});
+  $("#pzVendor").onchange = () => { renderPrizeForm(); if($("#pzVendor").value==="__other") $("#pzVendorOther").focus(); };
+  $("#pzRateN").oninput = e => { pzCostRate = Math.min(100, Math.max(1, Math.round(num(e.target.value)||1))); renderPrizeForm(); updatePzGauge(); };
+  $("#savePrize").onclick = savePrize;
+
+  // 経費
+  $("#exNet").oninput = renderCostForm;
+  $("#exPayee").oninput = e => { e.target.dataset.touched = "1"; };
+  $("#exKind").onchange = () => { const pe=$("#exPayee"); pe.dataset.touched=""; pe.value=""; renderCostForm(); };
+  $("#exDate").onchange = renderCostForm;
+  $("#saveCost").onclick = saveCost;
+
+  // 削除（各リスト共通）
+  let armed=null, armedT;
+  document.addEventListener("click", e=>{
+    const b = e.target.closest(".del"); if(!b) return;
+    const key = b.dataset.c+"/"+b.dataset.id;
+    if (armed===key){
+      clearTimeout(armedT); armed=null;
+      Store.remove(b.dataset.c, b.dataset.id);
+      toast("削除しました（スプレッドシートからも消しました）");
+      return;
+    }
+    if (armed){ const prev=document.querySelector(".del[data-armed]"); if(prev){prev.removeAttribute("data-armed");prev.textContent="🗑";} }
+    armed=key; b.setAttribute("data-armed","1"); b.textContent="もう一度で削除";
+    b.style.color="var(--critical)"; b.style.fontSize="11px"; b.style.fontWeight="700";
+    clearTimeout(armedT);
+    armedT=setTimeout(()=>{ armed=null; b.removeAttribute("data-armed"); b.textContent="🗑"; b.style.cssText=""; }, 3500);
+  });
+
+  // カレンダーの日をタップ → その日の内訳（スマホでは title が出ないため）
+  $("#gqDayStrip").onclick = e => { const d = e.target.closest(".gq-day"); if (d && d.title) toast(d.title); };
+
+  // 目標設定
+  let gqT; const gqSave = () => { clearTimeout(gqT); gqT=setTimeout(saveGoal, 600); };
+  $("#gqMonthly").oninput = gqSave; $("#gqDays").oninput = gqSave;
+
+  // 転記ドロワー
+  $("#closeX").onclick = closeDrawer;
+  // PIN 入力
+  $("#gateGo").onclick = submitGate;
+  $("#gatePin").onkeydown = e => { if (e.key==="Enter") submitGate(); };
+  // 担当バッジを長押し（1.2秒）で PIN を入れ直す
+  (function(){ const b=$("#meBadge"); if(!b) return; let t; const arm=()=>{ clearTimeout(t); t=setTimeout(()=>{ if (API_URL && confirm("PINを入れ直しますか？")) signOut(); },1200); }; const dis=()=>clearTimeout(t);
+    b.addEventListener("touchstart",arm,{passive:true}); b.addEventListener("touchend",dis); b.addEventListener("touchcancel",dis); b.addEventListener("mousedown",arm); b.addEventListener("mouseup",dis); b.addEventListener("mouseleave",dis); })();
+  $("#scrim").onclick = closeDrawer;
+  document.addEventListener("keydown", e=>{ if(e.key==="Escape") closeDrawer(); });
+  $("#sheetLink").href = SHEET_URL;
+}
+
+/* 数字が増えた瞬間に弾む（表示だけ） */
+(function bumpOnChange(){
+  const targets = ["#tSales","#xCount","#slotCount","#rSales","#tProfit"].map(s=>$(s)).filter(Boolean);
+  const mo = new MutationObserver(ms=>{
+    ms.forEach(m=>{ const el=m.target.nodeType===1?m.target:m.target.parentElement; const t=el&&el.closest&&targets.find(x=>x.contains(el)); if(!t) return;
+      t.classList.remove("bump"); void t.offsetWidth; t.classList.add("bump"); });
+  });
+  targets.forEach(t=>mo.observe(t,{childList:true,characterData:true,subtree:true}));
+})();
+
+/* 0→値へカウントアップ（終わったら元の文字列に戻す） */
+function countTo(el, target, ms){
+  const start=performance.now(), from=0;
+  const token = (el._ct = (el._ct||0)+1);           // 後から来た書き込みが勝つ（古いアニメは止まる）
+  const fmt = n => Math.round(n).toLocaleString("ja-JP");
+  (function f(now){
+    if (el._ct!==token) return;
+    const p=Math.min(1,(now-start)/ms), e=1-Math.pow(1-p,3);
+    el.textContent = fmt(from+(target-from)*e);
+    if (p<1) requestAnimationFrame(f); else el.textContent = fmt(target);
+  })(start);
+}
+/* 成績タブ：見えたときに1回だけポップ＋数字カウントアップ（表示だけ） */
+(function revealOnce(){
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const io = new IntersectionObserver(es=>{
+    es.forEach(en=>{
+      if(!en.isIntersecting) return;
+      const el=en.target; io.unobserve(el);
+      const group = Array.from(el.parentElement.children).filter(c=>c.matches(".tile,.chartcard"));
+      const idx = Math.max(0, group.indexOf(el));
+      el.style.animationDelay = (idx*70)+"ms"; el.classList.add("popin");
+      const v = el.querySelector(".tile .v, .v");
+      if (v && el.classList.contains("tile")){
+        const orig = v.innerHTML, m = v.textContent.match(/[\d,]+/);
+        if (m){ const n=+m[0].replace(/,/g,""); if(n>0){
+          const span=document.createElement("span"); v.textContent=""; v.appendChild(span);
+          countTo(span, n, 900); setTimeout(()=>{ v.innerHTML = orig; }, 950);
+        } }
+      }
+    });
+  },{threshold:.3});
+  $$("#p-dash .tile, #p-dash .chartcard").forEach(el=>io.observe(el));
+})();
+
+
+/* ===================== init ===================== */
+initWeek();
+$("#exDate").value = iso(new Date());
+$("#pzRateN").value = pzCostRate;
+wire();
+renderStaffSelect();
+setWeek(iso(new Date()));
+updateReadouts();
+updatePzGauge();
+render();
+Store.init().then(render);
+
+// iPhone の Safari/Chrome（ホーム画面追加でない）では、下のアドレスバーに隠れないようタブバーに余白を足す
+if (/iPhone/.test(navigator.userAgent) && !navigator.standalone) document.documentElement.classList.add("ios-bar");
+
+})();
+</script>
+</body>
+</html>
