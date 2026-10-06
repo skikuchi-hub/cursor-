@@ -182,6 +182,19 @@ function applySalesDelta(rec, allWeekly) {
   rec.cum = cum; rec.prevId = prev ? prev.id : "";
   return rec;
 }
+/* メモ（auto）の先頭の金額部分を「今回分（累計）」の表記に書き換える */
+function yen(n) { return Math.round(num(n)).toLocaleString("ja-JP"); }
+function rewriteAutoMoney(rec) {
+  var auto = String(rec.auto || "");
+  var prev = rec.prevId ? "" : null;                                  // 月の初回は累計表記なし
+  var money = rec.mtype === "box"
+    ? "売上" + yen(rec.sBox) + "円" + (rec.prevId ? "（累計" + yen(cumOf(rec).sBox) + "円）" : "")
+    : "AB" + yen(rec.sAB) + "/CD" + yen(rec.sCD) + "円" + (rec.prevId ? "（累計 AB" + yen(cumOf(rec).sAB) + "/CD" + yen(cumOf(rec).sCD) + "）" : "");
+  var parts = auto.split(" ｜ ");
+  if (parts.length && /^(売上[\d,]+円|AB[\d,]+\/CD[\d,]+円)/.test(parts[0])) parts[0] = money; else parts.unshift(money);
+  rec.auto = parts.join(" ｜ ");
+  return rec;
+}
 /* 既存の記録を全部、累計入力→差分のルールで計算し直し、_app_db と巡回ログ（プレイ数）・部屋別ログ（ペア売上）を更新する。
    何度実行しても結果は同じ。エディタから実行 */
 function recomputeSalesDeltas() {
@@ -197,13 +210,13 @@ function recomputeSalesDeltas() {
   var roomVals = (room && roomId && room.getLastRow() > 1) ? room.getRange(2, 1, room.getLastRow() - 1, roomId).getValues() : [];
   rows.forEach(function (x) {
     var rec = x.rec, before = JSON.stringify([rec.sAB, rec.sCD, rec.sBox, rec.sales, rec.plays]);
-    applySalesDelta(rec, done);
+    applySalesDelta(rec, done); rewriteAutoMoney(rec);
     done.push(rec);
     if (JSON.stringify([rec.sAB, rec.sCD, rec.sBox, rec.sales, rec.plays]) !== before || !x.rec.cum) changed++;
     sh.getRange(x.row, 4, 1, 2).setValues([[nowIso(), "recompute"]]);
     sh.getRange(x.row, 6).setValue(JSON.stringify(stripId(rec)));
-    // 巡回ログ：E列 プレイ数
-    logIds.forEach(function (id, i) { if (id === rec.id) log.getRange(i + 2, 5).setValue(num(rec.plays)); });
+    // 巡回ログ：E列 プレイ数、J列 メモ（金額表記を今回分に）
+    logIds.forEach(function (id, i) { if (id === rec.id) { log.getRange(i + 2, 5).setValue(num(rec.plays)); log.getRange(i + 2, 10).setValue(sheetMemo(rec)); } });
     // 部屋別ログ：G列 ペア売上（A/B→sAB、C/D→sCD、枠・本体→sBox）、F列 カウンター差（直前の訪問と比較）
     var prevR = done.filter(function (o) { return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine && String(o.createdAt || "") < String(rec.createdAt || "") && o.rooms; })
       .sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
