@@ -1193,6 +1193,7 @@ body{font-variant-numeric:tabular-nums}
           <summary>📈 うりあげの きろく（グラフ）</summary>
           <div class="card" style="padding:12px 13px;margin-top:10px">
             <span class="lbl">見る月</span>
+            <div class="field" id="dashWhoField" hidden style="margin-bottom:8px"><span class="lbl">だれの記録</span><div class="chips scroll" id="dashWhoRow"></div></div>
             <div class="chips scroll" id="monthRow"></div>
             <div id="demoBar"></div>
           </div>
@@ -2457,8 +2458,13 @@ function buildDemo(){
   return DEMO;
 }
 const demoOn = () => demoWanted && Store.data.weekly.length===0 && Store.data.expenses.length===0;
-const activeWeekly   = () => demoOn() ? buildDemo().weekly   : mine(Store.data.weekly);     // 成果一覧は見ている人の分だけ
-const activeExpenses = () => demoOn() ? buildDemo().expenses : mine(Store.data.expenses);
+/* うりあげのきろく：ふつうは見ている人の分だけ。管理者が自分のタブを見ているときは「全員／スタッフごと」を選べる */
+let dashScope = "all";
+const dashRows = rows => (typeof adminView==="function" && adminView())
+  ? (dashScope==="all" ? (rows||[]) : (rows||[]).filter(r=>staffOf(r)===dashScope))
+  : mine(rows);
+const activeWeekly   = () => demoOn() ? buildDemo().weekly   : dashRows(Store.data.weekly);
+const activeExpenses = () => demoOn() ? buildDemo().expenses : dashRows(Store.data.expenses);
 function monthsAvailable(){
   const set = new Set(activeWeekly().map(r=>monthOf(r.week)).filter(Boolean));
   set.add(iso(new Date()).slice(0,7));
@@ -2475,6 +2481,16 @@ function agg(rows){
           grossRate:sales>0?(sales-cost-place)/sales:null, n:rows.length};
 }
 function renderDash(){
+  const whoField=$("#dashWhoField");
+  if (whoField){
+    const on = (typeof adminView==="function" && adminView());
+    whoField.hidden = !on;
+    if (on){
+      const opts=["全員"].concat(STAFF);
+      if (dashScope!=="all" && STAFF.indexOf(dashScope)<0) dashScope="all";
+      chipRow($("#dashWhoRow"), opts, dashScope==="all"?"全員":dashScope, v=>{ dashScope = v==="全員" ? "all" : v; renderDash(); }, "mini");
+    }
+  }
   const months = monthsAvailable();
   if (!selMonth || months.indexOf(selMonth)<0) selMonth = months[0];
   chipRow($("#monthRow"), months.map(jpMonth), jpMonth(selMonth), v=>{
