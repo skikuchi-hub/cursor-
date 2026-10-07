@@ -60,8 +60,12 @@ Branch にこのアプリの入ったブランチ、フォルダ `/ (root)` を�
 ## 日々の修正
 
 画面や計算の修正は `index.html` を直して push するだけ。1分ほどで反映される。
-Apps Script 側（`Code.gs`）を変えたときは、貼り直して保存したあと
-**デプロイ → デプロイを管理 → 編集 → バージョン：新バージョン → デプロイ** を行う（URLは変わらない）。
+Apps Script 側（`Code.gs`）を変えたときの手順（案内するときは必ず対象スプシの URL を添える）：
+
+1. スプレッドシート「クレーンゲーム日報」 https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs
+   → 拡張機能 → Apps Script を開き、GitHub の `apps-script/Code.gs` を **Copy raw file** でコピーして `コード.gs` に貼り直して保存
+2. （指示があれば）指定の関数を選んで ▶ 実行
+3. **デプロイ → デプロイを管理 → 編集 → バージョン：新バージョン → デプロイ**（URLは変わらない）
 
 ## 手動メンテ関数（Apps Script エディタから実行）
 
