@@ -274,6 +274,20 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--rose) 70%,#000)}
 .save:disabled{background:var(--surface-sunk);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
 .save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
+/* 写真添付 */
+.photo-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:2px dashed var(--line-2);border-radius:var(--r-m);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px}
+.photo-btn:active{background:var(--surface-sunk)}
+.photo-btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.photo-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.photo-row:empty{display:none}
+.ph{position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);flex:none}
+.ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ph .x{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(20,32,58,.75);color:#fff;font-size:13px;line-height:22px;padding:0}
+.ph.up::after{content:"送信中";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,32,58,.55);color:#fff;font-size:11px;font-weight:700}
+.rowitem .phs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.rowitem .phs a{width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);display:block}
+.rowitem .phs img{width:100%;height:100%;object-fit:cover;display:block}
+.rowitem .addph{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:8px;font-size:11px;font-weight:700;padding:4px 8px}
 
 /* ============ tabs ============ */
 .tabbar{
@@ -751,6 +765,8 @@ body{font-variant-numeric:tabular-nums}
 .gq-labi .stores{display:flex;flex-direction:column;gap:3px;margin-top:5px}
 .gq-labi .srow{display:flex;align-items:center;gap:6px;font-size:11px;color:#eef3fb}
 .gq-labi .srow .sn{width:84px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#a8b8d4}
+.gq-labi .srow .sn small{font-size:9.5px;color:#7f93b8}
+.gq-labi .srow .v{flex:none;white-space:nowrap}
 .gq-labi .srow .gq-bar{height:7px}
 .gq-labi .srow .gq-bar i{background:linear-gradient(#7fb8ea,#2f7fc6)}
 .gq-labi .srow.best .sn{color:#f5c542}
@@ -893,6 +909,13 @@ body{font-variant-numeric:tabular-nums}
             <select class="txt" id="staffIn"></select>
             <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品・経費にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
           </div>
+        </div>
+        <div class="field">
+          <span class="lbl">機械の写真</span>
+          <button type="button" class="photo-btn" id="photoBtn"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="photoBtnLbl">補充する前に、機械の正面を1枚</span></button>
+          <input type="file" id="photoIn" accept="image/*" capture="environment" multiple hidden>
+          <div class="photo-row" id="photoRow"></div>
+          <p class="hint">報告と一緒に Drive に保存され、毎日自動でチェックされます（空き部屋・POP・陳列）。正面全体が入るように。</p>
         </div>
         <div class="field">
           <span class="lbl">メモ</span>
@@ -1165,6 +1188,7 @@ body{font-variant-numeric:tabular-nums}
             <button class="chip mini" data-lab="turn" aria-pressed="true">在庫回転</button>
             <button class="chip mini" data-lab="fit" aria-pressed="false">店舗との相性</button>
             <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
+            <button class="chip mini" data-lab="pos" aria-pressed="false">部屋の位置</button>
           </div>
           <div class="gq-lab" id="gqLab"></div>
           <div class="gq-qnote" id="gqLabNote"></div>
@@ -1420,6 +1444,7 @@ function formDirty(){
     if (clean($("#pzName").value) || clean($("#pzMemo").value)) return true;
     if (num($("#exNet").value)!==0 || clean($("#exMemo").value)) return true;
     if (clean($("#memoIn").value)) return true;
+    if (PHOTOS.length || PHOTO_BUSY) return true;                 // 写真の添付・送信中
   } catch(e){}
   return false;
 }
@@ -2256,6 +2281,64 @@ function updateReadouts(){
     : "押せるようになるまで：" + missing.join(" → ");
 }
 
+/* ===================== 写真添付 =====================
+   端末で長辺 1600px の JPEG に縮小してから送る（1枚 300〜600KB）。保存した記録の id に紐づけて Drive へ。
+   PHOTOS：まだ送っていない写真（{blob, url}）。送信は報告の保存が成功したあと 1 枚ずつ */
+let PHOTOS = [], PHOTO_BUSY = false, PHOTO_TARGET = null;      // PHOTO_TARGET：既存の記録に足すときの id
+const PHOTO_MAX = 4, PHOTO_EDGE = 1600, PHOTO_Q = 0.82;
+const thumbUrl = fid => `https://drive.google.com/thumbnail?id=${encodeURIComponent(fid)}&sz=w240`;
+async function shrinkImage(file){
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise((ok,ng)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>ng(new Error("読めない画像")); i.src=url; });
+    const w=img.naturalWidth, h=img.naturalHeight, sc=Math.min(1, PHOTO_EDGE/Math.max(w,h));
+    const c=document.createElement("canvas"); c.width=Math.round(w*sc); c.height=Math.round(h*sc);
+    c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+    const blob = await new Promise(ok=>c.toBlob(ok,"image/jpeg",PHOTO_Q));
+    if (!blob) throw new Error("変換できませんでした");
+    return blob;
+  } finally { URL.revokeObjectURL(url); }
+}
+const blobToB64 = blob => new Promise((ok,ng)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]||""); r.onerror=()=>ng(new Error("読めませんでした")); r.readAsDataURL(blob); });
+function renderPhotoRow(){
+  const el=$("#photoRow"); if(!el) return;
+  el.innerHTML = PHOTOS.map((p,i)=>`<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`).join("");
+  const lbl=$("#photoBtnLbl"); if (lbl) lbl.textContent = PHOTOS.length ? `写真 ${PHOTOS.length}枚（もう1枚足す）` : "補充する前に、機械の正面を1枚";
+  $("#photoBtn").disabled = PHOTOS.length>=PHOTO_MAX;
+}
+async function addPhotoFiles(files){
+  for (const f of Array.from(files||[])){
+    if (PHOTOS.length>=PHOTO_MAX){ toast(`写真は1回の報告で ${PHOTO_MAX} 枚まで`); break; }
+    try { const blob = await shrinkImage(f); PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false}); }
+    catch(e){ toast("この写真は読めませんでした"); }
+  }
+  renderPhotoRow();
+}
+/* 記録 id に PHOTOS を順に送る。送れた分は記録に反映、送れなかった分は残す（「写真を足す」で送り直せる） */
+async function uploadPhotos(id){
+  if (!PHOTOS.length || !Store.online()) return;
+  PHOTO_BUSY = true; let okN=0;
+  try {
+    while (PHOTOS.length){
+      const p = PHOTOS[0]; p.up=true; renderPhotoRow();
+      try {
+        const data = await blobToB64(p.blob);
+        const r = await api("photo", {id, data, mime:"image/jpeg"});
+        Store.data.weekly = (Store.data.weekly||[]).map(x=> x.id===id ? r.rec : x);
+        URL.revokeObjectURL(p.url); PHOTOS.shift(); okN++; renderPhotoRow();
+      } catch(e){ p.up=false; renderPhotoRow(); toast(`写真を送れませんでした：${errMsg(e)}`); break; }
+    }
+  } finally { PHOTO_BUSY=false; }
+  if (okN) toast(`写真 ${okN}枚 を保存しました`);
+  renderLogList();
+}
+function photoThumbs(r){
+  const ps = (r.photos||[]);
+  const mine = canDelete(r) && !r.source;
+  if (!ps.length && !mine) return "";
+  return `<div class="phs">${ps.map(p=>`<a href="${esc(p.url)}" target="_blank" rel="noopener"><img src="${thumbUrl(p.fid)}" alt="" loading="lazy"></a>`).join("")}${mine && ps.length<PHOTO_MAX ? `<button type="button" class="addph" data-addph="${esc(r.id)}">📷 写真を足す</button>` : ""}</div>`;
+}
+
 /* クレーン演出は撤去（保存の流れはそのまま） */
 function playCatch(){}
 function confetti(){}
@@ -2283,12 +2366,15 @@ async function saveLog(){
     time:$("#timeIn").value||"", staff:clean($("#staffIn").value), memo:clean($("#memoIn").value)
   };
   const btn=$("#saveLog"); btn.disabled=true;
+  const before = new Set((Store.data.weekly||[]).map(x=>x.id));
   if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
   playCatch();
   toast(`GET! ${F.store} ${yen(t.sales)}円 を記録`);
   $("#memoIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
   F.machine=""; R=null; builtFor="";
   renderMachineRow(); buildRooms(true); render();
+  const added = (Store.data.weekly||[]).find(x=>!before.has(x.id) && !x._local);
+  if (added && PHOTOS.length) await uploadPhotos(added.id);
 }
 
 function renderLogList(){
@@ -2314,6 +2400,7 @@ function renderLogList(){
         <div class="t1">${esc(r.store)}　<span style="font-weight:400;color:var(--ink-3)">${esc(r.machine)}</span></div>
         <div class="t2">${jpDate(r.week)}${r.time?" "+esc(r.time):""}　${yen(sales)}円＝${yen(r.plays)}プレイ　払出${yen(r.pays)}</div>
         ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
+        ${photoThumbs(r)}
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>
           ${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
@@ -3178,6 +3265,35 @@ function labAgg(){
   });
   return byP;
 }
+/* 部屋（枠）の位置ごとの出かた。店舗×機械ごとに、4人機は部屋 A〜D の払出と プレイ（カウンター差）、
+   BOX機は枠番号ごとに「空いた回数／見た回数」。写真と合わせて「どの位置に何を置くと出るか」を見るための元データ */
+function posAgg(){
+  const all=(Store.data.weekly||[]).slice().sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
+  const M={};
+  all.forEach((r,idx)=>{
+    const key=r.store+"｜"+r.machine;
+    const m=M[key]=M[key]||{store:r.store, machine:r.machine, type:(r.mtype==="box"||(r.slots||[]).length)?"box":"4p", rooms:{}, visits:0};
+    const prev = all.slice(0,idx).filter(o=>o.store===r.store && o.machine===r.machine && (o.rooms||o.slots)).pop();
+    if (m.type==="4p"){
+      if (!(r.rooms||[]).length) return; m.visits++;
+      (r.rooms||[]).forEach(x=>{
+        const R2=m.rooms[x.k]=m.rooms[x.k]||{k:x.k, pays:0, plays:0, playsKnown:false, n:0, prizes:{}};
+        if (x.pays!==null && x.pays!==undefined && x.pays!==""){ R2.pays+=num(x.pays); R2.n++; }
+        const pv = prev ? (prev.rooms||[]).find(y=>y.k===x.k) : null;
+        if (pv && pv.counter!=="" && x.counter!=="" && pv.counter!==undefined && x.counter!==undefined){ R2.plays+=Math.max(0,num(x.counter)-num(pv.counter)); R2.playsKnown=true; }
+        const nm = pv ? ((pv.addPrize && num(pv.add)>0) ? pv.addPrize : pv.prize) : "";
+        if (nm && num(x.pays)>0) R2.prizes[nm]=(R2.prizes[nm]||0)+num(x.pays);
+      });
+    } else {
+      if (!(r.slots||[]).length) return; m.visits++;
+      (r.slots||[]).forEach(x=>{
+        const R2=m.rooms[x.i]=m.rooms[x.i]||{k:String(x.i), pays:0, plays:0, playsKnown:false, n:0, prizes:{}};
+        R2.n++; if (x.out){ R2.pays++; if (x.prize) R2.prizes[x.prize]=(R2.prizes[x.prize]||0)+1; }
+      });
+    }
+  });
+  return Object.values(M).filter(m=>Object.keys(m.rooms).length);
+}
 let labTab="turn";
 function renderLab(){
   const el=$("#gqLab"); if(!el) return;
@@ -3217,6 +3333,25 @@ function renderLab(){
     }).join("");
     $("#gqLabSub").textContent = "店舗ごと";
     note = `同じ景品でも店で出かたが違う。<b style="color:#f5c542">売上/日</b>はその部屋のカウンター差×100円÷日数（BOX機は払出/週）。カウンターを入れていない区間は数字に入らない。`;
+  } else if (labTab==="pos"){
+    const ms=posAgg();
+    html = ms.map(m=>{
+      const rows=Object.values(m.rooms).sort((a,b)=>b.pays-a.pays || String(a.k).localeCompare(String(b.k),undefined,{numeric:true}));
+      const max=Math.max(1,...rows.map(x=>x.pays));
+      const tot=rows.reduce((a,x)=>a+x.pays,0);
+      const top=rows[0], low=rows[rows.length-1];
+      const lows = rows.filter(x=>x.pays===low.pays && x.pays<top.pays).map(x=>x.k);
+      const act = tot===0 ? "まだ払出の記録がない。2回目の訪問から出ます。"
+        : rows.length<2 || !lows.length ? "部屋ごとの差はまだ出ていない。訪問を重ねると位置の差が見える。"
+        : m.type==="4p" ? `いちばん出るのは <b>${esc(top.k)}</b>${top.playsKnown&&top.pays>0?`（1/${Math.round(top.plays/top.pays)}）`:""}。出ない部屋 <b>${lows.map(esc).join("・")}</b> には、出がいい景品か POP を回す。`
+        : `空きやすい枠は <b>${rows.filter(x=>x.pays===top.pays).map(x=>x.k).join("・")}</b>番。目線の高さ・中央寄りかを写真で確認。出ない枠 <b>${lows.slice(0,4).join("・")}${lows.length>4?"…":""}</b>番 は景品の入れ替え候補。`;
+      return `<div class="gq-labi ${tot>0?"good":""}"><div class="hd"><b>${esc(short(m.store))}　${esc(m.machine)}</b><span class="tag">${m.visits}回</span></div>
+        <div class="stores">${rows.map((x,i)=>{ const w=(x.pays/max*100).toFixed(0); const best=Object.entries(x.prizes).sort((a,b)=>b[1]-a[1])[0];
+          return `<div class="srow ${i===0&&x.pays>0?"best":""}"><span class="sn">${m.type==="4p"?esc(x.k):`${esc(x.k)}番`}${best?` <small>${esc(best[0])}</small>`:""}</span><div class="gq-bar"><i style="width:${w}%"></i></div><span class="v">${x.pays}こ${m.type==="box"?`/${x.n}`:(x.playsKnown?`・${x.plays}P`:"")}</span></div>`; }).join("")}</div>
+        <div class="act">${act}</div></div>`;
+    }).join("");
+    $("#gqLabSub").textContent = ms.length ? `${ms.length}台` : "";
+    note = `同じ機械でも位置で出かたが違う。4人機は部屋ごとの払出（P＝プレイ数）、BOX機は<b style="color:#f5c542">枠が空いた回数／見た回数</b>。写真タブの自動チェック（空き部屋・POP）と合わせて、「どの位置に何を置くと出るか」をデータで決める。`;
   } else {
     // 原価率ガイド：景品ごとの実績 1/N と原価率、推奨レンジ
     const rows=list.filter(P=>P.playsKnown && P.plays>0).map(P=>{
@@ -3593,6 +3728,20 @@ function wire(){
   $("#exKind").onchange = () => { const pe=$("#exPayee"); pe.dataset.touched=""; pe.value=""; renderCostForm(); };
   $("#exDate").onchange = renderCostForm;
   $("#saveCost").onclick = saveCost;
+
+  // 写真：フォームの添付と、既存の記録への追加
+  $("#photoBtn").onclick = ()=>{ PHOTO_TARGET=null; $("#photoIn").click(); };
+  $("#photoIn").onchange = async e => {
+    const files = Array.from(e.target.files||[]); e.target.value="";   // value を消すと FileList も空になるので先に複製
+    if (PHOTO_TARGET){ const id=PHOTO_TARGET; PHOTO_TARGET=null; const keep=PHOTOS; PHOTOS=[]; await addPhotoFiles(files); await uploadPhotos(id); PHOTOS=keep.concat(PHOTOS); renderPhotoRow(); return; }
+    await addPhotoFiles(files);
+  };
+  $("#photoRow").onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); };
+  document.addEventListener("click", e=>{
+    const b=e.target.closest("[data-addph]"); if(!b) return;
+    if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }
+    PHOTO_TARGET=b.dataset.addph; $("#photoIn").click();
+  });
 
   // 削除（各リスト共通）
   let armed=null, armedT;
