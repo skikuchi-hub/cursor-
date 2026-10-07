@@ -795,6 +795,11 @@ body{font-variant-numeric:tabular-nums}
 .updbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;
   margin:0;padding:8px 14px;background:var(--gold-wash);color:var(--gold-text);font-size:12.5px;font-weight:700;border-bottom:1px solid var(--line)}
 .updbar .btn{padding:7px 12px;font-size:12px}
+/* 補充候補の印：この店の当たり／在庫多め */
+.hinttag{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:700;vertical-align:middle;line-height:1.5}
+.hinttag.hit{background:var(--gold-wash);color:var(--gold-text)}
+.hinttag.stale{background:var(--sky-wash);color:var(--sky-ink)}
+.combo button .hinttag{float:right}
 /* ============ PIN gate ============ */
 .gate{position:fixed;inset:0;z-index:200;background:var(--navy);display:flex;align-items:center;justify-content:center;padding:24px 16px}
 .gate-card{width:100%;max-width:360px;background:var(--surface,#fff);border-radius:18px;padding:26px 22px 18px;box-shadow:0 18px 50px rgba(0,0,0,.35);text-align:center}
@@ -1774,12 +1779,13 @@ function drawSlots(){
   const fr = $("#fillRow"); if (fr) fr.hidden = R.mode!=="fill";
   const mr = $("#moveRow"); if (mr) mr.hidden = R.mode!=="move";
   if (R.mode==="fill"){
-    const names = Array.from(new Set(
+    const ord = orderByHints(Array.from(new Set(
       allPrizes().filter(p=>p.use!=="4人機用").map(p=>p.name).concat(R.slots.map(x=>x.prize).filter(Boolean))
-    )).filter(Boolean);
+    )).filter(Boolean), F.store);
+    const names = ord.names;
     $("#fillChips").innerHTML = names.length
       ? names.map(n=>{ const st=stockOf(n);
-          return `<button class="chip mini" data-act="fillprize" data-v="${esc(n)}" aria-pressed="${n===R.fillPrize}">${esc(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`;
+          return `<button class="chip mini" data-act="fillprize" data-v="${esc(n)}" aria-pressed="${n===R.fillPrize}">${esc(n)}${ord.tag(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`;
         }).join("")
       : `<span class="hint" style="margin:0">「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`;
     const fn = $("#fillNote");
@@ -1883,6 +1889,26 @@ function openSwap(k){
   const el = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`);
   if (el){ attachCombo(el); el.focus(); }
 }
+/* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
+   けいひんラボと同じ区間データ（labAgg）から作る */
+function prizeHints(storeName){
+  const hit=new Map(), stale=new Set();
+  try {
+    const agg = labAgg();
+    Object.values(agg).forEach(P=>{
+      const S=P.stores[storeName];
+      if (S && (S.pays>0 || (S.salesPerDay||0)>0)) hit.set(P.prize, (S.salesPerDay||0)*1000 + S.paysPerDay*100 + S.pays);
+      if (P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14))) stale.add(P.prize);
+    });
+  } catch(e){}
+  return {hit, stale};
+}
+function orderByHints(names, storeName){
+  const h = prizeHints(storeName);
+  const score = n => h.hit.has(n) ? 2e9 + h.hit.get(n) : h.stale.has(n) ? 1e9 : 0;
+  const sorted = names.slice().sort((a,b)=> score(b)-score(a));
+  return {names:sorted, tag:n=> h.hit.has(n) ? `<span class="hinttag hit">★この店の当たり</span>` : h.stale.has(n) ? `<span class="hinttag stale">在庫多め</span>` : ""};
+}
 /* 4人機の景品名：機械タイプ「4人機用」の景品をプルダウンで出し、打った文字で絞り込む */
 function prizeNames4p(){
   return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name))).filter(Boolean);
@@ -1890,11 +1916,13 @@ function prizeNames4p(){
 function attachCombo(inp, onPick){
   const box = document.createElement("div"); box.className="combo";
   inp.insertAdjacentElement("afterend", box);
+  const initial = clean(inp.value).toLowerCase();        // 開いた時点の名前のままなら全候補を見せる（当たり景品が先頭）
   const draw = () => {
-    const q = clean(inp.value).toLowerCase();
-    const names = prizeNames4p().filter(n=>!q || n.toLowerCase().includes(q)).slice(0,30);
+    const q0 = clean(inp.value).toLowerCase(); const q = q0===initial ? "" : q0;
+    const ord = orderByHints(prizeNames4p(), F.store);
+    const names = ord.names.filter(n=>!q || n.toLowerCase().includes(q)).slice(0,30);
     box.innerHTML = names.length
-      ? names.map(n=>`<button type="button" data-pick="${esc(n)}">${esc(n)}</button>`).join("")
+      ? names.map(n=>`<button type="button" data-pick="${esc(n)}">${esc(n)}${ord.tag(n)}</button>`).join("")
       : `<div class="none">${q?"候補なし（このまま新しい名前で登録できます）":"景品タブで「4人機用」の景品を登録すると出ます"}</div>`;
   };
   box.addEventListener("pointerdown", e=>{
