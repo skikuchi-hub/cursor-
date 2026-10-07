@@ -99,8 +99,8 @@ HANDOVER.md                  この文書
 | `fixVisitDates` | 移行4件の訪問日を 10/5→10/6 に修正（＋repairDates） | 済 |
 | `recomputeSalesDeltas` | 全記録を累計→差分で再計算し、巡回ログ E・J、部屋別ログ F・G を更新 | 済 |
 | `renameDateHeaders` | A1 見出しの改名（setup から呼ばれる） | 済 |
-| `rebuildPrizeStats` | 「景品実績」タブを全記録から作り直す | 未（Code.gs 貼り直し後に実行） |
-| `setup`（再実行） | 部屋別ログ M1「回収数」、景品マスタ J列の数式を回収対応に更新（`upgradeStockFormulas`） | 未（Code.gs 貼り直し後に実行） |
+| `rebuildPrizeStats` | 「景品実績」タブを全記録から作り直す | 済（2026-10-07、4行） |
+| `setup`（再実行） | 部屋別ログ M1「回収数」、景品マスタ J列の数式を回収対応に更新（`upgradeStockFormulas`） | 済（2026-10-07） |
 
 ## 6. 既知の注意点・今後の候補
 - 日付はスプシのタイムゾーンで解釈（`Utilities.parseDate(…, getSpreadsheetTimeZone())`）。初期はスプシが America/Los_Angeles で1日ずれたが、修復済み＋スプシを東京に変更済み。
