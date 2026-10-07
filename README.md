@@ -70,7 +70,7 @@ Apps Script 側（`Code.gs`）を変えたときの手順（案内するとき�
 ## 手動メンテ関数（Apps Script エディタから実行）
 
 `setup`（初期化）／`importFromDrive`（旧アプリ移行）／`repairDates`（日付の書き直し）／`fixVisitDates`（移行分の訪問日修正）／
-`recomputeSalesDeltas`（累計→差分の再計算）。詳細は HANDOVER.md。
+`recomputeSalesDeltas`（累計→差分の再計算）／`rebuildPrizeStats`（景品実績の作り直し）／`importPhotoChecks`（写真チェック結果の取り込み）。詳細は HANDOVER.md、写真の自動チェックは docs/PHOTO_CHECK.md。
 
 ## PIN を入れ直す
 
