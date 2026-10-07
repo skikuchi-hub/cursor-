@@ -2498,7 +2498,7 @@ function renderDash(){
   if (demoOn()) $("#tSalesSub").innerHTML = "サンプルの数字です。入力を始めると本物に変わります。";
   const exMonthAll = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
   const grossM = a.gross - exMonthAll;                                   // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費
-  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !(ME && ME.role==="admin"); }   // 粗利は管理者だけ（プールの率を逆算されないように）
+  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !adminView(); }   // 粗利は管理者だけ（プールの率を逆算されないように）
   $("#tProfit").textContent = yen(grossM);
   const gp=$("#tProfitPill");
   gp.className="pill "+(a.sales===0?"flat":grossM>0?"ok":"bad");
@@ -2905,6 +2905,8 @@ function teamMonth(mon){
   const perVisit = n>0 ? Math.round(pool/n) : 0;
   return {W, sales, cost, place, gross, rate, pool, visits, n, perVisit};
 }
+/* 管理者が「トレーナー」で自分以外を選んだときは、そのスタッフに見えている成績画面を再現する（管理者だけの情報は隠す） */
+const adminView = () => !!(ME && ME.role==="admin" && gqWho===ME.name);
 let poolShown = null;
 function renderPool(mon){
   const el=$("#gqPool"); if(!el) return;
@@ -2912,7 +2914,7 @@ function renderPool(mon){
   if (poolShown===null || poolShown===t.pool) el.textContent = t.pool.toLocaleString("ja-JP");
   else countTo(el, t.pool, 900);
   poolShown = t.pool;
-  const admin = !!(ME && ME.role==="admin");
+  const admin = adminView();
   $("#gqPoolSub").textContent = admin ? `${+mon.slice(5)}月・粗利の ${t.rate}％` : `${+mon.slice(5)}月`;
   $("#gqPoolMeta").innerHTML = admin
     ? `今月の粗利 <b>${yen(t.gross)}</b>円<br>売上 ${yen(t.sales)}円 − 景品 ${yen(t.cost)}円 − 場所代 ${yen(t.place)}円`
@@ -2921,16 +2923,16 @@ function renderPool(mon){
   const maxV = Math.max(1, ...members.map(w=>t.visits[w]||0));
   $("#gqPoolSplit").innerHTML = members.map(w=>{
     const v=t.visits[w]||0, share = t.n>0 ? Math.round(t.pool*v/t.n) : 0;
-    return `<div class="gq-share ${w===me()?"me":""}"><span class="nm">${esc(w)}</span><div class="gq-bar"><i style="width:${(v/maxV*100).toFixed(0)}%"></i></div><span class="ct">${v}回</span><span class="yen">¥${share.toLocaleString("ja-JP")}</span></div>`;
+    return `<div class="gq-share ${w===gqWho?"me":""}"><span class="nm">${esc(w)}</span><div class="gq-bar"><i style="width:${(v/maxV*100).toFixed(0)}%"></i></div><span class="ct">${v}回</span><span class="yen">¥${share.toLocaleString("ja-JP")}</span></div>`;
   }).join("");
-  const myV = t.visits[me()]||0, nextShare = t.n>0 ? Math.round(t.pool*(myV+1)/(t.n+1)) - Math.round(t.pool*myV/t.n) : 0;
+  const myV = t.visits[gqWho]||0, nextShare = t.n>0 ? Math.round(t.pool*(myV+1)/(t.n+1)) - Math.round(t.pool*myV/t.n) : 0;
   $("#gqPoolNote").innerHTML = t.n>0
     ? (admin
         ? `巡回回数の比率で山分け。いまは <b style="color:#f5c542">1回の巡回 ≈ ¥${t.perVisit.toLocaleString("ja-JP")}</b> ぶんのプール。月末の数字で確定。`
         : `巡回回数の比率で山分け。<b style="color:#f5c542">もう1店まわると、取り分が ≈ ¥${Math.max(0,nextShare).toLocaleString("ja-JP")} ふえる</b>。売上が伸びるほどプールも育つ。`)
     : (admin ? `今月の巡回が入るとプールが育ちはじめる。粗利の ${t.rate}％ をみんなで山分け。`
              : `今月の巡回が入るとプールが育ちはじめる。巡回した回数の比率で山分け。`);
-  const rateBox=$("#gqPoolRate"); if (rateBox){ rateBox.hidden = !(ME && ME.role==="admin"); const inp=$("#gqRateIn"); if (inp && document.activeElement!==inp) inp.value = t.rate; }
+  const rateBox=$("#gqPoolRate"); if (rateBox){ rateBox.hidden = !admin; const inp=$("#gqRateIn"); if (inp && document.activeElement!==inp) inp.value = t.rate; }
 }
 async function saveTeamRate(){
   const v = num($("#gqRateIn").value); if (!(v>0) || v>10) { toast("率は 0.1〜10 の範囲で入れてください"); return; }
@@ -3058,7 +3060,7 @@ function renderNews(mon){
   if (!SEEN){ box.hidden=true; return; }
   const items=[];
   const fresh=(Store.data.weekly||[]).filter(r=>!SEEN.ids.has(r.id));
-  const others=fresh.filter(r=>staffOf(r)!==me());
+  const others=fresh.filter(r=>staffOf(r)!==gqWho);
   if (others.length){ const by={}; others.forEach(r=>{ by[staffOf(r)]=(by[staffOf(r)]||0)+1; });
     items.push(`🕹️ ${Object.keys(by).map(w=>`<b>${esc(w)}</b> が ${by[w]}台`).join("、")} 巡回した（${esc(Array.from(new Set(others.map(r=>r.store.replace(/店$/,"")))).join("・"))}）`); }
   const t=teamMonth(mon); const dp=t.pool-SEEN.pool;
