@@ -40,7 +40,7 @@ function doPost(e) {
       case "patch":  return out(withLock(function () { return patchDoc(me, req.col, req.id, req.obj); }));
       case "remove": return out(withLock(function () { return removeDoc(me, req.col, req.id); }));
       case "put":    return out(withLock(function () { return putDoc(me, req.col, req.id, req.obj); }));
-      case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.note); }));
+      case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.kind); }));
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -583,13 +583,14 @@ function appendPrizeStatsWith(rec, prevAll, units, sh) {
    アプリから action:"photo" で base64 の JPEG が届く。Drive の「クレーンログ写真／店舗／yyyy-MM」に保存し、
    記録（_app_db の photos[]）と「写真」タブに 1 行追加する。リンクを知っている人は見られる設定にする
    （アプリでサムネイルを出すため。写真は機械の正面だけなので個人情報は写らない運用）。
-   「写真」タブの H 列以降は、毎日の自動チェック（Claude のルーティン）が Drive の
+   種別は 補充前（着いてすぐ）／補充後（補充・入れ替え後）。「写真」タブの I 列以降は、毎日の自動チェック（Claude のルーティン）が Drive の
    「クレーンログ写真／_チェック結果」に置く JSON を importPhotoChecks() が取り込んで埋める。 */
 var PHOTO_SHEET = "写真";
 var PHOTO_ROOT = "クレーンログ写真";
 var PHOTO_CHECK_DIR = "_チェック結果";
-var PHOTO_HEADERS = ["訪問日", "店舗", "機械", "担当", "写真URL", "ファイルID", "登録日時",
+var PHOTO_HEADERS = ["訪問日", "店舗", "機械", "担当", "種別", "写真URL", "ファイルID", "登録日時",
   "チェック日時", "空き部屋", "空き数", "報告の払出", "照合", "POP数", "陳列スコア", "所見", "競合メモ"];
+var PHOTO_KINDS = { before: "補充前", after: "補充後" };
 var PHOTO_MAX_BYTES = 6 * 1024 * 1024;
 
 function photoSheet() {
@@ -597,8 +598,8 @@ function photoSheet() {
   if (!sh) {
     sh = ss().insertSheet(PHOTO_SHEET);
     sh.getRange(1, 1, 1, PHOTO_HEADERS.length).setValues([PHOTO_HEADERS]).setFontWeight("bold");
-    sh.getRange(1, PHOTO_HEADERS.length + 1).setValue("E〜G はアプリが書く。H〜P は毎日の自動チェック（Drive の _チェック結果 から取り込み）。");
-    sh.setFrozenRows(1); sh.setColumnWidth(5, 220); sh.setColumnWidth(15, 320);
+    sh.getRange(1, PHOTO_HEADERS.length + 1).setValue("A〜H はアプリが書く（種別＝補充前／補充後）。I〜Q は毎日の自動チェック（Drive の _チェック結果 から取り込み）。");
+    sh.setFrozenRows(1); sh.setColumnWidth(6, 220); sh.setColumnWidth(16, 320);
   }
   return sh;
 }
@@ -609,7 +610,8 @@ function folderUnder(parent, name) {
 function photoRoot() { return folderUnder(DriveApp.getRootFolder(), PHOTO_ROOT); }
 function photoCheckDir() { return folderUnder(photoRoot(), PHOTO_CHECK_DIR); }
 
-function addPhoto(me, id, data, mime, note) {
+function addPhoto(me, id, data, mime, kind) {
+  kind = kind === "after" ? "after" : "before";
   var row = findDbRow("weekly", id);
   if (!row) throw new Error("記録が見つかりません");
   var sh = dbSheet();
@@ -621,18 +623,18 @@ function addPhoto(me, id, data, mime, note) {
   var bytes = Utilities.base64Decode(b64);
   if (bytes.length > PHOTO_MAX_BYTES) throw new Error("写真が大きすぎます（" + Math.round(bytes.length / 1024 / 1024) + "MB）");
   var ext = /png/i.test(mime || "") ? "png" : "jpg";
-  var n = (rec.photos || []).length + 1;
+  var n = (rec.photos || []).filter(function (p) { return (p.kind || "before") === kind; }).length + 1;
   var day = String(rec.week || "").slice(0, 10) || Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
-  var name = day + "_" + clean(rec.store) + "_" + clean(rec.machine).replace(/[\/\\:*?"<>|]/g, "") + "_" + n + "_" + id + "." + ext;
+  var name = day + "_" + clean(rec.store) + "_" + clean(rec.machine).replace(/[\/\\:*?"<>|]/g, "") + "_" + PHOTO_KINDS[kind] + n + "_" + id + "." + ext;
   var folder = folderUnder(folderUnder(photoRoot(), clean(rec.store) || "店舗不明"), day.slice(0, 7));
   var file = folder.createFile(Utilities.newBlob(bytes, ext === "png" ? "image/png" : "image/jpeg", name));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
-  var p = { fid: file.getId(), url: "https://drive.google.com/file/d/" + file.getId() + "/view", at: nowIso(), by: me.name, note: clean(note || "") };
+  var p = { fid: file.getId(), url: "https://drive.google.com/file/d/" + file.getId() + "/view", at: nowIso(), by: me.name, kind: kind };
   rec.photos = (rec.photos || []).concat([p]);
   rec.id = id;
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
   var ps = photoSheet();
-  var r = appendValues(ps, [dateOf(rec.week), rec.store || "", rec.machine || "", rec.staff || "", p.url, p.fid, p.at], id);
+  var r = appendValues(ps, [dateOf(rec.week), rec.store || "", rec.machine || "", rec.staff || "", PHOTO_KINDS[kind], p.url, p.fid, p.at], id);
   ps.getRange(r, 1).setNumberFormat("yyyy/mm/dd");
   return { ok: true, rec: rec, photo: p };
 }
@@ -647,7 +649,7 @@ function importPhotoChecks() {
   var files = dir.getFiles(), n = 0, m = 0;
   var ps = photoSheet();
   var last = ps.getLastRow();
-  var fids = last >= 2 ? ps.getRange(2, 6, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
+  var fids = last >= 2 ? ps.getRange(2, 7, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
   while (files.hasNext()) {
     var f = files.next();
     var name = f.getName();
@@ -657,7 +659,7 @@ function importPhotoChecks() {
     (data.items || []).forEach(function (it) {
       var i = fids.indexOf(String(it.fid || "")); if (i < 0) return;
       var rooms = Array.isArray(it.emptyRooms) ? it.emptyRooms.join(",") : String(it.emptyRooms || "");
-      ps.getRange(i + 2, 8, 1, 9).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
+      ps.getRange(i + 2, 9, 1, 9).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
         it.match || "", it.popCount == null ? "" : num(it.popCount), it.score == null ? "" : num(it.score), clean(it.note || ""), clean(it.competitor || "")]]);
       m++;
     });
@@ -680,7 +682,7 @@ function pendingPhotos() {
   var ps = photoSheet(); var last = ps.getLastRow(); if (last < 2) return [];
   var v = ps.getRange(2, 1, last - 1, PHOTO_HEADERS.length).getValues();
   var out = [];
-  v.forEach(function (r) { if (r[5] && !r[7]) out.push({ date: r[0], store: r[1], machine: r[2], staff: r[3], url: r[4], fid: r[5] }); });
+  v.forEach(function (r) { if (r[6] && !r[8]) out.push({ date: r[0], store: r[1], machine: r[2], staff: r[3], kind: r[4], url: r[5], fid: r[6] }); });
   Logger.log(JSON.stringify(out)); return out;
 }
 

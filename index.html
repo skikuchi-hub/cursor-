@@ -278,14 +278,21 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .photo-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:2px dashed var(--line-2);border-radius:var(--r-m);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px}
 .photo-btn:active{background:var(--surface-sunk)}
 .photo-btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
+.photo-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+.photo-pair>div{min-width:0}
+.photo-pair .photo-btn{flex-direction:column;gap:4px;padding:12px 6px;min-height:92px}
+.photo-pair .photo-btn span{display:flex;flex-direction:column;align-items:center;gap:2px}
+.photo-pair .photo-btn small{font-size:10px;font-weight:600;color:var(--ink-3);line-height:1.3}
+.photo-pair .photo-btn[data-has="1"]{border-style:solid;border-color:var(--navy);background:var(--gold-wash)}
 .photo-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .photo-row:empty{display:none}
-.ph{position:relative;width:72px;height:72px;border-radius:10px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);flex:none}
+.ph{position:relative;width:64px;height:64px;border-radius:10px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);flex:none}
 .ph img{width:100%;height:100%;object-fit:cover;display:block}
 .ph .x{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;border:0;background:rgba(20,32,58,.75);color:#fff;font-size:13px;line-height:22px;padding:0}
 .ph.up::after{content:"送信中";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,32,58,.55);color:#fff;font-size:11px;font-weight:700}
 .rowitem .phs{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
-.rowitem .phs a{width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);display:block}
+.rowitem .phs a{position:relative;width:56px;height:56px;border-radius:8px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);display:block}
+.rowitem .phs a::after{content:attr(data-k);position:absolute;left:0;bottom:0;font-size:9px;font-weight:800;padding:1px 4px;background:rgba(20,32,58,.8);color:#fff;border-radius:0 6px 0 0}
 .rowitem .phs img{width:100%;height:100%;object-fit:cover;display:block}
 .rowitem .addph{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:8px;font-size:11px;font-weight:700;padding:4px 8px}
 
@@ -911,11 +918,19 @@ body{font-variant-numeric:tabular-nums}
           </div>
         </div>
         <div class="field">
-          <span class="lbl">機械の写真</span>
-          <button type="button" class="photo-btn" id="photoBtn"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span id="photoBtnLbl">補充する前に、機械の正面を1枚</span></button>
+          <span class="lbl">機械の写真（補充前と補充後）</span>
+          <div class="photo-pair">
+            <div>
+              <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前</b><small id="photoLblBefore">着いてすぐ、正面を1枚</small></span></button>
+              <div class="photo-row" data-row="before"></div>
+            </div>
+            <div>
+              <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後</b><small id="photoLblAfter">補充・入れ替えが終わったら1枚</small></span></button>
+              <div class="photo-row" data-row="after"></div>
+            </div>
+          </div>
           <input type="file" id="photoIn" accept="image/*" capture="environment" multiple hidden>
-          <div class="photo-row" id="photoRow"></div>
-          <p class="hint">報告と一緒に Drive に保存され、毎日自動でチェックされます（空き部屋・POP・陳列）。正面全体が入るように。</p>
+          <p class="hint">①で「何が取られたか」、②で「何をどこに入れたか」を毎日自動でチェックします。正面全体が入るように。</p>
         </div>
         <div class="field">
           <span class="lbl">メモ</span>
@@ -2284,8 +2299,9 @@ function updateReadouts(){
 /* ===================== 写真添付 =====================
    端末で長辺 1600px の JPEG に縮小してから送る（1枚 300〜600KB）。保存した記録の id に紐づけて Drive へ。
    PHOTOS：まだ送っていない写真（{blob, url}）。送信は報告の保存が成功したあと 1 枚ずつ */
-let PHOTOS = [], PHOTO_BUSY = false, PHOTO_TARGET = null;      // PHOTO_TARGET：既存の記録に足すときの id
-const PHOTO_MAX = 4, PHOTO_EDGE = 1600, PHOTO_Q = 0.82;
+let PHOTOS = [], PHOTO_BUSY = false, PHOTO_TARGET = null, PHOTO_KIND = "before";   // PHOTO_TARGET：既存の記録に足すときの id
+const PHOTO_MAX = 3, PHOTO_EDGE = 1600, PHOTO_Q = 0.82;                             // 種別ごとに 3 枚まで
+const PHOTO_KINDS = {before:"補充前", after:"補充後"};
 const thumbUrl = fid => `https://drive.google.com/thumbnail?id=${encodeURIComponent(fid)}&sz=w240`;
 async function shrinkImage(file){
   const url = URL.createObjectURL(file);
@@ -2301,15 +2317,19 @@ async function shrinkImage(file){
 }
 const blobToB64 = blob => new Promise((ok,ng)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]||""); r.onerror=()=>ng(new Error("読めませんでした")); r.readAsDataURL(blob); });
 function renderPhotoRow(){
-  const el=$("#photoRow"); if(!el) return;
-  el.innerHTML = PHOTOS.map((p,i)=>`<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`).join("");
-  const lbl=$("#photoBtnLbl"); if (lbl) lbl.textContent = PHOTOS.length ? `写真 ${PHOTOS.length}枚（もう1枚足す）` : "補充する前に、機械の正面を1枚";
-  $("#photoBtn").disabled = PHOTOS.length>=PHOTO_MAX;
+  Object.keys(PHOTO_KINDS).forEach(k=>{
+    const el=document.querySelector(`.photo-row[data-row="${k}"]`); if(!el) return;
+    const list=PHOTOS.filter(p=>p.kind===k);
+    el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
+    const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
+    btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
+    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚（もう1枚足せる）` : (k==="before" ? "着いてすぐ、正面を1枚" : "補充・入れ替えが終わったら1枚");
+  });
 }
-async function addPhotoFiles(files){
+async function addPhotoFiles(files, kind){
   for (const f of Array.from(files||[])){
-    if (PHOTOS.length>=PHOTO_MAX){ toast(`写真は1回の報告で ${PHOTO_MAX} 枚まで`); break; }
-    try { const blob = await shrinkImage(f); PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false}); }
+    if (PHOTOS.filter(p=>p.kind===kind).length>=PHOTO_MAX){ toast(`${PHOTO_KINDS[kind]}の写真は ${PHOTO_MAX} 枚まで`); break; }
+    try { const blob = await shrinkImage(f); PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false, kind}); }
     catch(e){ toast("この写真は読めませんでした"); }
   }
   renderPhotoRow();
@@ -2323,7 +2343,7 @@ async function uploadPhotos(id){
       const p = PHOTOS[0]; p.up=true; renderPhotoRow();
       try {
         const data = await blobToB64(p.blob);
-        const r = await api("photo", {id, data, mime:"image/jpeg"});
+        const r = await api("photo", {id, data, mime:"image/jpeg", kind:p.kind});
         Store.data.weekly = (Store.data.weekly||[]).map(x=> x.id===id ? r.rec : x);
         URL.revokeObjectURL(p.url); PHOTOS.shift(); okN++; renderPhotoRow();
       } catch(e){ p.up=false; renderPhotoRow(); toast(`写真を送れませんでした：${errMsg(e)}`); break; }
@@ -2333,10 +2353,12 @@ async function uploadPhotos(id){
   renderLogList();
 }
 function photoThumbs(r){
-  const ps = (r.photos||[]);
+  const ps = (r.photos||[]).slice().sort((a,b)=>(a.kind==="after")-(b.kind==="after"));
   const mine = canDelete(r) && !r.source;
   if (!ps.length && !mine) return "";
-  return `<div class="phs">${ps.map(p=>`<a href="${esc(p.url)}" target="_blank" rel="noopener"><img src="${thumbUrl(p.fid)}" alt="" loading="lazy"></a>`).join("")}${mine && ps.length<PHOTO_MAX ? `<button type="button" class="addph" data-addph="${esc(r.id)}">📷 写真を足す</button>` : ""}</div>`;
+  const nOf = k => ps.filter(p=>(p.kind||"before")===k).length;
+  const addBtn = k => mine && nOf(k)<PHOTO_MAX ? `<button type="button" class="addph" data-addph="${esc(r.id)}" data-kind="${k}">📷 ${nOf(k)?"＋":""}${PHOTO_KINDS[k]}</button>` : "";
+  return `<div class="phs">${ps.map(p=>`<a href="${esc(p.url)}" target="_blank" rel="noopener" data-k="${p.kind==="after"?"後":"前"}"><img src="${thumbUrl(p.fid)}" alt="" loading="lazy"></a>`).join("")}${addBtn("before")}${addBtn("after")}</div>`;
 }
 
 /* クレーン演出は撤去（保存の流れはそのまま） */
@@ -3730,17 +3752,18 @@ function wire(){
   $("#saveCost").onclick = saveCost;
 
   // 写真：フォームの添付と、既存の記録への追加
-  $("#photoBtn").onclick = ()=>{ PHOTO_TARGET=null; $("#photoIn").click(); };
+  $$(".photo-btn[data-kind]").forEach(b=>b.onclick=()=>{ PHOTO_TARGET=null; PHOTO_KIND=b.dataset.kind; $("#photoIn").click(); });
   $("#photoIn").onchange = async e => {
     const files = Array.from(e.target.files||[]); e.target.value="";   // value を消すと FileList も空になるので先に複製
-    if (PHOTO_TARGET){ const id=PHOTO_TARGET; PHOTO_TARGET=null; const keep=PHOTOS; PHOTOS=[]; await addPhotoFiles(files); await uploadPhotos(id); PHOTOS=keep.concat(PHOTOS); renderPhotoRow(); return; }
-    await addPhotoFiles(files);
+    const kind = PHOTO_KIND;
+    if (PHOTO_TARGET){ const id=PHOTO_TARGET; PHOTO_TARGET=null; const keep=PHOTOS; PHOTOS=[]; await addPhotoFiles(files, kind); await uploadPhotos(id); PHOTOS=keep.concat(PHOTOS); renderPhotoRow(); return; }
+    await addPhotoFiles(files, kind);
   };
-  $("#photoRow").onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); };
+  $$(".photo-row[data-row]").forEach(el=>el.onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); });
   document.addEventListener("click", e=>{
     const b=e.target.closest("[data-addph]"); if(!b) return;
     if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }
-    PHOTO_TARGET=b.dataset.addph; $("#photoIn").click();
+    PHOTO_TARGET=b.dataset.addph; PHOTO_KIND=b.dataset.kind||"before"; $("#photoIn").click();
   });
 
   // 削除（各リスト共通）
