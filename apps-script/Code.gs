@@ -41,6 +41,7 @@ function doPost(e) {
       case "remove": return out(withLock(function () { return removeDoc(me, req.col, req.id); }));
       case "put":    return out(withLock(function () { return putDoc(me, req.col, req.id, req.obj); }));
       case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.kind); }));
+      case "update": return out(withLock(function () { return updateDoc(me, req.col, req.id, req.obj); }));
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -260,6 +261,51 @@ function removeDoc(me, col, id) {
   }
   dematerialize(col, id);
   return { ok: true };
+}
+/* 記録の修正（登録した本人か管理者）。巡回の記録のみ。
+   createdAt・by・sentAt・photos は元の値を保ち、売上の差分を計算し直して、巡回ログ・部屋別ログ・景品実績の行を作り直す。
+   同じ店舗・機械のあとの訪問は「前回」が変わるので、差分と行を同じように作り直す（写真タブの行はそのまま） */
+var REFRESH_TABS = ["巡回ログ", "部屋別ログ", "景品実績"];
+function updateDoc(me, col, id, obj) {
+  if (col !== "weekly") throw new Error("この記録は修正できません");
+  var row = findDbRow(col, id);
+  if (!row) throw new Error("記録が見つかりません");
+  var sh = dbSheet();
+  var old; try { old = JSON.parse(sh.getRange(row, 6).getValue()); } catch (e) { old = {}; }
+  var owner = old.by || old.staff || "";
+  if (me.role !== "admin" && owner && owner !== me.name) throw new Error("この記録は " + owner + " さんが登録したものなので修正できません");
+  var rec = Object.assign({}, obj || {});
+  rec.id = id; rec.createdAt = old.createdAt || rec.createdAt || nowIso(); rec.by = old.by || me.name; rec.sentAt = old.sentAt || nowIso();
+  if (old.photos) rec.photos = old.photos;
+  if (me.role !== "admin" || !rec.staff) rec.staff = old.staff || me.name;
+  rec.editedAt = nowIso(); rec.editedBy = me.name;
+  var docs = readAllDocs();
+  docs.weekly = docs.weekly.map(function (r) { return r.id === id ? rec : r; });
+  applySalesDelta(rec, docs.weekly);
+  sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
+  rematerialize(rec, docs);
+  // あとの訪問（同じ店舗・機械）を作り直す
+  var later = docs.weekly.filter(function (r) { return r.id !== id && r.store === rec.store && r.machine === rec.machine && String(r.createdAt || "") > String(rec.createdAt || ""); })
+    .sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
+  var recs = [];
+  later.forEach(function (r) {
+    applySalesDelta(r, docs.weekly); rewriteAutoMoney(r);
+    var rr = findDbRow("weekly", r.id); if (!rr) return;
+    sh.getRange(rr, 4, 1, 3).setValues([[nowIso(), "recompute", JSON.stringify(stripId(r))]]);
+    rematerialize(r, docs); recs.push(r);
+  });
+  return { ok: true, rec: rec, recs: recs };
+}
+function rematerialize(rec, docs) {
+  REFRESH_TABS.forEach(function (n) {
+    var sh = ss().getSheetByName(n); if (!sh) return;
+    var idc = idColumn(sh, false); if (!idc) return;
+    var last = sh.getLastRow(); if (last < 2) return;
+    var v = sh.getRange(2, idc, last - 1, 1).getValues();
+    for (var i = v.length - 1; i >= 0; i--) if (String(v[i][0]) === String(rec.id)) sh.deleteRow(i + 2);
+  });
+  var earlier = { weekly: docs.weekly.filter(function (o) { return String(o.createdAt || "") < String(rec.createdAt || ""); }) };
+  materialize("weekly", rec, earlier);
 }
 function putDoc(me, col, id, obj) {
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);

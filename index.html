@@ -274,6 +274,10 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--rose) 70%,#000)}
 .save:disabled{background:var(--surface-sunk);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
 .save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
+/* 記録の修正中 */
+.editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:2px solid var(--gold);color:var(--ink);font-size:13px;font-weight:700}
+.editbar .btn{padding:7px 12px;font-size:12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.rowitem .edit{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:8px;font-size:11px;font-weight:700;padding:4px 8px}
 /* 写真添付 */
 .photo-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:2px dashed var(--line-2);border-radius:var(--r-m);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px}
 .photo-btn:active{background:var(--surface-sunk)}
@@ -866,6 +870,8 @@ body{font-variant-numeric:tabular-nums}
         <div class="wk-bar"><i id="wkBar" style="width:0%"></i></div>
         <div class="wk-sub"><span id="wkSales">売上 0円</span><span id="wkLast">まだ入力なし</span></div>
       </div>
+
+      <div class="editbar" id="editBar" hidden><span id="editBarTxt">記録を修正中</span><button type="button" class="btn" id="editCancel">やめる</button></div>
 
       <div class="card">
         <div class="step"><em>1</em><h3>どの店舗？</h3><span class="sub" id="storeDone"></span></div>
@@ -1460,6 +1466,7 @@ function formDirty(){
     if (num($("#exNet").value)!==0 || clean($("#exMemo").value)) return true;
     if (clean($("#memoIn").value)) return true;
     if (PHOTOS.length || PHOTO_BUSY) return true;                 // 写真の添付・送信中
+    if (EDIT) return true;                                         // 記録の修正中
   } catch(e){}
   return false;
 }
@@ -1604,6 +1611,18 @@ const Store = {
     this.data[c] = (this.data[c]||[]).filter(r=>r.id!==id);
     this.saveLocal(); render();
   },
+  async update(c,id,obj){                    // 記録の修正（本人・管理者）。サーバーが差分・シートの行を作り直す
+    if (API_URL){
+      if (!this.online()){ toast("いまは保存できません（オフライン）"); return false; }
+      try {
+        const r = await api("update", {col:c, id, obj});
+        const upd = {}; [r.rec].concat(r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
+        this.data[c] = (this.data[c]||[]).map(x=> upd[x.id] || x); render(); return true;
+      } catch(e){ if (e.code==="unauthorized") this.sync(false); toast(errMsg(e)); return false; }
+    }
+    this.data[c] = (this.data[c]||[]).map(r=> r.id===id ? Object.assign({},r,obj,{id}) : r);
+    this.saveLocal(); render(); return true;
+  },
   async put(c,id,obj){                       // 固定IDの文書をまるごと保存（設定用）
     if (API_URL){
       if (!this.online()){ toast("いまは保存できません（オフライン）"); return; }
@@ -1664,6 +1683,8 @@ function machineType(name){ return /4人機|キャッチャー|ミニSP/.test(na
 
 const F = { week:"", store:"", machine:"", staff:"" };
 let R = null;                 // 入力中の筐体データ
+let EDIT = null;              // 修正中の記録 {id, createdAt}。修正中は「前回の訪問」をこの記録より前のものから探す
+const beforeEdit = r => !EDIT || (r.id!==EDIT.id && String(r.createdAt||"") < String(EDIT.createdAt||""));
 let paysTouched=false, costTouched=false;
 
 /* 部屋：counter＝カウンター、taken＝取られた数（機械の払出表示。前回からの数）、before＝補充前の残り（前回の残り＋補充−回収 − 取られた数。初回だけ手入力）、
@@ -1673,7 +1694,7 @@ const blankRoom = k => ({k, counter:"", prize:"", taken:"", before:"", addPrize:
 function lastVisit(){
   if(!F.store || !F.machine) return null;
   return Store.data.weekly
-    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots))
+    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots) && beforeEdit(r))
     .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")))[0] || null;   // 直前の訪問（同じ週でもよい）
 }
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
@@ -1692,7 +1713,7 @@ function prevSalesRec(){
   if(!F.store || !F.machine) return null;
   const mon = monthOf(F.week);
   return Store.data.weekly
-    .filter(r => r.store===F.store && r.machine===F.machine && monthOf(r.week)===mon)
+    .filter(r => r.store===F.store && r.machine===F.machine && monthOf(r.week)===mon && beforeEdit(r))
     .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0] || null;
 }
 function salesDelta(f){                       // f: "sAB" | "sCD" | "sBox" → {cur, prev, delta, reset}
@@ -2388,6 +2409,16 @@ async function saveLog(){
     time:$("#timeIn").value||"", staff:clean($("#staffIn").value), memo:clean($("#memoIn").value)
   };
   const btn=$("#saveLog"); btn.disabled=true;
+  if (EDIT){
+    const id = EDIT.id;
+    if (!(await Store.update("weekly", id, rec))){ btn.disabled=false; return; }
+    EDIT=null; toast(`修正を保存しました（スプレッドシートも書き直しました）`);
+    $("#memoIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
+    F.machine=""; R=null; builtFor="";
+    renderEditBar(); renderMachineRow(); buildRooms(true); render();
+    if (PHOTOS.length) await uploadPhotos(id);
+    return;
+  }
   const before = new Set((Store.data.weekly||[]).map(x=>x.id));
   if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
   playCatch();
@@ -2397,6 +2428,53 @@ async function saveLog(){
   renderMachineRow(); buildRooms(true); render();
   const added = (Store.data.weekly||[]).find(x=>!before.has(x.id) && !x._local);
   if (added && PHOTOS.length) await uploadPhotos(added.id);
+}
+
+/* ===================== 記録の修正（登録した本人と管理者） =====================
+   記録をフォームに読み戻し、「修正を保存」で action:"update"。サーバーが差分（累計→今回分）と
+   巡回ログ・部屋別ログ・景品実績の行を作り直し、あとの訪問の差分も計算し直す */
+const editBtn = r => (canDelete(r) && !r.source) ? `<button type="button" class="edit" data-edit="${esc(r.id)}">✎ 編集</button>` : "";
+function renderEditBar(){
+  const bar=$("#editBar"); if (!bar) return;
+  bar.hidden = !EDIT;
+  const btn=$("#saveLog"); if (btn) btn.textContent = EDIT ? "修正を保存" : "巡回を報告";
+  if (EDIT){ const r=(Store.data.weekly||[]).find(x=>x.id===EDIT.id)||{}; $("#editBarTxt").textContent = `✎ ${jpDate(r.week)} ${r.store||""}／${r.machine||""} の記録を修正中`; }
+}
+function startEdit(id){
+  const r=(Store.data.weekly||[]).find(x=>x.id===id); if(!r || !canDelete(r)) return;
+  if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }
+  EDIT = {id:r.id, createdAt:r.createdAt||""};
+  F.store=r.store||""; F.machine=r.machine||""; builtFor="";
+  setWeek(r.week);                                   // 店舗・機械・日付でフォームを作り直す
+  renderStoreRow(); renderMachineRow(); buildRooms(true);
+  if (R){
+    const cum=cumOf(r); R.sAB=cum.sAB||""; R.sCD=cum.sCD||""; R.sBox=cum.sBox||"";   // 入力欄は累計
+    if (!cum.sAB && !cum.sCD && !cum.sBox && num(r.sales)>0){ if (R.type==="box") R.sBox=num(r.sales); else R.sAB=num(r.sales); }   // 旧データ（合計だけ）の救済
+    if (R.type==="4p"){
+      (r.rooms||[]).forEach(x=>{ const rm=R.rooms.find(y=>y.k===x.k); if(!rm) return;
+        rm.counter = x.counter===undefined||x.counter===null ? "" : x.counter;
+        rm.prize = x.prize||rm.prize; rm.prizeWas = rm.prize;
+        rm.taken = (x.pays===null||x.pays===undefined) ? "" : x.pays;
+        rm.before = x.before===undefined||x.before===null ? "" : x.before;
+        rm.addPrize = x.addPrize||rm.prize; rm.add = num(x.add)>0 ? num(x.add) : ""; rm.take = num(x.take)>0 ? num(x.take) : ""; });
+    } else if ((r.slots||[]).length){
+      R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, filled:sl.filled||""}));
+    }
+    buildRooms(true);
+  }
+  $("#timeIn").value = r.time||""; $("#memoIn").value = r.memo||"";
+  if (r.staff && $("#staffIn").querySelector(`option[value="${CSS.escape(r.staff)}"]`)) $("#staffIn").value = r.staff;
+  updateDerived();
+  const t=totals();
+  if (num(r.pays)!==t.pays){ paysTouched=true; $("#paysIn").value=num(r.pays); $("#manualBox").hidden=false; }
+  if (num(r.cost)!==Math.round(t.cost)){ costTouched=true; $("#costIn").value=num(r.cost); $("#manualBox").hidden=false; }
+  renderEditBar(); updateReadouts();
+  window.scrollTo({top:0, behavior:"smooth"});
+}
+function cancelEdit(){
+  EDIT=null; $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
+  F.machine=""; R=null; builtFor="";
+  renderEditBar(); renderMachineRow(); buildRooms(true); render(); toast("修正をやめました");
 }
 
 function renderLogList(){
@@ -2424,7 +2502,8 @@ function renderLogList(){
         ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
         ${photoThumbs(r)}
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
-          <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>
+          ${editBtn(r)}
+          <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>${r.editedAt?`<span class="tag">修正済</span>`:""}
           ${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
         </div>
       </div>
@@ -3750,6 +3829,10 @@ function wire(){
   $("#exKind").onchange = () => { const pe=$("#exPayee"); pe.dataset.touched=""; pe.value=""; renderCostForm(); };
   $("#exDate").onchange = renderCostForm;
   $("#saveCost").onclick = saveCost;
+
+  // 記録の修正
+  document.addEventListener("click", e=>{ const b=e.target.closest("[data-edit]"); if(!b) return; startEdit(b.dataset.edit); });
+  $("#editCancel").onclick = cancelEdit;
 
   // 写真：フォームの添付と、既存の記録への追加
   $$(".photo-btn[data-kind]").forEach(b=>b.onclick=()=>{ PHOTO_TARGET=null; PHOTO_KIND=b.dataset.kind; $("#photoIn").click(); });
