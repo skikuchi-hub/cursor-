@@ -284,12 +284,12 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .photo-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:12px;border:2px dashed var(--line-2);border-radius:var(--r-m);background:var(--surface);color:var(--ink);font-weight:700;font-size:14px}
 .photo-btn:active{background:var(--surface-sunk)}
 .photo-btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round}
-.photo-pair{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
-.photo-pair>div{min-width:0}
-.photo-pair .photo-btn{flex-direction:column;gap:4px;padding:12px 6px;min-height:92px}
-.photo-pair .photo-btn span{display:flex;flex-direction:column;align-items:center;gap:2px}
-.photo-pair .photo-btn small{font-size:10px;font-weight:600;color:var(--ink-3);line-height:1.3}
-.photo-pair .photo-btn[data-has="1"]{border-style:solid;border-color:var(--navy);background:var(--gold-wash)}
+.photo-field{margin-bottom:12px}
+.photo-field .photo-btn{justify-content:flex-start;text-align:left;gap:10px;padding:10px 12px}
+.photo-field .photo-btn svg{flex:none}
+.photo-field .photo-btn span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.photo-field .photo-btn small{font-size:10.5px;font-weight:600;color:var(--ink-3);line-height:1.3}
+.photo-field .photo-btn[data-has="1"]{border-style:solid;border-color:var(--navy);background:var(--gold-wash)}
 .photo-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 .photo-row:empty{display:none}
 .ph{position:relative;width:64px;height:64px;border-radius:10px;overflow:hidden;background:var(--surface-sunk);border:1px solid var(--line);flex:none}
@@ -886,6 +886,11 @@ body{font-variant-numeric:tabular-nums}
 
       <div class="card">
         <div class="step"><em>2</em><h3>部屋ごとの記録</h3><span class="sub" id="mType"></span></div>
+        <div class="photo-field">
+          <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前の写真</b><small>着いてすぐ、機械の正面を1枚（何が取られたか）</small></span></button>
+          <div class="photo-row" data-row="before"></div>
+        </div>
+        <input type="file" id="photoIn" accept="image/*" capture="environment" multiple hidden>
         <div id="roomGrid"></div>
         <datalist id="prizeList"></datalist>
         <p class="hint" id="zhint"></p>
@@ -899,6 +904,10 @@ body{font-variant-numeric:tabular-nums}
             <span class="lbl">景品原価（円）</span>
             <input class="num" id="costIn" type="number" inputmode="numeric" min="0" value="0" style="font-size:20px">
           </div>
+        </div>
+        <div class="photo-field" style="margin-top:12px">
+          <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後の写真</b><small>補充・入れ替えが終わったら1枚（何をどこに入れたか）</small></span></button>
+          <div class="photo-row" data-row="after"></div>
         </div>
       </div>
 
@@ -924,21 +933,6 @@ body{font-variant-numeric:tabular-nums}
             <select class="txt" id="staffIn"></select>
             <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品・経費にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
           </div>
-        </div>
-        <div class="field">
-          <span class="lbl">機械の写真（補充前と補充後）</span>
-          <div class="photo-pair">
-            <div>
-              <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前</b><small id="photoLblBefore">着いてすぐ、正面を1枚</small></span></button>
-              <div class="photo-row" data-row="before"></div>
-            </div>
-            <div>
-              <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後</b><small id="photoLblAfter">補充・入れ替えが終わったら1枚</small></span></button>
-              <div class="photo-row" data-row="after"></div>
-            </div>
-          </div>
-          <input type="file" id="photoIn" accept="image/*" capture="environment" multiple hidden>
-          <p class="hint">①で「何が取られたか」、②で「何をどこに入れたか」を毎日自動でチェックします。正面全体が入るように。</p>
         </div>
         <div class="field">
           <span class="lbl">メモ</span>
@@ -2347,7 +2341,7 @@ function renderPhotoRow(){
     el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
     const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
     btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
-    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚（もう1枚足せる）` : (k==="before" ? "着いてすぐ、正面を1枚" : "補充・入れ替えが終わったら1枚");
+    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（何が取られたか）" : "補充・入れ替えが終わったら1枚（何をどこに入れたか）");
   });
 }
 async function addPhotoFiles(files, kind){
