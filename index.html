@@ -2918,20 +2918,18 @@ function renderPool(mon){
   $("#gqPoolSub").textContent = admin ? `${+mon.slice(5)}月・粗利の ${t.rate}％` : `${+mon.slice(5)}月`;
   $("#gqPoolMeta").innerHTML = admin
     ? `今月の粗利 <b>${yen(t.gross)}</b>円<br>売上 ${yen(t.sales)}円 − 景品 ${yen(t.cost)}円 − 場所代 ${yen(t.place)}円`
-    : `みんなの巡回 <b>${t.n}</b>回<br>月末の数字で確定`;
+    : `みんなの巡回 <b>${t.n}</b>回<br>巡回1回あたり <b>¥${t.perVisit.toLocaleString("ja-JP")}</b>`;
   const members = Array.from(new Set(STAFF.concat(Object.keys(t.visits)))).filter(w=>t.visits[w]||STAFF.includes(w));
   const maxV = Math.max(1, ...members.map(w=>t.visits[w]||0));
   $("#gqPoolSplit").innerHTML = members.map(w=>{
-    const v=t.visits[w]||0, share = t.n>0 ? Math.round(t.pool*v/t.n) : 0;
+    const v=t.visits[w]||0, share = v*t.perVisit;                                  // 巡回回数 × 巡回1回あたりの単価
     return `<div class="gq-share ${w===gqWho?"me":""}"><span class="nm">${esc(w)}</span><div class="gq-bar"><i style="width:${(v/maxV*100).toFixed(0)}%"></i></div><span class="ct">${v}回</span><span class="yen">¥${share.toLocaleString("ja-JP")}</span></div>`;
   }).join("");
-  const myV = t.visits[gqWho]||0, nextShare = t.n>0 ? Math.round(t.pool*(myV+1)/(t.n+1)) - Math.round(t.pool*myV/t.n) : 0;
   $("#gqPoolNote").innerHTML = t.n>0
-    ? (admin
-        ? `巡回回数の比率で山分け。いまは <b style="color:#f5c542">1回の巡回 ≈ ¥${t.perVisit.toLocaleString("ja-JP")}</b> ぶんのプール。月末の数字で確定。`
-        : `巡回回数の比率で山分け。<b style="color:#f5c542">もう1店まわると、取り分が ≈ ¥${Math.max(0,nextShare).toLocaleString("ja-JP")} ふえる</b>。売上が伸びるほどプールも育つ。`)
-    : (admin ? `今月の巡回が入るとプールが育ちはじめる。粗利の ${t.rate}％ をみんなで山分け。`
-             : `今月の巡回が入るとプールが育ちはじめる。巡回した回数の比率で山分け。`);
+    ? `<b>巡回1回あたり ¥${t.perVisit.toLocaleString("ja-JP")}</b>（プール ÷ みんなの巡回 ${t.n}回）× 自分の巡回回数 ＝ 取り分。`
+      + (admin ? ` 月末の数字で確定。` : ` <b style="color:#f5c542">もう1店まわると ≈ +¥${t.perVisit.toLocaleString("ja-JP")}</b>。売上が伸びるほど単価も上がる。`)
+    : (admin ? `今月の巡回が入るとプールが育ちはじめる。粗利の ${t.rate}％ を、巡回1回あたりの単価 × 回数で分ける。`
+             : `今月の巡回が入るとプールが育ちはじめる。巡回1回あたりの単価 × 自分の巡回回数 が取り分。`);
   const rateBox=$("#gqPoolRate"); if (rateBox){ rateBox.hidden = !admin; const inp=$("#gqRateIn"); if (inp && document.activeElement!==inp) inp.value = t.rate; }
 }
 async function saveTeamRate(){
