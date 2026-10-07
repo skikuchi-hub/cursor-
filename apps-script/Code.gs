@@ -423,7 +423,8 @@ function roomLines(r, all) {
     var pv = prevR ? (prevR.rooms || []).filter(function (y) { return y.k === x.k; })[0] : null;
     var dif = (pv && pv.counter !== "" && x.counter !== "") ? Math.round((num(x.counter) - num(pv.counter)) * 100) / 100 : "";
     out.push([wk, r.store, r.machine, x.k === "-" ? "本体" : x.k, x.counter === "" ? "" : num(x.counter), dif, num(pair),
-      x.prize || "", (x.before === "" || x.before === undefined) ? "" : num(x.before), x.addPrize || "", num(x.add), (x.pays === null || x.pays === undefined) ? "" : x.pays]);
+      x.prize || "", (x.before === "" || x.before === undefined) ? "" : num(x.before), x.addPrize || "", num(x.add), (x.pays === null || x.pays === undefined) ? "" : x.pays,
+      num(x.take) > 0 ? num(x.take) : ""]);                                       // M列 回収数（機械から抜いて在庫へ戻した数）
   });
   return out;
 }
@@ -578,6 +579,19 @@ function renameDateHeaders() {
     var sh = ss().getSheetByName(n); if (!sh) return;
     if (String(sh.getRange(1, 1).getValue()).trim() === "週") sh.getRange(1, 1).setValue("訪問日");
   });
+  upgradeStockFormulas();
+}
+/* 部屋別ログ M列「回収数」と、景品マスタ J列（残り在庫）に回収分を足し戻す数式。再実行しても安全 */
+function upgradeStockFormulas() {
+  var rs = ss().getSheetByName("部屋別ログ");
+  if (rs && String(rs.getRange(1, 13).getValue()).trim() === "") rs.getRange(1, 13).setValue("回収数");
+  var pm = ss().getSheetByName("景品マスタ");
+  if (pm) {
+    var f = String(pm.getRange(2, 10).getFormula() || "");
+    if (f && f.indexOf("$M$") < 0) {
+      pm.getRange(2, 10).setFormula("=ARRAYFORMULA(IF((A2:A500=\"\")+(F2:F500=\"\"),\"\",F2:F500-I2:I500+IF(A2:A500=\"\",0,SUMIF('部屋別ログ'!$H$2:$H$8000,A2:A500,'部屋別ログ'!$M$2:$M$8000))))");
+    }
+  }
 }
 /* アプリIDの付いた行の A列（週／日付）を _app_db の記録から書き直す。
    タイムゾーン差で日付が1日ずれて入った行の修復用。何度実行してもよい */

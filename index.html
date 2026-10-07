@@ -449,6 +449,8 @@ td:first-child{font-family:var(--fs-body)}
   padding:9px 2px;font-size:11.5px;font-weight:700;color:var(--ink-2);
 }
 .addbtn:active{background:var(--surface-sunk)}
+.addbtn.take{color:var(--ink-3)}
+.numin.ro{background:transparent;border-style:dashed;color:var(--ink-2);font-size:16px;padding:9px 4px}
 .swapbtn{
   background:none;border:0;padding:2px 0 0;font-size:10.5px;color:var(--violet);font-weight:700;text-align:left;
 }
@@ -1624,7 +1626,9 @@ const F = { week:"", store:"", machine:"", staff:"" };
 let R = null;                 // 入力中の筐体データ
 let paysTouched=false, costTouched=false;
 
-const blankRoom = k => ({k, counter:"", prize:"", before:"", addPrize:"", add:""});
+/* 部屋：counter＝カウンター、taken＝取られた数（機械の払出表示。前回からの数）、before＝補充前の残り（前回の残り＋補充−回収 − 取られた数。初回だけ手入力）、
+   add/addPrize＝補充、take＝回収（機械から抜いて在庫へ戻した数） */
+const blankRoom = k => ({k, counter:"", prize:"", taken:"", before:"", addPrize:"", add:"", take:""});
 
 function lastVisit(){
   if(!F.store || !F.machine) return null;
@@ -1633,7 +1637,7 @@ function lastVisit(){
     .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")))[0] || null;   // 直前の訪問（同じ週でもよい）
 }
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
-function prevStock(k){ const pr=prevRoom(k); return pr ? num(pr.before)+num(pr.add) : null; }
+function prevStock(k){ const pr=prevRoom(k); return pr ? Math.max(0, num(pr.before)+num(pr.add)-num(pr.take)) : null; }   // 前回訪問のあとに機械に入っていた数
 function prevPrize(k){
   const pr=prevRoom(k); if(!pr) return "";
   return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
@@ -1656,10 +1660,19 @@ function salesDelta(f){                       // f: "sAB" | "sCD" | "sBox" → {
   const reset = pr && cur>0 && cur<prev;
   return {cur, prev, delta: pr ? (reset ? cur : cur-prev) : cur, reset, has:!!pr};
 }
-function roomPays(rm){
+function roomPays(rm){                       // 払出＝入力した「取られた数」
+  if (rm.taken==="" || rm.taken===undefined || rm.taken===null) return null;
+  return Math.max(0, Math.round(num(rm.taken)));
+}
+function roomBefore(rm){                     // 補充前の残り：前回の数 − 取られた数（初回は手入力）
   const st = prevStock(rm.k);
-  if (st===null || rm.before==="") return null;
-  return Math.max(0, Math.round(st - num(rm.before)));
+  if (st===null) return rm.before===""||rm.before===undefined ? "" : Math.max(0, num(rm.before));
+  const p = roomPays(rm); if (p===null) return "";
+  return Math.max(0, st - p);
+}
+function roomAfter(rm){                      // 補充後：残り ＋ 補充 − 回収
+  const b = roomBefore(rm); if (b==="") return "";
+  return Math.max(0, b + num(rm.add) - num(rm.take));
 }
 
 function resetRooms(keep){
@@ -1706,7 +1719,7 @@ function addInto(dst, src){ Object.keys(src).forEach(k=>dst[k]=(dst[k]||0)+src[k
 function refillUsed(){
   const r = {};
   Store.data.weekly.forEach(w=>{
-    (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); });
+    (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); if(x.prize && num(x.take)>0) r[x.prize]=(r[x.prize]||0)-num(x.take); });
     if ((w.slots||[]).length) addInto(r, boxRefill(w.slots));
   });
   return r;
@@ -1734,10 +1747,18 @@ function roomCell(rm){
       <span class="dif" data-d="${rm.k}"></span>
     </div>
     <div class="row2">
-      <div><span class="mini">残り</span>
-        <input class="numin" type="text" inputmode="numeric" data-k="${rm.k}" data-f="before" placeholder="0" aria-label="補充前に残っていた景品の数"></div>
+      ${prevStock(rm.k)===null
+        ? `<div><span class="mini">いま入っている数</span>
+            <input class="numin" type="text" inputmode="numeric" data-k="${rm.k}" data-f="before" placeholder="0" aria-label="いま機械に入っている景品の数（初回だけ）"></div>`
+        : `<div><span class="mini">取られた数</span>
+            <input class="numin" type="text" inputmode="numeric" data-k="${rm.k}" data-f="taken" placeholder="0" aria-label="前回から取られた景品の数（機械の払出表示）"></div>`}
       <div data-addslot="${rm.k}">
         <button class="addbtn" data-act="open-add" data-k="${rm.k}">＋ 補充</button></div>
+    </div>
+    <div class="row2">
+      <div><span class="mini">残り（計算）</span><div class="numin ro" data-left="${rm.k}">—</div></div>
+      <div data-takeslot="${rm.k}">
+        <button class="addbtn take" data-act="open-take" data-k="${rm.k}">− 回収</button></div>
     </div>
     <button class="swapbtn" data-act="swap" data-k="${rm.k}" hidden>補充した景品が別景品の場合</button>
     <span class="pz" data-y="${rm.k}"></span>
@@ -1815,7 +1836,7 @@ function buildRooms(force){
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
   $("#zhint").innerHTML = t==="4p"
-    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。<b>カウンターと残り数</b>を毎回入れると、景品ごとの売上・獲得率・原価率がデータになります。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。<b>カウンターと取られた数</b>（機械の払出表示）を毎回入れると、景品ごとの売上・獲得率・原価率がデータになります。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
     : "枠の中身は前回のまま出ています。<b>① 空いていた枠をタップ</b>（＝出た景品）→ <b>② 補充した枠をタップ</b>。写真を撮らなくても、何が何個出たかが残ります。";
 
   if (t==="4p"){
@@ -1830,7 +1851,9 @@ function buildRooms(force){
     R.rooms.forEach(rm=>{
       setVal(`[data-k="${rm.k}"][data-f="counter"]`, rm.counter);
       setVal(`[data-k="${rm.k}"][data-f="before"]`,  rm.before);
+      setVal(`[data-k="${rm.k}"][data-f="taken"]`,   rm.taken);
       if (num(rm.add)>0) openAdd(rm.k, true);
+      if (num(rm.take)>0) openTake(rm.k, true);
     });
   } else {
     grid.innerHTML = `
@@ -1877,6 +1900,15 @@ function openAdd(k, silent){
     <input class="numin" type="text" inputmode="numeric" data-k="${k}" data-f="add" placeholder="0" aria-label="補充した数" value="${rm.add||""}">`;
   const sw = document.querySelector(`#roomGrid [data-act="swap"][data-k="${k}"]`);
   if (sw) sw.hidden = false;
+  if (!silent) slot.querySelector("input").focus();
+}
+function openTake(k, silent){
+  const slot = document.querySelector(`#roomGrid [data-takeslot="${k}"]`);
+  if (!slot || slot.dataset.open==="1") return;
+  const rm = R.rooms.find(x=>x.k===k) || {};
+  slot.dataset.open="1";
+  slot.innerHTML = `<span class="mini">回収した数（在庫へ戻す）</span>
+    <input class="numin" type="text" inputmode="numeric" data-k="${k}" data-f="take" placeholder="0" aria-label="機械から抜いて在庫に戻した数" value="${rm.take||""}">`;
   if (!silent) slot.querySelector("input").focus();
 }
 function openSwap(k){
@@ -1965,6 +1997,7 @@ function onRoomClick(e){
   const a = b.dataset.act;
   if (a==="rename")   return editPrize(b.dataset.k);
   if (a==="open-add") return openAdd(b.dataset.k);
+  if (a==="open-take") return openTake(b.dataset.k);
   if (a==="swap")     return openSwap(b.dataset.k);
   if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
   if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
@@ -2065,11 +2098,12 @@ function autoMemo(){
   }
   const dab = salesDelta("sAB"), dcd = salesDelta("sCD");
   const money = `AB${yen(dab.delta)}/CD${yen(dcd.delta)}円${(dab.has||dcd.has)?`（累計 AB${yen(dab.cur)}/CD${yen(dcd.cur)}）`:""}`;
-  const parts = R.rooms.filter(rm=>rm.prize||rm.before!=="").map(rm=>{
+  const parts = R.rooms.filter(rm=>rm.prize||roomBefore(rm)!=="").map(rm=>{
     const head = rm.k==="-" ? "" : rm.k+" ";
-    const ap = addPrizeOf(rm);
+    const ap = addPrizeOf(rm), b = roomBefore(rm);
     const add = num(rm.add)>0 ? (ap && ap!==clean(rm.prize) ? `＋${ap}${num(rm.add)}` : `＋${num(rm.add)}`) : "";
-    return `${head}${rm.prize||"?"}${rm.before===""?"":num(rm.before)}${add}`;
+    const take = num(rm.take)>0 ? `−回収${num(rm.take)}` : "";
+    return `${head}${rm.prize||"?"}${b===""?"":b}${add}${take}`;
   });
   const cnt = R.rooms.filter(rm=>rm.counter!=="").map(rm=>`${rm.k==="-"?"":rm.k}${rm.counter}`).join(" ");
   return [money, parts.join(" / "), cnt?("カウンター "+cnt):""].filter(Boolean).join(" ｜ ");
@@ -2088,11 +2122,13 @@ function updateDerived(){
           ? `前回 ${pr.counter} → +${(+((num(rm.counter)-prevC).toFixed(3)))}`
           : (prevC!==null ? `前回 ${pr.counter}` : "");
       }
+      const left = document.querySelector(`#roomGrid [data-left="${rm.k}"]`);
+      if (left){ const b=roomBefore(rm), a=roomAfter(rm); left.textContent = b==="" ? "—" : (num(rm.add)>0||num(rm.take)>0 ? `${b} → ${a}` : String(b)); }
       const y = document.querySelector(`#roomGrid [data-y="${rm.k}"]`);
       if (y){
         const pays = roomPays(rm), st = prevStock(rm.k);
         const swapped = addPrizeOf(rm)!==clean(rm.prize) && num(rm.add)>0;
-        y.innerHTML = (pays===null ? "" : `払出 <b style="color:var(--ink)">${pays}</b>`)
+        y.innerHTML = (st!==null ? `前回 ${st}こ　` : "") + (pays===null ? "" : `払出 <b style="color:var(--ink)">${pays}</b>`) + (num(rm.take)>0 ? `　回収 ${num(rm.take)}` : "")
           + (swapped ? `　→ ${esc(addPrizeOf(rm))}` : "");
       }
     });
@@ -2117,7 +2153,7 @@ function updateDerived(){
     <span>${R.type==="box"?"出た":"払出"} <b>${num($("#paysIn").value)}</b> 個</span>
     ${R.type==="box"?`<span>補充 <b>${t.refill}</b> 個</span>`:""}
     <span>景品原価 <b>${yen(num($("#costIn").value))}</b> 円</span>
-    ${t.known?"":`<span class="hint" style="margin:0;flex-basis:100%">払出は、次回から「前回の残り＋補充 − 今回の残り」で自動計算されます。</span>`}
+    ${t.known?"":`<span class="hint" style="margin:0;flex-basis:100%">初回は「いま入っている数」を入れると、次回から残りが自動で追いかけられます。</span>`}
     ${noMaster?`<span class="hint" style="margin:0;flex-basis:100%">景品マスタに無い景品があるので、原価は0で計算しています。</span>`:""}
     ${low.length?`<span class="hint" style="margin:0;flex-basis:100%;color:var(--warning-ink)">在庫が少ない景品：${low.map(x=>esc(x.n)+" 残"+x.s).join("・")}</span>`:""}`;
 
@@ -2229,7 +2265,7 @@ async function saveLog(){
   if (!F.store || !F.machine || t.sales<=0) return;
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
-    before:rm.before===""?"":num(rm.before), addPrize:addPrizeOf(rm), add:num(rm.add),
+    before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
     pays: roomPays(rm)
   })) : [];
   const slots = R.type==="box" ? R.slots.map(sl=>({
@@ -2270,7 +2306,7 @@ function renderLogList(){
       roomLine = names.length ? "出た："+names.map(n=>`${esc(n)}×${out[n]}`).join("　") : "";
     } else {
       roomLine = (r.rooms||[]).filter(x=>x.prize||x.counter!=="").map(x=>
-        `${x.k==="-"?"":x.k+":"}${esc(x.prize||"—")}${x.before===""?"":" "+x.before}${num(x.add)>0?` +${esc(x.addPrize)}${x.add}`:""}`).join("　");
+        `${x.k==="-"?"":x.k+":"}${esc(x.prize||"—")}${x.before===""?"":" "+x.before}${num(x.add)>0?` +${esc(x.addPrize)}${x.add}`:""}${num(x.take)>0?` −回収${num(x.take)}`:""}`).join("　");
     }
     return `<div class="rowitem" style="--sc:${storeColor(r.store)}">
       <span class="sw"></span>
@@ -2719,7 +2755,7 @@ const SHEETS = [
     { range:"A〜F列", note:"G列（月キー）は自動",
       cols:r=>[(r.date||"").replace(/-/g,"/"),r.store,r.kind,r.net,r.payee||"",r.memo||""] }]},
 ];
-const ROOM_HEAD = ["訪問日","店舗","機械","部屋","カウンター数","カウンター差","ペア売上","景品","補充前数","補充景品","補充数","払出数"];
+const ROOM_HEAD = ["訪問日","店舗","機械","部屋","カウンター数","カウンター差","ペア売上","景品","補充前数","補充景品","補充数","払出数","回収数"];
 function sheetMemo(r){
   return [r.auto||"", r.memo||""].filter(Boolean).join(" ｜ ");
 }
