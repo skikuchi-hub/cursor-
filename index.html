@@ -274,6 +274,8 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save:active{transform:translateY(3px);box-shadow:0 1px 0 color-mix(in srgb,var(--rose) 70%,#000)}
 .save:disabled{background:var(--surface-sunk);color:var(--ink-3);box-shadow:none;cursor:not-allowed}
 .save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
+.save-cancel{width:100%;margin-top:8px;padding:13px;border-radius:var(--r-m);border:2px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-weight:700;font-size:14px}
+.save-cancel:active{background:var(--surface-sunk)}
 /* 記録の修正中 */
 .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:2px solid var(--gold);color:var(--ink);font-size:13px;font-weight:700}
 .editbar .btn{flex:none;white-space:nowrap;padding:7px 12px;font-size:12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
@@ -945,6 +947,7 @@ body{font-variant-numeric:tabular-nums}
       </div>
 
       <button class="save" id="saveLog">巡回を報告</button>
+      <button type="button" class="save-cancel" id="editCancel2" hidden>← 修正をやめて元に戻る</button>
       <p class="save-note" id="saveNote">店舗・機械・プレイ数を入れると押せます</p>
 
       <div class="card flush" style="margin-top:12px">
@@ -2438,6 +2441,7 @@ function renderEditBar(){
   const bar=$("#editBar"); if (!bar) return;
   bar.hidden = !EDIT;
   const btn=$("#saveLog"); if (btn) btn.textContent = EDIT ? "修正を保存" : "巡回を報告";
+  const c2=$("#editCancel2"); if (c2) c2.hidden = !EDIT;
   if (EDIT){ const r=(Store.data.weekly||[]).find(x=>x.id===EDIT.id)||{}; $("#editBarTxt").textContent = `✎ ${jpDate(r.week)} ${r.store||""}／${r.machine||""} の記録を修正中`; }
 }
 function startEdit(id){
@@ -3832,7 +3836,7 @@ function wire(){
 
   // 記録の修正
   document.addEventListener("click", e=>{ const b=e.target.closest("[data-edit]"); if(!b) return; startEdit(b.dataset.edit); });
-  $("#editCancel").onclick = cancelEdit;
+  $("#editCancel").onclick = cancelEdit; $("#editCancel2").onclick = cancelEdit;
 
   // 写真：フォームの添付と、既存の記録への追加
   $$(".photo-btn[data-kind]").forEach(b=>b.onclick=()=>{ PHOTO_TARGET=null; PHOTO_KIND=b.dataset.kind; $("#photoIn").click(); });
