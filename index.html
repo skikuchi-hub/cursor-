@@ -730,6 +730,30 @@ body{font-variant-numeric:tabular-nums}
 .gq-dexi.new{border-color:#7fb8ea}
 .gq-dexi.unseen{opacity:.55;border-style:dashed}
 .gq-dexi.unseen .nm{color:#a8b8d4}
+/* 景品ラボ */
+.gq-labtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
+.gq-labtabs .chip{background:#14203a;border-color:#2a4a8c;color:#eef3fb}
+.gq-labtabs .chip[aria-pressed="true"]{background:#f5c542;border-color:#f5c542;color:#14203a}
+.gq-lab{display:flex;flex-direction:column;gap:6px}
+.gq-labi{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:8px 10px}
+.gq-labi .hd{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.gq-labi .hd b{font-size:12.5px;color:#eef3fb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.gq-labi .hd .tag{font-size:10px;padding:2px 7px;border-radius:999px;background:#243454;color:#a8b8d4;flex:none}
+.gq-labi.good .hd .tag{background:#1f3a1f;color:#9ccf6b}
+.gq-labi.warn .hd .tag{background:#3a2f10;color:#f5c542}
+.gq-labi.bad{border-color:#e33f3f}.gq-labi.bad .hd .tag{background:#3a1515;color:#ff9f93}
+.gq-labi .kv{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11px;color:#a8b8d4;margin-top:4px}
+.gq-labi .kv b{color:#eef3fb;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+.gq-labi .act{font-size:11.5px;color:#eef3fb;margin-top:5px;line-height:1.5}
+.gq-labi .act b{color:#f5c542}
+.gq-labi .stores{display:flex;flex-direction:column;gap:3px;margin-top:5px}
+.gq-labi .srow{display:flex;align-items:center;gap:6px;font-size:11px;color:#eef3fb}
+.gq-labi .srow .sn{width:84px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#a8b8d4}
+.gq-labi .srow .gq-bar{height:7px}
+.gq-labi .srow .gq-bar i{background:linear-gradient(#7fb8ea,#2f7fc6)}
+.gq-labi .srow.best .sn{color:#f5c542}
+.gq-labi .srow.best .gq-bar i{background:linear-gradient(#ffe08a,#e4a900)}
+.gq-labi .srow .v{width:92px;flex:none;text-align:right;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .gq-gym{display:flex;align-items:center;gap:10px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px}
 .gq-gym.got{border-color:#7fb8ea;background:#1b2d5b}
 .gq-gym.max{border-color:#f5c542;background:#2a2410;box-shadow:0 0 0 2px rgba(245,197,66,.35)}
@@ -1125,6 +1149,18 @@ body{font-variant-numeric:tabular-nums}
           <div class="gq-h">▶ けいひん ずかん <span class="gq-sub" id="gqDexSub"></span></div>
           <div class="gq-dex" id="gqDex"></div>
           <div class="gq-qnote" id="gqDexNote"></div>
+        </div>
+
+        <!-- 景品ラボ：在庫回転・店舗との相性・原価率の調整ガイド（再現性のための数字） -->
+        <div class="gq-screen">
+          <div class="gq-h">▶ けいひん ラボ <span class="gq-sub" id="gqLabSub"></span></div>
+          <div class="gq-labtabs" id="gqLabTabs">
+            <button class="chip mini" data-lab="turn" aria-pressed="true">在庫回転</button>
+            <button class="chip mini" data-lab="fit" aria-pressed="false">店舗との相性</button>
+            <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
+          </div>
+          <div class="gq-lab" id="gqLab"></div>
+          <div class="gq-qnote" id="gqLabNote"></div>
         </div>
 
         <!-- ジムランク（店舗ごと） -->
@@ -1772,7 +1808,7 @@ function buildRooms(force){
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
   $("#zhint").innerHTML = t==="4p"
-    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。<b>カウンターと残り数</b>を毎回入れると、景品ごとの売上・獲得率・原価率がデータになります。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
     : "枠の中身は前回のまま出ています。<b>① 空いていた枠をタップ</b>（＝出た景品）→ <b>② 補充した枠をタップ</b>。写真を撮らなくても、何が何個出たかが残ります。";
 
   if (t==="4p"){
@@ -2996,7 +3032,128 @@ function renderNews(mon){
   box.hidden = !items.length;
   $("#gqNewsList").innerHTML = items.map(x=>`<li>${x}</li>`).join("");
 }
-function renderTeam(mon){ renderNews(mon); renderPool(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderDex(); }
+function renderTeam(mon){ renderNews(mon); renderPool(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderDex(); renderLab(); }
+
+/* ===================== 景品ラボ：景品ごとの数字（再現性のため） =====================
+   4人機は部屋ごとのカウンター差＝その部屋（＝その景品）のプレイ数、在庫差＝払出。前回訪問から今回までの区間で、
+   「どの景品が・どの店で・何日で・何プレイ・何個出たか」を作る（区間の景品＝前回訪問時点でその部屋に入っていた景品）。
+   BOX（カリーノ）は売上を景品ごとに分けられないので払出数だけ数える。 */
+function prizeIntervals(){
+  const all=(Store.data.weekly||[]).slice().sort((a,b)=>String(a.createdAt||"").localeCompare(String(b.createdAt||"")));
+  const out=[];
+  all.forEach((r,idx)=>{
+    const prev = all.slice(0,idx).filter(o=>o.store===r.store && o.machine===r.machine && (o.rooms||o.slots)).pop();
+    if (r.mtype!=="box" && (r.rooms||[]).length){
+      if (!prev || !(prev.rooms||[]).length) return;
+      const days = Math.max(1, daysSince(prev.week) - daysSince(r.week));
+      (r.rooms||[]).forEach(x=>{
+        const pv=(prev.rooms||[]).find(y=>y.k===x.k); if(!pv) return;
+        const prize = (pv.addPrize && num(pv.add)>0) ? pv.addPrize : (pv.prize||"");
+        if (!prize) return;
+        const plays = (pv.counter!=="" && x.counter!=="" && pv.counter!==undefined && x.counter!==undefined) ? Math.max(0, num(x.counter)-num(pv.counter)) : null;
+        const pays = (x.pays===null||x.pays===undefined) ? null : num(x.pays);
+        const unit = prizeCostUnit(prize);
+        out.push({prize, store:r.store, machine:r.machine, mtype:"4p", days, plays, pays, unit, date:r.week,
+                  sales: plays===null?null:plays*PLAY_PRICE, cost:(pays!==null&&unit)?pays*unit:null});
+      });
+    } else if (r.mtype==="box" || (r.slots||[]).length){
+      if (!prev) return;
+      const days = Math.max(1, daysSince(prev.week) - daysSince(r.week));
+      const out2={}; (r.slots||[]).forEach(x=>{ if(x.out&&x.prize) out2[x.prize]=(out2[x.prize]||0)+1; });
+      const inPlace=new Set((prev.slots||[]).map(x=>x.filled||x.prize).filter(Boolean));
+      inPlace.forEach(prize=>{ const unit=prizeCostUnit(prize); const pays=out2[prize]||0;
+        out.push({prize, store:r.store, machine:r.machine, mtype:"box", days, plays:null, pays, unit, date:r.week, sales:null, cost:unit?pays*unit:null}); });
+    }
+  });
+  return out;
+}
+function targetBand(unit){ return (unit!==null && unit>0 && unit<=300) ? [0.05,0.10] : [0.25,0.30]; }
+function labAgg(){
+  const iv=prizeIntervals();
+  const byP={};
+  iv.forEach(e=>{
+    const P=byP[e.prize]=byP[e.prize]||{prize:e.prize, unit:e.unit, days:0, plays:0, pays:0, playsKnown:false, zero:0, n:0, last:"", stores:{}};
+    P.n++; P.days+=e.days; P.pays+=(e.pays||0); if (e.plays!==null){ P.plays+=e.plays; P.playsKnown=true; } if (e.pays===0) P.zero++; if (e.date>P.last) P.last=e.date;
+    const S=P.stores[e.store]=P.stores[e.store]||{days:0,plays:0,pays:0,playsKnown:false,n:0};
+    S.n++; S.days+=e.days; S.pays+=(e.pays||0); if (e.plays!==null){ S.plays+=e.plays; S.playsKnown=true; }
+  });
+  Object.values(byP).forEach(P=>{
+    const m = allPrizes().find(x=>x.name===P.prize);
+    P.qty = m ? num(m.qty) : 0; P.stock = stockOf(P.prize);
+    P.pacePerWeek = P.days>0 ? P.pays/P.days*7 : 0;
+    P.weeksLeft = (P.stock!==null && P.pacePerWeek>0) ? P.stock/P.pacePerWeek : null;
+    P.sales = P.playsKnown ? P.plays*PLAY_PRICE : null;
+    P.cost = (P.unit ? P.pays*P.unit : null);
+    P.ratio = (P.sales && P.cost!==null && P.sales>0) ? P.cost/P.sales : null;
+    P.nOf = (P.playsKnown && P.pays>0) ? P.plays/P.pays : null;                    // 1/N
+    Object.values(P.stores).forEach(S=>{ S.salesPerDay = S.playsKnown && S.days>0 ? S.plays*PLAY_PRICE/S.days : null; S.paysPerDay = S.days>0 ? S.pays/S.days : 0; S.nOf = (S.playsKnown&&S.pays>0)?S.plays/S.pays:null; });
+  });
+  return byP;
+}
+let labTab="turn";
+function renderLab(){
+  const el=$("#gqLab"); if(!el) return;
+  const byP=labAgg(); const list=Object.values(byP);
+  const short = n => String(n).replace(/店$/,"");
+  const n1 = v => v===null||v===undefined ? "—" : (v>=10 ? Math.round(v) : v.toFixed(1));
+  let html="", note="";
+  if (labTab==="turn"){
+    const rows=list.filter(P=>P.stock!==null || P.pays>0).map(P=>{
+      const stale = P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14));
+      const fast = P.weeksLeft!==null && P.weeksLeft<=2 && P.stock>0;
+      const cls = stale ? "bad" : fast ? "good" : "";
+      const tag = stale ? "滞留" : fast ? "回転よし" : P.stock===0 ? "在庫なし" : "ふつう";
+      const best = Object.entries(P.stores).sort((a,b)=>b[1].paysPerDay-a[1].paysPerDay)[0];
+      const act = stale ? (best && best[1].paysPerDay>0 ? `出がいいのは <b>${esc(short(best[0]))}</b>。そこへ回すか、獲得率をゆるめる。` : `まだ動きが少ない。出やすい店に置いてみる。`)
+        : fast ? `<b>あと ${n1(P.weeksLeft)}週</b> で売り切り。次の仕入れ候補。` : "";
+      return {P, cls, tag, act, sort: stale?0:fast?1:2};
+    }).sort((a,b)=>a.sort-b.sort || (b.P.stock||0)-(a.P.stock||0));
+    html = rows.map(({P,cls,tag,act})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
+      <div class="kv"><span>在庫 <b>${P.stock===null?"—":P.stock}</b>${P.qty?`／${P.qty}`:""}</span><span>払出 <b>${P.pays}</b>こ</span><span>ペース <b>${n1(P.pacePerWeek)}</b>こ/週</span>${P.weeksLeft!==null?`<span>売り切り <b>${n1(P.weeksLeft)}</b>週</span>`:""}</div>
+      ${act?`<div class="act">${act}</div>`:""}</div>`).join("");
+    const stale=rows.filter(r=>r.cls==="bad").length;
+    $("#gqLabSub").textContent = rows.length ? (stale?`滞留 ${stale}`:`滞留なし`) : "";
+    note = `在庫は景品マスタの「残り在庫」（買った数 − 補充に使った数）。ペースは前回訪問から今回までの払出を日数で割ったもの。<b style="color:#f5c542">在庫が多くて出ない景品</b>は、出がいい店へ移す・獲得率をゆるめる、のどちらか。`;
+  } else if (labTab==="fit"){
+    // 店舗ごとの当たり景品（売上/日。BOX は払出/日）
+    const byStore={};
+    list.forEach(P=>Object.entries(P.stores).forEach(([st,S])=>{ (byStore[st]=byStore[st]||[]).push({prize:P.prize, S, unit:P.unit}); }));
+    html = STORES.map(s=>{
+      const arr=(byStore[s.n]||[]).slice().sort((a,b)=>(b.S.salesPerDay??-1)-(a.S.salesPerDay??-1) || b.S.paysPerDay-a.S.paysPerDay).slice(0,4);
+      if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">2回目の訪問から、景品ごとの数字が出ます。</div></div>`;
+      const max=Math.max(1,...arr.map(x=>x.S.salesPerDay??x.S.paysPerDay*PLAY_PRICE*10));
+      return `<div class="gq-labi good"><div class="hd"><b>${esc(s.n)}</b><span class="tag">当たり景品</span></div>
+        <div class="stores">${arr.map((x,i)=>{ const v=x.S.salesPerDay; const w=((v??x.S.paysPerDay*PLAY_PRICE*10)/max*100).toFixed(0);
+          return `<div class="srow ${i===0?"best":""}"><span class="sn">${esc(x.prize)}</span><div class="gq-bar"><i style="width:${w}%"></i></div><span class="v">${v!==null?`${yen(Math.round(v))}円/日`:`${n1(x.S.paysPerDay*7)}こ/週`}</span></div>`; }).join("")}</div>
+        <div class="act">${arr[0].S.nOf?`いちばん上は 獲得率 1/${Math.round(arr[0].S.nOf)}。`:""}この店で売れた順。入れ替えるときの第一候補。</div></div>`;
+    }).join("");
+    $("#gqLabSub").textContent = "店舗ごと";
+    note = `同じ景品でも店で出かたが違う。<b style="color:#f5c542">売上/日</b>はその部屋のカウンター差×100円÷日数（BOX機は払出/週）。カウンターを入れていない区間は数字に入らない。`;
+  } else {
+    // 原価率ガイド：景品ごとの実績 1/N と原価率、推奨レンジ
+    const rows=list.filter(P=>P.playsKnown && P.plays>0).map(P=>{
+      const [lo,hi]=targetBand(P.unit); const u=P.unit||0;
+      const recN = u>0 ? [u/(hi*PLAY_PRICE), u/(lo*PLAY_PRICE)] : null;      // 推奨 1/N（原価率 hi〜lo に収まる N）
+      const ratio=P.ratio; let cls="", tag="", act="";
+      if (!u){ tag="単価未登録"; act="景品マスタに仕入単価を入れると判定できる。"; }
+      else if (P.zero>=2 && P.pays===0){ cls="bad"; tag="取れてない"; act=`${P.zero}回連続で払出ゼロ。苦情のもと。<b>設定をゆるめる</b>。`; }
+      else if (ratio!==null && ratio<lo*0.6){ cls="bad"; tag="低すぎ"; act=`原価率 ${pct(ratio,0)}。目安 ${pct(lo,0)}〜${pct(hi,0)}。<b>ゆるめて 1/${Math.round(recN[1])}〜1/${Math.round(recN[0])}</b> を狙う。`; }
+      else if (ratio!==null && ratio>hi*1.3){ cls="warn"; tag="高い"; act=`原価率 ${pct(ratio,0)}。<b>1/${Math.round(recN[0])} くらいまで取りにくく</b>できる。`; }
+      else if (ratio!==null && ratio<lo){ cls="warn"; tag="やや低い"; act=`原価率 ${pct(ratio,0)}。取れている（${P.pays}こ）なら様子見。苦情が出たら 1/${Math.round(recN[1])} へ。`; }
+      else if (ratio!==null){ cls="good"; tag="適正"; act=`この設定（1/${P.nOf?Math.round(P.nOf):"—"}）が この景品の<b>再現できる正解</b>。他店でも同じ設定から始める。`; }
+      return {P,cls,tag,act,recN,lo,hi, sort: cls==="bad"?0:cls==="warn"?1:cls===""?3:2};
+    }).sort((a,b)=>a.sort-b.sort);
+    html = rows.length ? rows.map(({P,cls,tag,act,recN,lo,hi})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
+      <div class="kv"><span>単価 <b>${P.unit?yen(P.unit)+"円":"—"}</b></span><span>実績 <b>${P.nOf?`1/${Math.round(P.nOf)}`:"—"}</b></span><span>原価率 <b>${P.ratio!==null?pct(P.ratio,0):"—"}</b></span>${recN?`<span>推奨 <b>1/${Math.round(recN[0])}〜1/${Math.round(recN[1])}</b>（${pct(lo,0)}〜${pct(hi,0)}）</span>`:""}<span>${P.plays}プレイ・${P.pays}こ</span></div>
+      <div class="act">${act}</div></div>`).join("")
+      : `<div class="gq-qnote">4人機で カウンターと残り数を入れた訪問が2回以上あると、景品ごとの獲得率と原価率が出ます。</div>`;
+    const bad=rows.filter(r=>r.cls==="bad").length;
+    $("#gqLabSub").textContent = rows.length ? (bad?`要調整 ${bad}`:"全部OK") : "";
+    note = `目安は 25〜30%（仕入300円以下は 5〜10%）。<b style="color:#f5c542">推奨 1/N</b> ＝ 仕入単価 ÷（目安の原価率 × 100円）。実績が推奨の中に入っている設定を「正解」として他店に横展開する。`;
+  }
+  el.innerHTML = html || `<div class="gq-qnote">まだデータがありません。</div>`;
+  $("#gqLabNote").innerHTML = note;
+}
 function dailyTarget(){ const g=Store.goal(gqWho); return (g.monthly>0 && g.days>0) ? Math.ceil(g.monthly/g.days) : 0; }
 
 function renderQuest(){
@@ -3374,6 +3531,7 @@ function wire(){
   let gqT; const gqSave = () => { clearTimeout(gqT); gqT=setTimeout(saveGoal, 600); };
   $("#gqMonthly").oninput = gqSave; $("#gqDays").oninput = gqSave;
   let rateT; $("#gqRateIn").onchange = () => { clearTimeout(rateT); rateT=setTimeout(saveTeamRate, 300); };
+  $("#gqLabTabs").onclick = e => { const b=e.target.closest("[data-lab]"); if(!b) return; labTab=b.dataset.lab; $$("#gqLabTabs .chip").forEach(c=>c.setAttribute("aria-pressed", String(c===b))); renderLab(); };
 
   // 転記ドロワー
   $("#closeX").onclick = closeDrawer;

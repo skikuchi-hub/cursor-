@@ -340,6 +340,7 @@ function materialize(col, rec, docs) {
         rs.getRange(rr, 1).setNumberFormat("yyyy/mm/dd");
       });
     }
+    appendPrizeStats(rec, (docs && docs.weekly) || []);
   } else if (col === "prizes") {
     var ps = ss().getSheetByName("景品マスタ");
     if (ps) {
@@ -357,7 +358,7 @@ function materialize(col, rec, docs) {
   }
 }
 function dematerialize(col, id) {
-  var names = col === "weekly" ? ["巡回ログ", "部屋別ログ"] : col === "prizes" ? ["景品マスタ"] : col === "expenses" ? ["経費台帳"] : [];
+  var names = col === "weekly" ? ["巡回ログ", "部屋別ログ", PRIZE_STATS_SHEET] : col === "prizes" ? ["景品マスタ"] : col === "expenses" ? ["経費台帳"] : [];
   names.forEach(function (n) {
     var sh = ss().getSheetByName(n); if (!sh) return;
     var idc = idColumn(sh, false); if (!idc) return;
@@ -487,6 +488,87 @@ function tagExistingLogRow(rec) {
     }
   }
   return false;
+}
+
+/* ===================== 景品実績（景品ごとの区間データ。再現性のための元データ） =====================
+   訪問ごとに「前回訪問から今回まで」の区間を景品単位で1行にする。
+   4人機：部屋のカウンター差＝その景品のプレイ数、在庫差＝払出。区間の景品＝前回訪問時にその部屋へ入れていた景品。
+   BOX：売上は景品に分けられないので払出だけ（プレイ数・売上は空欄）。
+   列：訪問日 / 店舗 / 機械 / 部屋 / 景品 / 日数 / プレイ数 / 払出数 / 仕入単価 / 景品原価 / 売上 / 原価率 / 獲得率(1/N) / 担当 / アプリID */
+var PRIZE_STATS_SHEET = "景品実績";
+function prizeStatsSheet() {
+  var sh = ss().getSheetByName(PRIZE_STATS_SHEET);
+  if (!sh) {
+    sh = ss().insertSheet(PRIZE_STATS_SHEET);
+    sh.getRange(1, 1, 1, 15).setValues([["訪問日", "店舗", "機械", "部屋", "景品", "日数", "プレイ数", "払出数", "仕入単価", "景品原価", "売上", "原価率", "獲得率(1/N)", "担当", ID_HEADER]]).setFontWeight("bold");
+    sh.getRange(1, 17).setValue("アプリが自動で書く。1行＝前回訪問から今回までの区間 × 景品。4人機はカウンター差がプレイ数、BOX機は払出数のみ。");
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+function unitCostMap() {
+  var m = {}; readPrizeMaster().rows.forEach(function (r) { if (r.name && !(r.name in m)) m[r.name] = num(r.cost); });
+  return m;
+}
+function daysBetween(a, b) {               // "YYYY-MM-DD" 同士
+  var da = dateOf(a), db = dateOf(b);
+  if (!(da instanceof Date) || !(db instanceof Date)) return 1;
+  return Math.max(1, Math.round((db.getTime() - da.getTime()) / 864e5));
+}
+function prizeStatRows(rec, allWeekly, units) {
+  var prev = allWeekly.filter(function (o) { return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine && String(o.createdAt || "") < String(rec.createdAt || "") && ((o.rooms && o.rooms.length) || (o.slots && o.slots.length)); })
+    .sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
+  if (!prev) return [];
+  var days = daysBetween(prev.week, rec.week), wk = dateOf(rec.week), out = [];
+  if (rec.mtype !== "box" && rec.rooms && rec.rooms.length) {
+    (rec.rooms || []).forEach(function (x) {
+      var pv = (prev.rooms || []).filter(function (y) { return y.k === x.k; })[0]; if (!pv) return;
+      var prize = (pv.addPrize && num(pv.add) > 0) ? pv.addPrize : (pv.prize || ""); if (!prize) return;
+      var hasC = pv.counter !== "" && x.counter !== "" && pv.counter !== undefined && x.counter !== undefined;
+      var plays = hasC ? Math.max(0, num(x.counter) - num(pv.counter)) : "";
+      var pays = (x.pays === null || x.pays === undefined) ? "" : num(x.pays);
+      var unit = units[prize]; var cost = (pays !== "" && unit) ? pays * unit : "";
+      var sales = plays !== "" ? plays * PLAY_PRICE : "";
+      var ratio = (sales !== "" && sales > 0 && cost !== "") ? cost / sales : "";
+      var nOf = (plays !== "" && pays !== "" && pays > 0) ? plays / pays : "";
+      out.push([wk, rec.store, rec.machine, x.k === "-" ? "本体" : x.k, prize, days, plays, pays, unit || "", cost, sales, ratio, nOf, rec.staff || ""]);
+    });
+  } else if (rec.mtype === "box" || (rec.slots && rec.slots.length)) {
+    var outs = {}; (rec.slots || []).forEach(function (x) { if (x.out && x.prize) outs[x.prize] = (outs[x.prize] || 0) + 1; });
+    var inPlace = {}; (prev.slots || []).forEach(function (x) { var n = x.filled || x.prize; if (n) inPlace[n] = true; });
+    Object.keys(inPlace).forEach(function (prize) {
+      var pays = outs[prize] || 0, unit = units[prize];
+      out.push([wk, rec.store, rec.machine, "BOX", prize, days, "", pays, unit || "", unit ? pays * unit : "", "", "", "", rec.staff || ""]);
+    });
+  }
+  return out;
+}
+function appendPrizeStats(rec, allWeekly) {
+  var rows = prizeStatRows(rec, allWeekly, unitCostMap()); if (!rows.length) return 0;
+  var sh = prizeStatsSheet();
+  rows.forEach(function (row) {
+    var r = appendValues(sh, row, rec.id);
+    sh.getRange(r, 1).setNumberFormat("yyyy/mm/dd"); sh.getRange(r, 12).setNumberFormat("0.0%"); sh.getRange(r, 13).setNumberFormat("0.0");
+  });
+  return rows.length;
+}
+/* 景品実績タブを全記録から作り直す（エディタから実行。再実行しても同じ結果） */
+function rebuildPrizeStats() {
+  var sh = prizeStatsSheet();
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getMaxColumns()).clearContent();
+  var docs = readAllDocs(), units = unitCostMap(), n = 0;
+  var all = docs.weekly.slice().sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
+  all.forEach(function (rec, i) { n += appendPrizeStatsWith(rec, all.slice(0, i), units, sh); });
+  var msg = "景品実績を作り直しました：" + n + " 行";
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
+}
+function appendPrizeStatsWith(rec, prevAll, units, sh) {
+  var rows = prizeStatRows(rec, prevAll, units); if (!rows.length) return 0;
+  rows.forEach(function (row) {
+    var r = appendValues(sh, row, rec.id);
+    sh.getRange(r, 1).setNumberFormat("yyyy/mm/dd"); sh.getRange(r, 12).setNumberFormat("0.0%"); sh.getRange(r, 13).setNumberFormat("0.0");
+  });
+  return rows.length;
 }
 
 /* ===================== 手動メンテ用（エディタから実行） ===================== */
