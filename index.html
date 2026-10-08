@@ -887,10 +887,10 @@ body{font-variant-numeric:tabular-nums}
       <div class="card">
         <div class="step"><em>2</em><h3>部屋ごとの記録</h3><span class="sub" id="mType"></span></div>
         <div class="photo-field">
-          <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前の写真</b><small>着いてすぐ、機械の正面を1枚（何が取られたか）</small></span></button>
+          <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前の写真</b><small>着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）</small></span></button>
           <div class="photo-row" data-row="before"></div>
         </div>
-        <input type="file" id="photoIn" accept="image/*" capture="environment" multiple hidden>
+        <input type="file" id="photoIn" accept="image/*" multiple hidden>
         <div id="roomGrid"></div>
         <datalist id="prizeList"></datalist>
         <p class="hint" id="zhint"></p>
@@ -906,7 +906,7 @@ body{font-variant-numeric:tabular-nums}
           </div>
         </div>
         <div class="photo-field" style="margin-top:12px">
-          <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後の写真</b><small>補充・入れ替えが終わったら1枚（何をどこに入れたか）</small></span></button>
+          <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後の写真</b><small>補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）</small></span></button>
           <div class="photo-row" data-row="after"></div>
         </div>
       </div>
@@ -2341,7 +2341,7 @@ function renderPhotoRow(){
     el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
     const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
     btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
-    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（何が取られたか）" : "補充・入れ替えが終わったら1枚（何をどこに入れたか）");
+    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）" : "補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）");
   });
 }
 async function addPhotoFiles(files, kind){
