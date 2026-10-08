@@ -984,7 +984,7 @@ body{font-variant-numeric:tabular-nums}
             <button class="pad" id="dateToday" style="width:auto;padding:0 12px;font-size:12px;font-family:var(--fs-body)">きょう</button>
           </div>
         </div>
-        <div class="grid2">
+        <div>
           <div class="field">
             <span class="lbl">訪問時間</span>
             <div class="num-row">
@@ -992,10 +992,10 @@ body{font-variant-numeric:tabular-nums}
               <button class="pad" id="timeNow" style="width:auto;padding:0 12px;font-size:12px;font-family:var(--fs-body)">いま</button>
             </div>
           </div>
-          <div class="field">
+          <div class="field" hidden><!-- 担当は PIN の本人で固定（2026-10-08 欄を非表示に。中身は内部で使う） -->
             <span class="lbl">担当</span>
             <select class="txt" id="staffIn"></select>
-            <p class="hint" id="staffHint">ここで選んだ人が「わたし」として記憶され、景品・経費にも自動で付きます。ログイン中なら、最初に選んだ担当がこのアカウントに固定されます。</p>
+            <p class="hint" id="staffHint"></p>
           </div>
         </div>
         <div class="field">
