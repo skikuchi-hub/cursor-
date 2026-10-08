@@ -2472,7 +2472,8 @@ function srcRank(it){
     const band = priceBand(it.price), same = list.filter(P=>P.unit>0 && priceBand(P.unit)===band);
     if (same.length){ score = paceOf(same)*0.8; basis=`価格帯 ${band} の平均`; detail.push(`同じ価格帯 ${same.length}件が 週 ${paceOf(same).toFixed(1)}こ（系統の実績はまだ無し）`); }
   }
-  const hist = SRC.history.filter(h=>normName(h.name)===normName(it.name) || (toks.size && [...nameTokens(h.name)].some(t=>toks.has(t) && t.length>=4)));
+  const ordered = /発注済|下書き作成/.test(it.status||"");          // この商品自身が発注済みなら「再発注」とは言わない
+  const hist = ordered ? [] : SRC.history.filter(h=>normName(h.name)===normName(it.name) || (toks.size && [...nameTokens(h.name)].some(t=>toks.has(t) && t.length>=4)));
   const exact = hist.find(h=>normName(h.name)===normName(it.name));
   if (exact) detail.push(`再発注：${jpDate(exact.date)} に ${exact.cases}ケース`);
   else if (hist.length) detail.push(`同系統を ${jpDate(hist[0].date)} に発注済み（${hist[0].name.slice(0,14)}…）`);
