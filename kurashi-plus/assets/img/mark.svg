@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="くらしプラス ロゴマーク">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#14908F"/>
+      <stop offset="1" stop-color="#0B5F5E"/>
+    </linearGradient>
+  </defs>
+  <rect x="6" y="6" width="108" height="108" rx="30" fill="url(#g)"/>
+  <!-- 家の屋根と壁 -->
+  <path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
+  <!-- プラス -->
+  <rect x="55" y="56" width="10" height="28" rx="3" fill="#F4A83A"/>
+  <rect x="46" y="65" width="28" height="10" rx="3" fill="#F4A83A"/>
+</svg>

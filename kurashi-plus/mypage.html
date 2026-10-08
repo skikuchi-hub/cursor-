@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>マイページ｜くらしプラス</title>
+<meta name="description" content="くらしプラス会員マイページ。">
+<meta property="og:title" content="マイページ｜くらしプラス">
+<meta property="og:description" content="くらしプラス会員マイページ。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css">
+<script src="config.js"></script>
+<meta name="robots" content="noindex">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="くらしプラス トップへ"><svg class="mark" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14908F"/><stop offset="1" stop-color="#0B5F5E"/></linearGradient></defs><rect x="6" y="6" width="108" height="108" rx="30" fill="url(#gm)"/><path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/><rect x="55" y="56" width="10" height="28" rx="3" fill="#F4A83A"/><rect x="46" y="65" width="28" height="10" rx="3" fill="#F4A83A"/></svg><span class="word">くらしプラス<small>KURASHI+</small></span></a>
+    <button class="menu-btn" aria-label="メニュー" aria-expanded="false"><span></span><span></span><span></span></button>
+    <nav class="nav">
+      <a href="index.html#services">サービス</a>
+      <a href="index.html#features">選ばれる理由</a>
+      <a href="index.html#price">料金</a>
+      <a href="index.html#faq">よくある質問</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a class="btn btn-teal btn-sm" href="login.html">会員ログイン</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap" id="mypage">
+  <div class="page-head">
+    <div class="label">My page</div>
+    <h1>マイページ</h1>
+  </div>
+  <div class="my-grid" style="padding-bottom:64px">
+    <aside class="my-side">
+      <div class="card">
+        <div class="name">—</div>
+        <div class="mail">—</div>
+        <p style="font-size:13px;color:var(--muted);margin-top:10px">ご利用中のサービス：<b class="count">0</b> 件</p>
+        <nav>
+          <a href="#services">ご契約サービス</a>
+          <a href="contact.html">お支払い方法の変更</a>
+          <a href="contact.html">登録情報の変更</a>
+          <a href="contact.html">お問い合わせ</a>
+          <a href="#" class="logout">ログアウト</a>
+        </nav>
+      </div>
+    </aside>
+    <div>
+      <h2 id="services" style="font-size:20px;margin-bottom:12px">ご契約サービス</h2>
+      <div class="my-list"><div class="my-item" data-code="okihai" data-price="1,330円">
+      <div class="svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5"/><path d="M5 9.5V20h14V9.5"/><rect x="9" y="13" width="6" height="5" rx="1"/><path d="M12 13v5"/></svg></div>
+      <div><h3>置き配補償</h3><div class="st">未加入</div></div>
+      <div class="act"><button type="button" class="btn btn-teal btn-sm">申し込む</button></div>
+    </div><div class="my-item" data-code="wifi" data-price="1,330円">
+      <div class="svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="2.5" width="10" height="19" rx="2"/><path d="M11 18.5h2"/><path d="M8.5 9.5a5 5 0 0 1 7 0"/><path d="M10.3 11.6a2.5 2.5 0 0 1 3.4 0"/><circle cx="12" cy="13.8" r=".6" fill="currentColor"/></svg></div>
+      <div><h3>Wi-Fi接続機器補償</h3><div class="st">未加入</div></div>
+      <div class="act"><button type="button" class="btn btn-teal btn-sm">申し込む</button></div>
+    </div><div class="my-item" data-code="gifukatsu" data-price="1,330円">
+      <div class="svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 12h18"/><path d="M12 8v13"/><path d="M12 8c-2-3-6-3-6-1s4 1 6 1Zm0 0c2-3 6-3 6-1s-4 1-6 1Z"/></svg></div>
+      <div><h3>ギフ活</h3><div class="st">未加入</div></div>
+      <div class="act"><button type="button" class="btn btn-teal btn-sm">申し込む</button></div>
+    </div><div class="my-item" data-code="kumamori" data-price="1,330円">
+      <div class="svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 5 6v5c0 4.5 3 8.2 7 9.5 4-1.3 7-5 7-9.5V6l-7-3Z"/><path d="M9 12l2 2 4-4"/></svg></div>
+      <div><h3>クマモリ 広告ブロック</h3><div class="st">未加入</div></div>
+      <div class="act"><button type="button" class="btn btn-teal btn-sm">申し込む</button></div>
+    </div><div class="my-item" data-code="kaden" data-price="1,330円">
+      <div class="svc-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><circle cx="12" cy="13" r="4"/><path d="M8 7h.01M11 7h.01"/><path d="M14.5 10.5l-5 5"/></svg></div>
+      <div><h3>家電保証</h3><div class="st">未加入</div></div>
+      <div class="act"><button type="button" class="btn btn-teal btn-sm">申し込む</button></div>
+    </div></div>
+      <p class="notice gray" style="margin-top:16px">お申し込み・解約はお手続き完了後にメールでご案内します。解約は当月末に反映され、日割り計算はありません。</p>
+    </div>
+  </div>
+</div>
+<footer class="site-footer">
+  <div class="wrap">
+    <div class="cols">
+      <div>
+        <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14908F"/><stop offset="1" stop-color="#0B5F5E"/></linearGradient></defs><rect x="6" y="6" width="108" height="108" rx="30" fill="url(#gm)"/><path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/><rect x="55" y="56" width="10" height="28" rx="3" fill="#F4A83A"/><rect x="46" y="65" width="28" height="10" rx="3" fill="#F4A83A"/></svg><span class="word">くらしプラス<small>KURASHI+</small></span></a>
+        <p>毎日の「もしも」に、ひとつ足す安心。<br>運営：株式会社WST<br>〒815-0041 福岡県福岡市南区野間1-1-2 サンシャインシティビル野間5F<br>ヘルプデスク：平日12:00〜18:00（土日祝日・年末年始を除く）</p>
+      </div>
+      <div>
+        <h4>サービス</h4>
+        <ul><li><a href="services/okihai.html">置き配補償</a></li><li><a href="services/wifi.html">Wi-Fi接続機器補償</a></li><li><a href="services/gifukatsu.html">ギフ活</a></li><li><a href="services/kumamori.html">クマモリ 広告ブロック</a></li><li><a href="services/kaden.html">家電保証</a></li></ul>
+      </div>
+      <div>
+        <h4>サポート・規約</h4>
+        <ul>
+          <li><a href="index.html#faq">よくある質問</a></li>
+          <li><a href="contact.html">お問い合わせ</a></li>
+          <li><a href="login.html">会員ログイン</a></li>
+          <li><a href="terms/index.html">利用規約</a></li>
+          <li><a href="privacy.html">プライバシーポリシー</a></li>
+          <li><a href="legal.html">特定商取引法に基づく表記</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="copy">© 株式会社WST All rights reserved.</div>
+  </div>
+</footer>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
