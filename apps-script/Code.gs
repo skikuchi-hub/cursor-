@@ -208,6 +208,7 @@ function applySalesDelta(rec, allWeekly) {
   function d(f) { var c = cum[f], p = pc[f]; return prev ? (c > 0 && c < p ? c : c - p) : c; }
   rec.sAB = d("sAB"); rec.sCD = d("sCD"); rec.sBox = d("sBox");
   rec.sales = rec.mtype === "box" ? rec.sBox : rec.sAB + rec.sCD;
+  if (rec.sales > 2000000) throw new Error("今回分の売上が " + Math.round(rec.sales).toLocaleString("ja-JP") + " 円になります。累計の入力ミス（桁違い）の可能性が高いので保存しませんでした。累計の金額を確認してください");
   rec.plays = Math.round(rec.sales / PLAY_PRICE);
   rec.cum = cum; rec.prevId = prev ? prev.id : "";
   return rec;

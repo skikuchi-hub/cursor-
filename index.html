@@ -2750,9 +2750,15 @@ function photoThumbs(r){
 function playCatch(){}
 function confetti(){}
 
+const SALES_SANITY = 200000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
 async function saveLog(){
   const t = totals();
   if (!F.store || !F.machine || t.sales<=0) return;
+  if (t.sales > SALES_SANITY){
+    const big = ["sAB","sCD","sBox"].map(f=>({f, d:salesDelta(f)})).filter(x=>x.d.delta>SALES_SANITY);
+    const where = big.map(x=>`${x.f==="sAB"?"A＋B":x.f==="sCD"?"C＋D":"BOX"} 累計 ${yen(x.d.cur)}円（前回 ${yen(x.d.prev)}円）`).join("、");
+    if (!confirm(`今回分の売上が ${yen(t.sales)}円 になります。\n${where}\n\n累計の入力ミス（桁が多い・カウンターの数字を入れた）ではありませんか？\n本当にこの金額で保存するなら OK を押してください。`)) return;
+  }
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
