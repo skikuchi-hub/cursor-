@@ -2396,9 +2396,9 @@ async function loadSourcing(force){
   const el=$("#srcAt"); if (el) el.textContent="読み込み中…";
   try {
     const r = await api("sourcing", {force:!!force});
-    SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now();
+    SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now(); SRC.error = "";
     try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, limit:SRC.limit, at:SRC.at})); } catch(e){}
-  } catch(e){ toast(errMsg(e)); }
+  } catch(e){ SRC.error = e && e.code==="unknown_action" ? "Apps Script がまだ古い版です。「デプロイを管理 → 新バージョン」を行ってください" : errMsg(e); toast(SRC.error); }
   finally { SRC.busy=false; renderSourcing(); }
 }
 function srcLoadCache(){ try { const r=JSON.parse(localStorage.getItem(SRC_KEY)||"null"); if (r){ SRC.items=r.items||[]; SRC.requests=r.requests||[]; SRC.limit=r.limit||300000; SRC.at=r.at||0; } } catch(e){} }
@@ -2474,7 +2474,7 @@ function renderSourcing(){
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
   const shown = items.filter(it=>srcState(it)===SRC.filter);
   list.innerHTML = shown.length ? shown.map(srcCard).join("")
-    : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : (Store.online() ? "まだ商品が届いていません。" : "オンラインのときに読み込まれます。")}</div>`;
+    : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : SRC.error ? `<span style="color:var(--critical-ink)">読み込めませんでした：${esc(SRC.error)}</span>` : (Store.online() ? (SRC.at ? "まだ商品が届いていません。" : "読み込み中…") : "オンラインのときに読み込まれます。")}</div>`;
   // 発注予定のまとめ
   const orders = items.filter(it=>srcState(it)==="order");
   const total = orders.reduce((a,it)=>a+srcOrderOf(it).amount,0);
