@@ -2750,7 +2750,7 @@ function photoThumbs(r){
 function playCatch(){}
 function confetti(){}
 
-const SALES_SANITY = 200000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
+const SALES_SANITY = 100000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
 async function saveLog(){
   const t = totals();
   if (!F.store || !F.machine || t.sales<=0) return;
