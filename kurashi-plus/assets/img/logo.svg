@@ -1,16 +1,16 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 120" width="420" height="120" role="img" aria-label="くらしプラス KURASHI+">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#14908F"/>
-      <stop offset="1" stop-color="#0B5F5E"/>
+      <stop offset="0" stop-color="#1F6B66"/>
+      <stop offset="1" stop-color="#0F3D3A"/>
     </linearGradient>
   </defs>
   <g transform="translate(0,0)">
     <rect x="6" y="6" width="108" height="108" rx="30" fill="url(#g)"/>
     <path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#FFFFFF" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/>
-    <rect x="55" y="56" width="10" height="28" rx="3" fill="#F4A83A"/>
-    <rect x="46" y="65" width="28" height="10" rx="3" fill="#F4A83A"/>
+    <rect x="55" y="56" width="10" height="28" rx="3" fill="#D4B466"/>
+    <rect x="46" y="65" width="28" height="10" rx="3" fill="#D4B466"/>
   </g>
-  <text x="134" y="70" font-family="'Zen Maru Gothic','Noto Sans JP','Hiragino Maru Gothic ProN','Hiragino Sans',sans-serif" font-weight="700" font-size="46" fill="#1B2A2A" letter-spacing="1">くらしプラス</text>
-  <text x="136" y="98" font-family="'Noto Sans JP','Hiragino Sans',sans-serif" font-weight="500" font-size="15" fill="#0E7C7B" letter-spacing="6">KURASHI+</text>
+  <text x="134" y="70" font-family="'Shippori Mincho B1','Shippori Mincho','Hiragino Mincho ProN','Yu Mincho',serif" font-weight="700" font-size="46" fill="#141D1C" letter-spacing="3">くらしプラス</text>
+  <text x="136" y="98" font-family="'Outfit','Noto Sans JP',sans-serif" font-weight="500" font-size="14" fill="#A8873A" letter-spacing="7">KURASHI+</text>
 </svg>

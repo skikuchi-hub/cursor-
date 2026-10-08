@@ -3,6 +3,11 @@
   'use strict';
   var cfg = window.KP_CONFIG || {};
 
+  // ヘッダー：スクロールで背景
+  var hdr = document.querySelector('.site-header');
+  function onScroll(){ if (hdr) hdr.classList.toggle('scrolled', window.scrollY > 12); }
+  window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
   // モバイルメニュー
   var menuBtn = document.querySelector('.menu-btn');
   var nav = document.querySelector('.nav');
@@ -28,6 +33,10 @@
       });
     }, { threshold: 0.12 });
     document.querySelectorAll('.rv').forEach(function (el) { io.observe(el); });
+    // グリッド内の要素は順番に少し遅らせる
+    document.querySelectorAll('.svc-grid, .feat, .steps').forEach(function (g) {
+      Array.prototype.forEach.call(g.children, function (c, i) { if (c.classList.contains('rv')) c.style.transitionDelay = (i * 90) + 'ms'; });
+    });
   } else {
     document.querySelectorAll('.rv').forEach(function (el) { el.classList.add('in'); });
   }

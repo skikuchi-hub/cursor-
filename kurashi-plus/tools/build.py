@@ -168,7 +168,7 @@ def head(title, desc, depth, extra=""):
 <link rel="apple-touch-icon" href="{r}assets/img/icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=Shippori+Mincho+B1:wght@500;600;700&family=Outfit:wght@200;300;400;500&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{r}assets/css/style.css">
 <script src="{r}config.js"></script>
 {extra}
@@ -177,7 +177,7 @@ def head(title, desc, depth, extra=""):
 """
 
 def mark_svg(cls="mark"):
-    return f'''<svg class="{cls}" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14908F"/><stop offset="1" stop-color="#0B5F5E"/></linearGradient></defs><rect x="6" y="6" width="108" height="108" rx="30" fill="url(#gm)"/><path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/><rect x="55" y="56" width="10" height="28" rx="3" fill="#F4A83A"/><rect x="46" y="65" width="28" height="10" rx="3" fill="#F4A83A"/></svg>'''
+    return f'''<svg class="{cls}" viewBox="0 0 120 120" aria-hidden="true"><defs><linearGradient id="gm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1F6B66"/><stop offset="1" stop-color="#0F3D3A"/></linearGradient></defs><rect x="6" y="6" width="108" height="108" rx="30" fill="url(#gm)"/><path d="M60 28 L24 58 H34 V88 a4 4 0 0 0 4 4 H82 a4 4 0 0 0 4-4 V58 H96 Z" fill="none" stroke="#fff" stroke-width="7" stroke-linejoin="round" stroke-linecap="round"/><rect x="55" y="56" width="10" height="28" rx="3" fill="#D4B466"/><rect x="46" y="65" width="28" height="10" rx="3" fill="#D4B466"/></svg>'''
 
 def header(depth):
     r = rel(depth)
@@ -191,7 +191,7 @@ def header(depth):
       <a href="{r}index.html#price">料金</a>
       <a href="{r}index.html#faq">よくある質問</a>
       <a href="{r}contact.html">お問い合わせ</a>
-      <a class="btn btn-teal btn-sm" href="{r}login.html">会員ログイン</a>
+      <a class="btn btn-primary btn-sm" href="{r}login.html">会員ログイン</a>
     </nav>
   </div>
 </header>
@@ -201,6 +201,7 @@ def footer(depth):
     r = rel(depth)
     svc_links = "".join(f'<li><a href="{r}services/{s["code"]}.html">{s["name"]}</a></li>' for s in SERVICES)
     return f"""<footer class="site-footer">
+  <div class="big" aria-hidden="true">くらしプラス</div>
   <div class="wrap">
     <div class="cols">
       <div>
@@ -208,11 +209,11 @@ def footer(depth):
         <p>{SITE['tagline']}<br>運営：{SITE['company']}<br>{SITE['zip']} {SITE['addr']}<br>ヘルプデスク：{SITE['hours']}</p>
       </div>
       <div>
-        <h4>サービス</h4>
+        <h4>Services</h4>
         <ul>{svc_links}</ul>
       </div>
       <div>
-        <h4>サポート・規約</h4>
+        <h4>Support / Legal</h4>
         <ul>
           <li><a href="{r}index.html#faq">よくある質問</a></li>
           <li><a href="{r}contact.html">お問い合わせ</a></li>
@@ -223,7 +224,7 @@ def footer(depth):
         </ul>
       </div>
     </div>
-    <div class="copy">© {SITE['company']} All rights reserved.</div>
+    <div class="copy"><span>© {SITE['company']} All rights reserved.</span><span>{SITE['en']} — {SITE['tagline']}</span></div>
   </div>
 </footer>
 <script src="{r}assets/js/main.js"></script>
@@ -242,75 +243,97 @@ def page(path, title, desc, body, depth=0, extra=""):
 def svc_card(s, depth=0):
     r = rel(depth)
     return f"""<a class="svc-card rv" href="{r}services/{s['code']}.html">
-  <span class="no">{s['no']}</span>
-  <div class="svc-icon">{ICONS[s['code']]}</div>
+  <span class="no">{s['no']} / 05</span>
+  <div class="art"><div class="svc-icon">{ICONS[s['code']]}</div></div>
   <span class="tag">{s['tag']}</span>
   <h3>{s['name']}</h3>
   <p>{s['short']}</p>
-  <span class="more">くわしく見る →</span>
+  <span class="more">くわしく見る <i>{ARROW}</i></span>
 </a>"""
 
+ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>'
+
 # ---------- トップ ----------
-HERO_ART = """<svg viewBox="0 0 520 440" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-<defs><linearGradient id="hg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#14908F"/><stop offset="1" stop-color="#0B5F5E"/></linearGradient></defs>
-<circle cx="270" cy="230" r="190" fill="#E4F3F2"/>
+HERO_ART = """<svg viewBox="0 0 560 560" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+<defs>
+  <linearGradient id="hg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1F6B66"/><stop offset="1" stop-color="#0F3D3A"/></linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E2C77A"/><stop offset="1" stop-color="#B08E3C"/></linearGradient>
+  <radialGradient id="soft" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#DCE8E4"/><stop offset="1" stop-color="#DCE8E4" stop-opacity="0"/></radialGradient>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="18" stdDeviation="16" flood-color="#0F3D3A" flood-opacity=".16"/></filter>
+</defs>
+<circle cx="280" cy="280" r="250" fill="url(#soft)"/>
+<g class="ring"><circle cx="280" cy="280" r="236" fill="none" stroke="#C2A14F" stroke-width="1" stroke-dasharray="2 10" opacity=".8"/></g>
+<g class="ring r2"><circle cx="280" cy="280" r="196" fill="none" stroke="#1F6B66" stroke-width="1" stroke-dasharray="1 7" opacity=".55"/></g>
+<circle cx="280" cy="280" r="156" fill="#FBF9F4" stroke="#E6DFCF"/>
 <!-- 家 -->
-<path d="M160 215 L270 125 L380 215" fill="none" stroke="url(#hg)" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M185 205 V330 a10 10 0 0 0 10 10 H345 a10 10 0 0 0 10-10 V205" fill="#fff" stroke="url(#hg)" stroke-width="12" stroke-linejoin="round"/>
-<rect x="245" y="265" width="50" height="75" rx="6" fill="#F4A83A"/>
-<rect x="205" y="235" width="30" height="30" rx="5" fill="#CDE8E6"/>
-<rect x="305" y="235" width="30" height="30" rx="5" fill="#CDE8E6"/>
+<g filter="url(#sh)">
+  <path d="M280 182 L186 262 V352 a12 12 0 0 0 12 12 H362 a12 12 0 0 0 12-12 V262 Z" fill="#fff" stroke="url(#hg)" stroke-width="3"/>
+  <path d="M170 270 L280 176 L390 270" fill="none" stroke="url(#hg)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="258" y="300" width="44" height="64" rx="4" fill="url(#gold)"/>
+  <rect x="212" y="286" width="30" height="30" rx="4" fill="#DCE8E4"/>
+  <rect x="318" y="286" width="30" height="30" rx="4" fill="#DCE8E4"/>
+  <circle cx="294" cy="334" r="3" fill="#fff"/>
+</g>
 <!-- 浮かぶカード -->
-<g transform="translate(60,80)"><rect width="110" height="56" rx="14" fill="#fff" stroke="#E2E8E4"/><rect x="14" y="16" width="26" height="26" rx="8" fill="#E4F3F2"/><rect x="50" y="18" width="44" height="8" rx="4" fill="#CDE8E6"/><rect x="50" y="32" width="30" height="8" rx="4" fill="#E4F3F2"/></g>
-<g transform="translate(360,60)"><rect width="110" height="56" rx="14" fill="#fff" stroke="#E2E8E4"/><rect x="14" y="16" width="26" height="26" rx="8" fill="#FFF4E2"/><rect x="50" y="18" width="44" height="8" rx="4" fill="#F7D8A6"/><rect x="50" y="32" width="30" height="8" rx="4" fill="#FFF4E2"/></g>
-<g transform="translate(385,300)"><rect width="110" height="56" rx="14" fill="#fff" stroke="#E2E8E4"/><rect x="14" y="16" width="26" height="26" rx="8" fill="#E4F3F2"/><rect x="50" y="18" width="44" height="8" rx="4" fill="#CDE8E6"/><rect x="50" y="32" width="30" height="8" rx="4" fill="#E4F3F2"/></g>
-<g transform="translate(40,300)"><rect width="110" height="56" rx="14" fill="#fff" stroke="#E2E8E4"/><rect x="14" y="16" width="26" height="26" rx="8" fill="#FFF4E2"/><rect x="50" y="18" width="44" height="8" rx="4" fill="#F7D8A6"/><rect x="50" y="32" width="30" height="8" rx="4" fill="#FFF4E2"/></g>
-<!-- プラスバッジ -->
-<circle cx="400" cy="190" r="34" fill="#F4A83A"/><rect x="394" y="172" width="12" height="36" rx="4" fill="#2B1A00"/><rect x="382" y="184" width="36" height="12" rx="4" fill="#2B1A00"/>
+<g transform="translate(66,110)"><g class="float d1" filter="url(#sh)"><rect width="128" height="60" rx="16" fill="#fff"/><circle cx="30" cy="30" r="16" fill="#0F3D3A"/><path d="M24 30l4 4 8-8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><rect x="56" y="20" width="52" height="7" rx="3.5" fill="#DCE8E4"/><rect x="56" y="34" width="34" height="7" rx="3.5" fill="#EDE7DA"/></g></g>
+<g transform="translate(372,118)"><g class="float d2" filter="url(#sh)"><rect width="128" height="60" rx="16" fill="#fff"/><circle cx="30" cy="30" r="16" fill="#C2A14F"/><path d="M30 22v16M22 30h16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/><rect x="56" y="20" width="52" height="7" rx="3.5" fill="#F1E7CF"/><rect x="56" y="34" width="34" height="7" rx="3.5" fill="#EDE7DA"/></g></g>
+<g transform="translate(384,382)"><g class="float d3" filter="url(#sh)"><rect width="128" height="60" rx="16" fill="#fff"/><circle cx="30" cy="30" r="16" fill="#1F6B66"/><path d="M30 21 24 24v6c0 4 2.6 7 6 8 3.4-1 6-4 6-8v-6z" fill="none" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/><rect x="56" y="20" width="52" height="7" rx="3.5" fill="#DCE8E4"/><rect x="56" y="34" width="34" height="7" rx="3.5" fill="#EDE7DA"/></g></g>
+<g transform="translate(54,392)"><g class="float" filter="url(#sh)"><rect width="128" height="60" rx="16" fill="#fff"/><circle cx="30" cy="30" r="16" fill="#0F3D3A"/><rect x="24" y="24" width="12" height="12" rx="2" fill="none" stroke="#fff" stroke-width="1.8"/><rect x="56" y="20" width="52" height="7" rx="3.5" fill="#F1E7CF"/><rect x="56" y="34" width="34" height="7" rx="3.5" fill="#EDE7DA"/></g></g>
+<!-- 小さな点 -->
+<circle cx="120" cy="300" r="4" fill="#C2A14F"/><circle cx="450" cy="250" r="3" fill="#1F6B66"/><circle cx="300" cy="78" r="3" fill="#C2A14F"/>
 </svg>"""
 
 def build_index():
     cards = "\n".join(svc_card(s) for s in SERVICES)
+    ARROW_BTN = ARROW.replace('<svg ','<svg class="arrow" ')
+    MARQUEE = ''.join(f'<span>{x["name"]}</span>' for x in SERVICES)
     faq = "\n".join(f'<details class="rv"><summary>{html.escape(q)}</summary><div class="a">{html.escape(a)}</div></details>' for q, a in FAQ)
     body = f"""
 <section class="hero">
+  <div class="glow a"></div><div class="glow b"></div>
   <div class="wrap">
     <div>
-      <span class="eyebrow">月額制ライフサポート</span>
-      <h1>毎日の「もしも」に、<br><em>ひとつ足す</em>安心。</h1>
-      <p class="lead">置き配の盗難、スマホの故障、家電のトラブル、わずらわしい広告。くらしプラスは、5つのサービスから必要なものだけを月額で選べる、{SITE['company']}のライフサポートサービスです。</p>
-      <div class="cta">
-        <a class="btn btn-primary" href="#services">サービスを見る</a>
+      <span class="kicker rv">Life support subscription</span>
+      <h1 class="rv rv-d1"><span class="l">毎日の「もしも」に、</span><span class="l"><em>ひとつ足す</em>安心。</span></h1>
+      <p class="lead rv rv-d2">置き配の盗難、スマホの故障、家電のトラブル、わずらわしい広告。くらしプラスは、5つのサービスから必要なものだけを月額で選べる、{SITE['company']}のライフサポートサービスです。</p>
+      <div class="cta rv rv-d3">
+        <a class="btn btn-primary" href="#services">サービスを見る {ARROW_BTN}</a>
         <a class="btn btn-outline" href="contact.html">お問い合わせ</a>
       </div>
-      <p class="note">各サービス 月額{SITE['price']}円（税抜）／初期費用・解約金なし／いつでも解約OK</p>
+      <div class="meta rv rv-d4">
+        <div>月額（税抜）<b><span>{SITE['price']}</span> 円〜</b></div>
+        <div>初期費用・解約金<b>0 円</b></div>
+        <div>最低利用期間<b>なし</b></div>
+      </div>
     </div>
-    <div class="hero-art">{HERO_ART}</div>
+    <div class="hero-art rv rv-d2">{HERO_ART}</div>
   </div>
+  <div class="scroll-cue">Scroll<i></i></div>
 </section>
+<div class="marquee" aria-hidden="true"><div class="track">{MARQUEE}{MARQUEE}</div></div>
 
 <section class="section" id="services">
   <div class="wrap">
     <div class="section-head rv">
-      <div class="label">Services</div>
-      <h2>選べる5つのサービス</h2>
-      <p>補償からおトク、セキュリティまで。くらしに必要なものを、ひとつから。</p>
+      <div class="en">Services</div>
+      <h2>選べる、5つの安心。</h2>
+      <p>補償からおトク、セキュリティまで。くらしに必要なものを、ひとつから。組み合わせも、あとからの追加も自由です。</p>
     </div>
     <div class="svc-grid">{cards}</div>
   </div>
 </section>
 
-<section class="section alt" id="features">
+<section class="section paper" id="features">
   <div class="wrap">
     <div class="section-head rv">
-      <div class="label">Features</div>
+      <div class="en">Why Kurashi+</div>
       <h2>くらしプラスが選ばれる理由</h2>
     </div>
     <div class="feat">
-      <div class="item rv"><div class="num">POINT 01</div><h3>必要なものだけ、ひとつから</h3><p>セット契約は不要。5つのサービスから使いたいものだけを選び、あとから追加や解約もできます。</p></div>
-      <div class="item rv"><div class="num">POINT 02</div><h3>わかりやすい月額料金</h3><p>各サービス月額{SITE['price']}円（税抜）。初期費用や解約金はなく、最低利用期間もありません。</p></div>
-      <div class="item rv"><div class="num">POINT 03</div><h3>ご家族もいっしょに安心</h3><p>補償サービスは同居のご家族も対象。ギフ活は配偶者や二親等以内のご親族もご利用いただけます。</p></div>
-      <div class="item rv"><div class="num">POINT 04</div><h3>困ったときの窓口がある</h3><p>ヘルプデスクが{SITE['hours']}に対応。補償の請求方法や使い方のご相談も承ります。</p></div>
+      <div class="item rv"><div class="num">01</div><div><h3>必要なものだけ、ひとつから</h3><p>セット契約は不要。5つのサービスから使いたいものだけを選び、あとから追加や解約もできます。</p></div></div>
+      <div class="item rv"><div class="num">02</div><div><h3>わかりやすい月額料金</h3><p>各サービス月額{SITE['price']}円（税抜）。初期費用や解約金はなく、最低利用期間もありません。</p></div></div>
+      <div class="item rv"><div class="num">03</div><div><h3>ご家族もいっしょに安心</h3><p>補償サービスは同居のご家族も対象。ギフ活は配偶者や二親等以内のご親族もご利用いただけます。</p></div></div>
+      <div class="item rv"><div class="num">04</div><div><h3>困ったときの窓口がある</h3><p>ヘルプデスクが{SITE['hours']}に対応。補償の請求方法や使い方のご相談も承ります。</p></div></div>
     </div>
   </div>
 </section>
@@ -318,7 +341,7 @@ def build_index():
 <section class="section" id="flow">
   <div class="wrap">
     <div class="section-head rv">
-      <div class="label">Flow</div>
+      <div class="en">How it works</div>
       <h2>ご利用の流れ</h2>
     </div>
     <div class="steps">
@@ -330,20 +353,21 @@ def build_index():
   </div>
 </section>
 
-<section class="section alt" id="price">
+<section class="section dark" id="price">
   <div class="wrap">
     <div class="section-head rv">
-      <div class="label">Price</div>
-      <h2>料金</h2>
+      <div class="en">Price</div>
+      <h2>シンプルな、ひとつの料金。</h2>
+      <p>どのサービスを選んでも同じ月額。必要な数だけ、必要なあいだだけ。</p>
     </div>
-    <div class="price-box rv">
-      <div>
-        <h3>各サービス</h3>
-        <div class="big">{SITE['price']}<small>円／月（税抜）</small></div>
-        <div>税込 {SITE['price_tax']}円／月</div>
+    <div class="price">
+      <div class="rv">
+        <div class="price-label">各サービス月額</div>
+        <div class="amount"><span class="yen">¥</span>{SITE['price']}<span class="per">／月（税抜）</span></div>
+        <div class="sub">税込 {SITE['price_tax']}円／月</div>
         <p class="fine">※ キャンペーン適用時は、その条件に従い減額・免除となる場合があります。<br>※ 料金は予告なく変更となる場合があります。</p>
       </div>
-      <ul>
+      <ul class="rv rv-d2">
         <li>初期費用 0円・解約金 0円</li>
         <li>最低利用期間なし。いつでも解約できます</li>
         <li>お支払いはクレジットカードまたはキャリア決済</li>
@@ -356,7 +380,7 @@ def build_index():
 <section class="section" id="faq">
   <div class="wrap">
     <div class="section-head rv">
-      <div class="label">FAQ</div>
+      <div class="en">FAQ</div>
       <h2>よくある質問</h2>
     </div>
     <div class="faq">{faq}</div>
@@ -366,9 +390,11 @@ def build_index():
 <section class="section">
   <div class="wrap">
     <div class="cta-band rv">
-      <h2>ご不明な点はお気軽にどうぞ</h2>
-      <p>サービス内容や補償の範囲、お申込み方法について、ヘルプデスクがお答えします。</p>
-      <a class="btn btn-primary" href="contact.html">お問い合わせフォームへ</a>
+      <div>
+        <h2>ご不明な点は、お気軽にどうぞ。</h2>
+        <p>サービス内容や補償の範囲、お申込み方法について、ヘルプデスク（{SITE['hours_short']}）がお答えします。</p>
+      </div>
+      <a class="btn btn-light" href="contact.html">お問い合わせフォームへ {ARROW_BTN}</a>
     </div>
   </div>
 </section>
@@ -385,17 +411,18 @@ def build_services():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="../index.html">トップ</a> › <a href="../index.html#services">サービス</a> › {s['name']}</div>
-    <div class="label">Service {s['no']}</div>
+    <div class="en">Service {s['no']}</div>
     <h1>{s['name']}</h1>
     <p>{html.escape(s['short'])}</p>
   </div>
   <div class="svc-hero rv">
+    <div class="wm">{s['no']}</div>
     <div>
       <div class="svc-icon">{ICONS[s['code']]}</div>
       <span class="tag">{s['tag']}</span>
       <h2>{html.escape(s['lead'])}</h2>
-      <div class="price">月額 {SITE['price']}円<small>（税抜）／税込 {SITE['price_tax']}円</small></div>
-      <p style="margin-top:18px"><a class="btn btn-primary" href="../contact.html">お申し込み・ご相談はこちら</a></p>
+      <div class="price-line"><span class="yen">月額</span>¥{SITE['price']}<small>（税抜）／税込 {SITE['price_tax']}円</small></div>
+      <p style="margin-top:26px"><a class="btn btn-primary" href="../contact.html">お申し込み・ご相談はこちら</a></p>
     </div>
     <ul class="points">{pts}</ul>
   </div>
@@ -408,9 +435,9 @@ def build_services():
     <div class="notice gray">本ページの内容は概要です。補償の条件・対象外事項などの詳細は利用規約をご確認ください。</div>
   </div>
 </div>
-<section class="section alt">
+<section class="section paper">
   <div class="wrap">
-    <div class="section-head"><div class="label">Other services</div><h2>ほかのサービス</h2></div>
+    <div class="section-head rv"><div class="en">Other services</div><h2>ほかのサービス</h2></div>
     <div class="svc-grid four">{others}</div>
   </div>
 </section>
@@ -458,7 +485,7 @@ def build_terms():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="../index.html">トップ</a> › <a href="index.html">利用規約</a> › {s['name']}</div>
-    <div class="label">Terms</div>
+    <div class="en">Terms</div>
     <h1>{s['name']} 利用規約{status}</h1>
     <p>施行日：{SITE['effective']}　提供：{SITE['company']}</p>
   </div>
@@ -471,7 +498,7 @@ def build_terms():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="../index.html">トップ</a> › 利用規約</div>
-    <div class="label">Terms</div>
+    <div class="en">Terms</div>
     <h1>利用規約</h1>
     <p>サービスごとに利用規約を定めています。お申し込みの前に必ずお読みください。</p>
   </div>
@@ -488,7 +515,7 @@ def build_privacy():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › プライバシーポリシー</div>
-    <div class="label">Privacy Policy</div>
+    <div class="en">Privacy Policy</div>
     <h1>プライバシーポリシー</h1>
     <p>{c['company']}（以下「当社」といいます。）は、当社が提供する「{c['name']}」および関連サービス（以下「本サービス」といいます。）における個人情報の取扱いについて、以下のとおり定めます。</p>
   </div>
@@ -540,7 +567,7 @@ def build_legal():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › 特定商取引法に基づく表記</div>
-    <div class="label">Legal</div>
+    <div class="en">Legal</div>
     <h1>特定商取引法に基づく表記</h1>
   </div>
   <div class="content card"><div class="kv">{kv}</div></div>
@@ -557,7 +584,7 @@ def build_contact():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › お問い合わせ</div>
-    <div class="label">Contact</div>
+    <div class="en">Contact</div>
     <h1>お問い合わせ</h1>
     <p>サービス内容やお申し込み、補償の請求についてのご相談はこちらから。ヘルプデスク（{c['hours_short']}）より順次ご返信します。</p>
   </div>
@@ -581,7 +608,7 @@ def build_contact():
     body = f"""
 <div class="wrap">
   <div class="page-head" style="text-align:center">
-    <div class="label">Thank you</div>
+    <div class="en">Thank you</div>
     <h1>お問い合わせを受け付けました</h1>
     <p style="margin:12px auto 0">ご入力いただいたメールアドレス宛に受付確認をお送りします。担当者より{c['hours']}の間にご返信いたしますので、今しばらくお待ちください。</p>
     <p style="margin-top:28px"><a class="btn btn-outline" href="index.html">トップページへ戻る</a></p>
@@ -603,7 +630,7 @@ def build_auth():
         <div class="field"><label for="email">メールアドレス</label><input id="email" name="email" type="email" autocomplete="username" required></div>
         <div class="field"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required></div>
         <div class="err" role="alert"></div>
-        <button type="submit" class="btn btn-teal btn-block">ログイン</button>
+        <button type="submit" class="btn btn-primary btn-block">ログイン</button>
       </form>
       <div class="links"><a href="contact.html">パスワードをお忘れの方</a><a href="contact.html">新規お申し込み</a></div>
     </div>
@@ -621,7 +648,7 @@ def build_auth():
     body = f"""
 <div class="wrap" id="mypage">
   <div class="page-head">
-    <div class="label">My page</div>
+    <div class="en">My page</div>
     <h1>マイページ</h1>
   </div>
   <div class="my-grid" style="padding-bottom:64px">
@@ -653,7 +680,7 @@ def build_404():
     body = """
 <div class="wrap">
   <div class="page-head" style="text-align:center">
-    <div class="label">404</div>
+    <div class="en">404</div>
     <h1>ページが見つかりません</h1>
     <p style="margin:12px auto 0">URLが変更されたか、削除された可能性があります。</p>
     <p style="margin-top:28px"><a class="btn btn-outline" href="index.html">トップページへ戻る</a></p>
