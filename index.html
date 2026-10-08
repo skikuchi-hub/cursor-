@@ -2539,9 +2539,12 @@ function nameTokens(s){
   return t;
 }
 const priceBand = p => p<=300 ? "〜300円" : p<=600 ? "301〜600円" : p<=1000 ? "601〜1,000円" : "1,001円〜";
+/* 単価が「数量按分」の目安値（まとめ買いを数量で割っただけ）の景品は、仕入れのランク判定の材料から外す（菊地さん指示 2026-10-08）。
+   景品マスタのメモに「数量按分」が入っている景品が対象。手で適正単価を入れた景品（例：nici 620円）は対象内 */
+const isEstCost = name => { const m = allPrizes().find(x=>x.name===name); return !!(m && /数量按分/.test(m.memo||"")); };
 function srcRank(it){
   const agg = SRC.agg || (SRC.agg = labAgg());
-  const list = Object.values(agg).filter(P=>P.days>0);
+  const list = Object.values(agg).filter(P=>P.days>0 && !P.est);
   const toks = nameTokens(it.name);
   const hits = toks.size ? list.filter(P=>{ const pt=nameTokens(P.prize); return [...toks].some(t=>pt.has(t)); }) : [];
   const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
@@ -4039,7 +4042,7 @@ function labAgg(){
   });
   Object.values(byP).forEach(P=>{
     const m = allPrizes().find(x=>x.name===P.prize);
-    P.qty = m ? num(m.qty) : 0; P.stock = stockOf(P.prize);
+    P.qty = m ? num(m.qty) : 0; P.stock = stockOf(P.prize); P.est = !!(m && /数量按分/.test(m.memo||""));
     P.pacePerWeek = P.days>0 ? P.pays/P.days*7 : 0;
     P.weeksLeft = (P.stock!==null && P.pacePerWeek>0) ? P.stock/P.pacePerWeek : null;
     P.sales = P.playsKnown ? P.plays*PLAY_PRICE : null;
