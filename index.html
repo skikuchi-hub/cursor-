@@ -2191,6 +2191,13 @@ function onRoomInput(e){
   if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。カウンター値などの誤入力を防ぐ
     const digits = String(el.value).replace(/[^\d]/g,"").slice(0,6);
     if (digits !== el.value){ el.value = digits; if (digits.length>=6 && String(e.target.value).length>6) toast("売上は 6 桁（99万円）までです"); }
+  } else if (f==="taken" || f==="before" || f==="add" || f==="take"){   // 個数は 3 桁まで
+    const digits = String(el.value).replace(/[^\d]/g,"").slice(0,3);
+    if (digits !== el.value) el.value = digits;
+  } else if (f==="counter"){                                     // カウンターは 数字 7 桁＋小数 2 桁まで
+    const m = String(el.value).replace(/[^\d.]/g,"").match(/^(\d{0,7})(\.\d{0,2})?/);
+    const v = m ? (m[1]||"") + (m[2]||"") : "";
+    if (v !== el.value) el.value = v;
   }
   if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
   else R[f] = el.value;
@@ -2663,6 +2670,7 @@ function wireSourcing(){
     if (b.dataset.sok){
       const sel=SRC.sel[key]||{}; const cases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? num(sel.n)||1 : 0;
       if (!(cases>0)){ toast("数量を選んでください"); return; }
+      if (cases > 5 && !confirm(`${cases}ケース（${yen(Math.round(num(it.qty)*cases))}こ、${yen(Math.round(num(it.price)*num(it.qty)*cases))}円）です。多すぎませんか？`)) return;
       const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const machine = mb ? mb.dataset.sm : "";
       const note=clean(card.querySelector("[data-snote]").value);
       b.disabled=true;
@@ -2754,6 +2762,38 @@ function photoThumbs(r){
 function playCatch(){}
 function confetti(){}
 
+/* 保存前の入力チェック。block＝保存できない、ask＝確認してから保存 */
+const FN = {sAB:"A＋B", sCD:"C＋D", sBox:"BOX"};
+function validateVisit(){
+  const block=[], ask=[];
+  const today = todayStr();
+  if (F.week > today) block.push(`訪問日 ${jpDate(F.week)} は未来の日付です`);
+  else if (daysSince(F.week) > 60) ask.push(`訪問日 ${jpDate(F.week)} は 60 日以上前です`);
+  // 累計が前回より少ない＝リセット扱い。「今回分」を入れてしまったミスが多い
+  ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`); });
+  // 同じ日に同じ機械の記録
+  const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
+  if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
+  if (R && R.type==="4p"){
+    R.rooms.forEach(rm=>{
+      const pr = prevRoom(rm.k), st = prevStock(rm.k);
+      if (rm.counter!=="" && pr && pr.counter!=="" && pr.counter!==undefined){
+        const diff = num(rm.counter)-num(pr.counter);
+        if (diff < 0) ask.push(`部屋${rm.k} のカウンター ${rm.counter} が前回 ${pr.counter} より小さい（カウンターは減りません）`);
+        else if (diff > 3000) ask.push(`部屋${rm.k} のカウンターが前回から ${Math.round(diff)} 増えています。桁の打ち間違いではありませんか？`);
+      }
+      const p = roomPays(rm);
+      if (p!==null && st!==null && p > st) block.push(`部屋${rm.k} の取られた数 ${p} が、前回入っていた数 ${st} を超えています`);
+      if (p!==null && p > 99) block.push(`部屋${rm.k} の取られた数 ${p} が多すぎます`);
+      if (num(rm.add) > 200) block.push(`部屋${rm.k} の補充 ${num(rm.add)} が多すぎます`);
+      const b = roomBefore(rm);
+      if (num(rm.take) > 0 && b!=="" && num(rm.take) > b + num(rm.add)) block.push(`部屋${rm.k} の回収 ${num(rm.take)} が、残り＋補充（${b + num(rm.add)}）を超えています`);
+    });
+  }
+  const t = totals();
+  if (num($("#costIn").value) > t.sales && t.sales>0) ask.push(`景品原価 ${yen(num($("#costIn").value))}円 が売上 ${yen(t.sales)}円 を超えています`);
+  return {block, ask};
+}
 const SALES_SANITY = 100000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
 async function saveLog(){
   const t = totals();
@@ -2763,6 +2803,8 @@ async function saveLog(){
     const where = big.map(x=>`${x.f==="sAB"?"A＋B":x.f==="sCD"?"C＋D":"BOX"} 累計 ${yen(x.d.cur)}円（前回 ${yen(x.d.prev)}円）`).join("、");
     if (!confirm(`今回分の売上が ${yen(t.sales)}円 になります。\n${where}\n\n累計の入力ミス（桁が多い・カウンターの数字を入れた）ではありませんか？\n本当にこの金額で保存するなら OK を押してください。`)) return;
   }
+  const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
+  if (v.ask.length && !confirm("確認してください：\n・" + v.ask.join("\n・") + "\n\nこのまま保存しますか？")) return;
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
@@ -2927,6 +2969,16 @@ function updatePzGauge(){
 async function savePrize(){
   const {n} = pzDerived();
   const sel=$("#pzVendor");
+  {
+    const name=clean($("#pzName").value), cost=num($("#pzCost").value), qty=num($("#pzQty").value);
+    const ask=[];
+    if (cost > 5000) ask.push(`仕入単価 ${yen(cost)}円 は高すぎませんか？（1 個あたり・税抜）`);
+    if (cost > 0 && cost < 10) ask.push(`仕入単価 ${yen(cost)}円 は安すぎませんか？`);
+    if (qty > 500) ask.push(`数量 ${yen(qty)} は多すぎませんか？（入数×ケース数）`);
+    const same = allPrizes().find(p=>normName(p.name)===normName(name));
+    if (same) ask.push(`「${same.name}」はすでに登録があります。追加の仕入れなら OK`);
+    if (ask.length && !confirm("確認してください：\n・"+ask.join("\n・")+"\n\nこのまま登録しますか？")) return;
+  }
   const rec = {
     name:clean($("#pzName").value),
     vendor: sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value,
@@ -3006,6 +3058,17 @@ function renderCostForm(){
 }
 async function saveCost(){
   const net = num($("#exNet").value);
+  {
+    const d=$("#exDate").value, block=[], ask=[];
+    if (d > todayStr()) block.push(`日付 ${jpDate(d)} は未来の日付です`);
+    else if (daysSince(d) > 60) ask.push(`日付 ${jpDate(d)} は 60 日以上前です`);
+    if (Math.abs(net) > 30000) ask.push(`金額 ${yen(net)}円 は大きすぎませんか？`);
+    if (net < 0) ask.push(`金額がマイナスです（返金なら OK）`);
+    const dup=(Store.data.expenses||[]).find(r=>r.date===d && num(r.net)===net && r.kind===$("#exKind").value);
+    if (dup) ask.push(`同じ日・同じ区分・同じ金額の経費がすでにあります（二重登録？）`);
+    if (block.length){ alert("保存できません：\n・"+block.join("\n・")); return; }
+    if (ask.length && !confirm("確認してください：\n・"+ask.join("\n・")+"\n\nこのまま保存しますか？")) return;
+  }
   const rec = {
     date:$("#exDate").value, store: exNoStore() ? "共通" : exStore, kind:$("#exKind").value,
     item:"", net, gross:0, payee:clean($("#exPayee").value), slip:"", memo:clean($("#exMemo").value), staff:me()
