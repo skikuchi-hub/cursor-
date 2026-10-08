@@ -1074,6 +1074,35 @@ function allocateBulkCost() {
     (known.length ? "【確定】" + known.map(function (x) { return x.name + " ×" + x.q + " @" + x.cost; }).join("、") + "\n" : "") + "【按分】\n" + lines.join("\n");
   Logger.log(msg); SpreadsheetApp.getActive().toast("按分 " + unknown.length + " 行（1個 ≒ ¥" + Math.round(unit) + "）、確定 " + known.length + " 行"); return msg;
 }
+/* テスト発注など、実際には出していない発注番号を EXAmuse 発注システムのスプシから消す（2026-10-08 EH-20261005-1）。
+   消すもの：発注履歴タブ（B 列 発注No が一致する行）、発注要求タブ（H 列 発注No が一致、または G 列 結果にその番号を含む行）、
+   商品一覧 S 列 発注状況・T 列 チェック結果（その番号を含むときだけ空にする）。景品マスタ（クレーンゲーム日報）は触らない。
+   先頭の DELETE_ORDER_NO を変えれば他の番号にも使える。再実行しても安全（該当が無ければ何もしない） */
+var DELETE_ORDER_NO = "EH-20261005-1";
+function deleteOrderNo() {
+  var no = clean(DELETE_ORDER_NO); if (!no) return "DELETE_ORDER_NO が空です";
+  var x = exaSs(), msg = [];
+  function dropRows(sheetName, test) {
+    var sh = x.getSheetByName(sheetName); if (!sh) { msg.push(sheetName + "：タブなし"); return; }
+    var v = sh.getDataRange().getValues(), n = 0;
+    for (var i = v.length - 1; i >= 1; i--) if (test(v[i])) { sh.deleteRow(i + 1); n++; }
+    msg.push(sheetName + "：" + n + " 行削除");
+  }
+  dropRows("発注履歴", function (r) { return clean(r[1]) === no; });
+  dropRows("発注要求", function (r) { return clean(r[7]) === no || String(r[6] || "").indexOf(no) >= 0; });
+  var items = x.getSheetByName("商品一覧");
+  if (items) {
+    var v = items.getDataRange().getValues(), n = 0;
+    for (var i = 1; i < v.length; i++) {
+      var st = String(v[i][EXA.status - 1] || "");
+      if (st.indexOf(no) >= 0) { items.getRange(i + 1, EXA.status).setValue(""); items.getRange(i + 1, EXA.check).setValue(""); n++; }
+    }
+    msg.push("商品一覧：発注状況を空にした " + n + " 行");
+  }
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  var out = no + " を消しました → " + msg.join("、");
+  Logger.log(out); SpreadsheetApp.getActive().toast(out); return out;
+}
 /* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "importPhotoChecks") ScriptApp.deleteTrigger(t); });
