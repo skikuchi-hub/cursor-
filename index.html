@@ -1897,8 +1897,11 @@ function resetRooms(keep){
       const n = defaultSlotCount();
       R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, filled:""}));
     }
+    if (boxEmpty()) R.mode = "fill";                 // 何も入っていない機械（初回など）は「補充」から始める
   }
 }
+/* BOX 機で、前回の中身が 1 枠も無い（＝初回や総入れ替え後）か */
+const boxEmpty = () => !!(R && R.type==="box" && R.slots.length && R.slots.every(sl=>!sl.prize));
 
 /* --- 画面は機械を変えたときだけ作り直す（入力中にフォーカスを飛ばさないため） --- */
 let builtFor = "";
@@ -2014,6 +2017,7 @@ function drawSlots(){
     if (fn){ const k = sheetRows().length;
       fn.innerHTML = k ? `📗 スプレッドシートの景品マスタ <b>${k}件</b> を含みます（${esc(sheetStamp())} 取り込み）` : ""; }
   }
+  if (typeof renderGuide === "function") renderGuide();        // モード・入れる景品が変わったらガイドも進める
 }
 
 function buildRooms(force){
@@ -2044,7 +2048,9 @@ function buildRooms(force){
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
   $("#zhint").innerHTML = (t==="4p"
     ? `<b>A→B→C→D</b> の順に「取られた数」→ <b>A＋B・C＋D</b> の累計売上。黄色の枠が「つぎはここ」。`
-    : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
+    : boxEmpty()
+      ? `何も入っていない機械です。<b>① 補充</b> で入れる景品を選んで入れた枠をタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`
+      : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
       ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
@@ -2075,8 +2081,9 @@ function buildRooms(force){
         <span class="u">円</span><span class="pp" data-p="sBox"></span>
       </div>
       <div class="modes">
-        <button class="chip" data-act="mode" data-mode="out">① 出た枠</button>
-        <button class="chip" data-act="mode" data-mode="fill">② 補充</button>
+        ${boxEmpty()
+          ? `<button class="chip" data-act="mode" data-mode="fill">① 補充</button><button class="chip" data-act="mode" data-mode="out">② 出た枠</button>`
+          : `<button class="chip" data-act="mode" data-mode="out">① 出た枠</button><button class="chip" data-act="mode" data-mode="fill">② 補充</button>`}
         <button class="chip" data-act="mode" data-mode="move">③ 並べ替え</button>
       </div>
       <div class="slots" id="slotGrid"></div>
@@ -2896,7 +2903,13 @@ function guideTarget(){
     if (R.sAB==="") { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
     if (R.sCD==="") { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
   } else {
-    if (!GUIDE.skip.slots && !R.slots.some(sl=>sl.out||(sl.filled&&sl.filled!==sl.prize))) return {sec:2, el:$("#slotGrid"), txt:"空いていた枠 → 補充した枠 をタップ", skip:"slots"};
+    if (!GUIDE.skip.slots && !R.slots.some(sl=>sl.out||(sl.filled&&sl.filled!==sl.prize))){
+      if (boxEmpty()){                                 // 空の機械：まず補充
+        if (R.mode!=="fill") return {sec:2, el:$('#roomGrid .modes [data-mode="fill"]'), txt:"「① 補充」を押す（空の機械なので先に補充）", skip:"slots"};
+        return {sec:2, el: R.fillPrize ? $("#slotGrid") : $("#fillRow"), txt: R.fillPrize ? `「${R.fillPrize}」を入れた枠をタップ` : "入れる景品を選んで、入れた枠をタップ", skip:"slots"};
+      }
+      return {sec:2, el:$("#slotGrid"), txt:"空いていた枠 → 補充した枠 をタップ", skip:"slots"};
+    }
     if (R.sBox==="") { const el=$('#roomGrid [data-f="sBox"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"累計売上（機械の表示どおり）"}; }
   }
   if (!PHOTOS.some(p=>p.kind==="after") && !GUIDE.skip.after) return {sec:2, el:pf("after"), txt:"補充後の写真をとる（1枚）", skip:"after"};
