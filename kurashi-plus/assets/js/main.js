@@ -155,7 +155,7 @@
         it.querySelector('.st').innerHTML = on ? '<b>ご利用中</b>　次回更新日：毎月1日' : '未加入';
         var b = it.querySelector('button');
         b.textContent = on ? '解約する' : '申し込む';
-        b.className = on ? 'btn btn-outline btn-sm' : 'btn btn-teal btn-sm';
+        b.className = on ? 'btn btn-outline btn-sm' : 'btn btn-primary btn-sm';
       });
       var cnt = my.querySelector('.count');
       if (cnt) cnt.textContent = n;
