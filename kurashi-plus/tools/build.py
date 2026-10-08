@@ -369,11 +369,16 @@ def build_index():
 </section>
 
 <section class="band">
-  <img src="assets/img/photo/calm.jpg" alt="" decoding="async">
   <div class="wrap">
-    <h2 class="rv">困ったときに、<br>ちゃんと人が応える。</h2>
-    <p class="rv">補償の請求も、使い方の相談も、ヘルプデスク（{SITE['hours_short']}）がお応えします。</p>
-    <div class="cta rv"><a class="tlink" href="contact.html">お問い合わせ {ARROW}</a></div>
+    <div class="grid">
+      <div>
+        <span class="en rv">Support</span>
+        <h2 class="rv" style="margin-top:14px">困ったときに、<br>ちゃんと人が応える。</h2>
+        <p class="rv">補償の請求も、使い方の相談も、ヘルプデスク（{SITE['hours_short']}）がお応えします。</p>
+        <div class="cta rv"><a class="tlink" href="contact.html">お問い合わせ {ARROW}</a></div>
+      </div>
+      <div class="photo rv"><img src="assets/img/photo/calm.jpg" alt="" loading="lazy" width="1600" height="1273"></div>
+    </div>
   </div>
 </section>
 

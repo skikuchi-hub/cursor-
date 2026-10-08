@@ -175,13 +175,14 @@ h1,h2,h3,h4{font-weight:500;line-height:1.5;letter-spacing:.08em}
 @media (max-width:860px){.price{grid-template-columns:1fr}.price th{width:120px}}
 
 /* ---------- Band (photo) ---------- */
-.band{position:relative;min-height:380px;display:flex;align-items:center;overflow:hidden;background:var(--sand)}
-.band img{position:absolute;inset:0;width:100%;height:100%;max-width:none;object-fit:cover;object-position:center 30%;z-index:0}
-.band::after{content:"";position:absolute;inset:0;z-index:0;background:linear-gradient(90deg,rgba(251,250,247,.96) 0%,rgba(251,250,247,.85) 40%,rgba(251,250,247,.1) 100%)}
-.band .wrap{position:relative;z-index:1;width:100%;padding-top:64px;padding-bottom:64px}
-.band h2{font-size:clamp(22px,3vw,32px);letter-spacing:.1em;line-height:1.7;max-width:16em}
+.band{padding:clamp(64px,8vw,112px) 0}
+.band .grid{display:grid;grid-template-columns:1fr 1fr;gap:clamp(32px,6vw,88px);align-items:center}
+.band .photo{border-radius:var(--r);overflow:hidden;aspect-ratio:3/2;background:var(--sand)}
+.band .photo img{width:100%;height:100%;object-fit:cover;object-position:center 20%}
+.band h2{font-size:clamp(22px,3vw,32px);letter-spacing:.1em;line-height:1.7}
 .band p{color:var(--ink-2);font-size:14px;max-width:30em;margin-top:16px}
 .band .cta{margin-top:30px}
+@media (max-width:860px){.band .grid{grid-template-columns:1fr}.band .photo{order:-1}}
 
 /* ---------- FAQ ---------- */
 .faq{max-width:860px;margin:0 auto;border-top:1px solid var(--line-2)}
