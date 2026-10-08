@@ -369,7 +369,7 @@ def build_index():
 </section>
 
 <section class="band">
-  <img src="assets/img/photo/calm.jpg" alt="" loading="lazy" decoding="async">
+  <img src="assets/img/photo/calm.jpg" alt="" decoding="async">
   <div class="wrap">
     <h2 class="rv">困ったときに、<br>ちゃんと人が応える。</h2>
     <p class="rv">補償の請求も、使い方の相談も、ヘルプデスク（{SITE['hours_short']}）がお応えします。</p>
