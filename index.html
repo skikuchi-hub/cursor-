@@ -2091,7 +2091,6 @@ function buildRooms(force){
       <div class="fillrow" id="fillRow" hidden>
         <span class="lbl">入れる景品を選んでから、枠をタップ</span>
         <div class="chips" id="fillChips"></div>
-        <button class="btn" data-act="fillall" style="margin-top:9px">空いた枠をぜんぶこれで埋める</button>
         <p class="hint" id="fillNote" style="margin:7px 0 0"></p>
       </div>
       <div class="moverow" id="moveRow" hidden>
@@ -2221,11 +2220,6 @@ function onRoomClick(e){
   if (a==="swap")     return openSwap(b.dataset.k);
   if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
   if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
-  if (a==="fillall"){
-    if (!R.fillPrize){ toast("先に景品を選んでください"); return; }
-    R.slots.forEach(sl=>{ if (sl.out || !sl.prize) sl.filled = R.fillPrize; });
-    drawSlots(); return updateDerived();
-  }
   if (a==="slots+" || a==="slots-"){
     const n = R.slots.length + (a==="slots+"?1:-1);
     if (n<1 || n>40) return;
