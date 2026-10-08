@@ -3749,7 +3749,8 @@ const iso_ = d => d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"
 const todayStr = () => iso_(new Date());
 const nonLocalHidden = r => !r._local_hidden;
 
-function expStep(L){ return 1000 * (Math.floor(L/10) + 1); }          // Lv L → L+1 に必要な EXP
+const EXP_EARLY = {1:300, 2:400, 3:500, 4:800, 5:1000};               // 序盤は上がりやすく（菊地さん指定 2026-10-08）
+function expStep(L){ return EXP_EARLY[L] || 1000 * (Math.floor(L/10) + 1); }   // Lv L → L+1 に必要な EXP（Lv6 以降は従来どおり 1000、Lv10 ごとに +1000）
 function expForLv(L){ let t=0; for (let k=1; k<L; k++) t += expStep(k); return t; }   // Lv L になる累計 EXP
 function lvFromExp(exp){ let L=1; while (exp >= expForLv(L+1)) L++; return L; }
 function titleFor(L){ let t=TITLES[0][1]; TITLES.forEach(([l,n])=>{ if(L>=l) t=n; }); return t; }
