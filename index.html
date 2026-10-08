@@ -2558,7 +2558,7 @@ function srcCard(it){
         <button type="button" class="go ${st==="order"?"on":""}" data-sd="order" ${canOrder?"":"disabled"}>${st==="order"?"発注予定 ✓":"発注する"}</button>
       </div>` : ""}
       ${orderPanel}${fixPanel}
-      ${canAct && !openFix ? `<button type="button" class="fix" data-sfix="1">${miss?"⚠ 読み取れていない項目を直す":"商品名・品番を直す"}</button>` : ""}
+      ${canAct && !openFix ? `<button type="button" class="fix" data-sfix="1">${miss?"⚠ 読み取れていない項目を編集する":"編集する"}</button>` : ""}
     </div>
   </div>`;
 }
