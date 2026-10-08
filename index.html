@@ -747,6 +747,12 @@ body{font-variant-numeric:tabular-nums}
 .gq-qrow{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:6px}
 .gq-qrow b{font-size:16px;color:#f5c542}
 .gq-qnote{font-size:11.5px;color:#a8b8d4;margin-top:7px;line-height:1.5}
+.gq-qexp{border-top:1px dashed #2a4a8c;margin-top:8px}
+.gq-qexp .t{font-size:11px;color:#a8b8d4;letter-spacing:.08em;margin-bottom:3px}
+.gq-qexp .r{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;color:#eef3fb;padding:3px 0}
+.gq-qexp .r small{display:block;font-size:10px;color:#a8b8d4}
+.gq-qexp .r b{font-family:var(--fs-mono);font-size:13px;color:#eef3fb;font-variant-numeric:tabular-nums}
+.gq-qexp .r b.pos{color:#f5c542}.gq-qexp .r b.neg{color:#f08a76}
 .gq-clear{display:inline-block;background:#f5c542;color:#14203a;padding:2px 10px;border-radius:999px;font-size:12px;margin-top:4px}
 .gq-goal{margin-top:10px;border-top:1px dashed #2a4a8c;padding-top:10px}
 .gq-goalrow{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -1279,6 +1285,7 @@ body{font-variant-numeric:tabular-nums}
             <div class="gq-qrow"><span>巡回</span><b><span id="gqToday">0</span>／<span id="gqDaily">0</span>マシーン</b></div>
             <div class="gq-bar hp"><i id="gqQuestBar"></i></div>
             <div class="gq-qnote" id="gqQuestNote">目標を設定すると、1日の巡回マシーン数が出ます</div>
+            <div class="gq-qexp" id="gqQuestExp"></div>
           </div>
           <div class="gq-goal">
             <div class="gq-goalrow">
@@ -4230,6 +4237,21 @@ function renderQuest(){
   $("#gqQuestNote").innerHTML = !daily ? "目標を設定すると、1日の巡回マシーン数が出ます"
     : cleared ? `<span class="gq-clear">★ クエスト クリア！</span>　きょうの ノルマ たっせい！`
     : `あと <b style="color:#f5c542">${daily-todayN}</b> マシーンで きょうの クエスト クリア`;
+
+  // きょう かくとくした EXP と うちわけ
+  {
+    const w=byDay("weekly",today), p=byDay("prizes",today), x=byDay("expenses",today);
+    const bonus = milestoneHits(W, g.monthly).filter(h=>h.day===today);
+    const gained=expSum(w), prizeExp=p.length*EXP_PER_PRIZE, bonusExp=bonus.length*MILESTONE_EXP, spent=expCostSum(x);
+    const total = gained + prizeExp + bonusExp - spent;
+    const row = (name, v, sub) => `<div class="r"><span>${name}${sub?`<small>${sub}</small>`:""}</span><b class="${v<0?"neg":v>0?"pos":""}">${expFmt(v)}</b></div>`;
+    $("#gqQuestExp").innerHTML = `<div class="gq-qrow" style="margin:10px 0 4px"><span>かくとくした EXP</span><b>${expFmt(total)}</b></div>
+      <div class="t">EXP うちわけ</div>
+      ${row("うりあげ", gained, `${w.length}マシーン・売上100円＝+1`)}
+      ${row("けいひん とうろく", prizeExp, `${p.length}件・1件＝+${EXP_PER_PRIZE}`)}
+      ${row("きょてん ボーナス", bonusExp, bonus.length?bonus.map(h=>h.icon+h.name).join("・"):"拠点とうちゃく＝+"+MILESTONE_EXP)}
+      ${row("けいひ", -spent, `${x.length}件・100円＝−1`)}`;
+  }
 
   // メッセージ
   const msg = $("#gqMsg");
