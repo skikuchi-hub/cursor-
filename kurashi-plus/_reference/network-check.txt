@@ -1,0 +1,14 @@
+# network check 2026-10-08T23:13Z
+401 https://unsplash.com/
+200 https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=800
+403 https://www.pexels.com/
+200 https://green-spoon.jp/release/maindish
+200 https://monf.jp/
+200 https://iot.sonynetwork.co.jp/service/qrio/smartlock.html
+200 https://home-link.jp/
+
+# 備考
+# - プロキシ経由で外部到達は可能（403/000 のプロキシ拒否ではない）
+# - unsplash.com: 401/307 → Anubis（JS proof-of-work）チャレンジ。curl では通らない。Playwright で再試行
+# - www.pexels.com: 403 → Cloudflare challenge（cf-mitigated: challenge）。curl では通らない
+# - images.unsplash.com: 200（画像の直接ダウンロードは可能）

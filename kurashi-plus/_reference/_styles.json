@@ -1,0 +1,1234 @@
+{
+  "greenspoon-maindish": {
+    "url": "https://green-spoon.jp/release/maindish",
+    "styles": {
+      "title": "GREEN SPOON（グリーンスプーン）",
+      "bodyFont": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+      "bodyFontSize": "16px",
+      "bodyColor": "rgb(31, 31, 31)",
+      "bodyBg": "rgb(251, 251, 246)",
+      "bodyLineHeight": "normal",
+      "h1": null,
+      "h2": {
+        "sel": "h2",
+        "text": "",
+        "fontFamily": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "40px",
+        "fontWeight": "400",
+        "lineHeight": "48px",
+        "letterSpacing": "normal",
+        "color": "rgb(244, 201, 21)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h3": {
+        "sel": "h3",
+        "text": "＼ スムージー・スープ・サラダと一緒に頼める ／",
+        "fontFamily": "\"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "14px",
+        "fontWeight": "600",
+        "lineHeight": "21px",
+        "letterSpacing": "normal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "p": {
+        "sel": "p",
+        "text": "",
+        "fontFamily": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "13px",
+        "letterSpacing": "normal",
+        "color": "rgb(244, 201, 21)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2list": [
+        "",
+        "MAIN DISH",
+        "ALL ITEMS",
+        "HELLO! NEW GREEN SPOON",
+        "WHAT’S MAIN DISH",
+        "FEATURES",
+        "ALL ITEMS",
+        "HOW TO USE"
+      ],
+      "buttons": [
+        {
+          "text": "DELI BENTO デリ弁当",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "MAIN DISH メインディッシュ",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "RICE & PASTA ライス&パスタ",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "SOUP スープ",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "SALAD サラダ",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "SMOOTHIE スムージー",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "14px",
+          "fontWeight": "400",
+          "w": 158,
+          "h": 250
+        },
+        {
+          "text": "",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "w": 133,
+          "h": 133
+        },
+        {
+          "text": "",
+          "bg": "rgb(11, 121, 77)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "10px",
+          "fontSize": "16px",
+          "fontWeight": "400",
+          "w": 133,
+          "h": 133
+        }
+      ],
+      "bgColorsByArea": [
+        [
+          "rgb(251, 251, 246)",
+          4178
+        ],
+        [
+          "rgb(243, 218, 170)",
+          1449
+        ],
+        [
+          "rgb(219, 83, 49)",
+          835
+        ],
+        [
+          "rgb(248, 247, 238)",
+          565
+        ],
+        [
+          "rgba(226, 207, 176, 0.4)",
+          111
+        ],
+        [
+          "rgb(37, 37, 37)",
+          93
+        ],
+        [
+          "rgba(212, 166, 163, 0.2)",
+          72
+        ],
+        [
+          "rgba(178, 153, 52, 0.2)",
+          72
+        ],
+        [
+          "rgba(139, 166, 157, 0.2)",
+          53
+        ],
+        [
+          "rgb(191, 47, 84)",
+          51
+        ]
+      ],
+      "textColors": [
+        [
+          "rgb(31, 31, 31)",
+          60
+        ],
+        [
+          "rgb(255, 255, 255)",
+          53
+        ],
+        [
+          "rgb(37, 37, 37)",
+          45
+        ],
+        [
+          "rgb(251, 251, 246)",
+          41
+        ],
+        [
+          "rgb(0, 0, 238)",
+          25
+        ],
+        [
+          "rgb(219, 83, 49)",
+          11
+        ],
+        [
+          "rgb(244, 201, 21)",
+          6
+        ]
+      ],
+      "fontFamilies": [
+        [
+          "\"Hiragino Kaku Gothic ProN\", \"Hiragino Sans\", 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+          272
+        ],
+        [
+          "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+          154
+        ],
+        [
+          "Riviera, sans-serif",
+          52
+        ]
+      ],
+      "heroImages": [
+        {
+          "tag": "DIV",
+          "w": 500,
+          "h": 109,
+          "top": 1292,
+          "src": "url(\"https://green-spoon.jp/images/release/maindish/slide_1.png\")"
+        },
+        {
+          "tag": "DIV",
+          "w": 500,
+          "h": 109,
+          "top": 1413,
+          "src": "url(\"https://green-spoon.jp/images/release/maindish/slide_2.png\")"
+        },
+        {
+          "tag": "IMG",
+          "w": 500,
+          "h": 60,
+          "top": 1495,
+          "src": "https://green-spoon.jp/images/release/maindish/statement_top.svg"
+        }
+      ],
+      "sections": [
+        {
+          "cls": "newRelease",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgb(191, 47, 84)",
+          "h": 800
+        },
+        {
+          "cls": "allRecipes",
+          "pt": "40px",
+          "pb": "40px",
+          "bg": "rgb(248, 247, 238)",
+          "h": 444
+        },
+        {
+          "cls": "statement js-scrollspy",
+          "pt": "32px",
+          "pb": "32px",
+          "bg": "rgb(219, 83, 49)",
+          "h": 1692
+        },
+        {
+          "cls": "section js-scrollspy",
+          "pt": "80px",
+          "pb": "80px",
+          "bg": "rgb(248, 247, 238)",
+          "h": 1546
+        },
+        {
+          "cls": "section__content about",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1285
+        },
+        {
+          "cls": "section js-scrollspy",
+          "pt": "80px",
+          "pb": "80px",
+          "bg": "rgb(248, 247, 238)",
+          "h": 1760
+        }
+      ],
+      "docHeight": 15670,
+      "maxWidthCandidates": [
+        "1100px",
+        "475px",
+        "500px"
+      ]
+    }
+  },
+  "greenspoon-deli": {
+    "url": "https://green-spoon.jp/release/deli-bento",
+    "styles": {
+      "title": "まるでデリカテッセンのような冷凍弁当「DELI BENTO」｜GREEN SPOON | GREEN SPOON（グリーンスプーン）",
+      "bodyFont": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+      "bodyFontSize": "16px",
+      "bodyColor": "rgb(31, 31, 31)",
+      "bodyBg": "rgb(251, 251, 246)",
+      "bodyLineHeight": "normal",
+      "h1": {
+        "sel": "h1",
+        "text": "",
+        "fontFamily": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "28px",
+        "fontWeight": "400",
+        "lineHeight": "normal",
+        "letterSpacing": "normal",
+        "color": "rgb(232, 221, 175)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2": {
+        "sel": "h2",
+        "text": "Forest\nKitchen",
+        "fontFamily": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "40px",
+        "fontWeight": "400",
+        "lineHeight": "48px",
+        "letterSpacing": "normal",
+        "color": "rgb(244, 201, 21)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h3": {
+        "sel": "h3",
+        "text": "MAIN",
+        "fontFamily": "futura-pt-bold, sans-serif",
+        "fontSize": "74px",
+        "fontWeight": "700",
+        "lineHeight": "81.4px",
+        "letterSpacing": "normal",
+        "color": "rgb(232, 221, 175)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "p": {
+        "sel": "p",
+        "text": "10.07\n                水",
+        "fontFamily": "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+        "fontSize": "13px",
+        "fontWeight": "400",
+        "lineHeight": "13px",
+        "letterSpacing": "normal",
+        "color": "rgb(244, 201, 21)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2list": [
+        "Forest Kitchen",
+        "DELI BENTO",
+        "WHAT IS A DELI BENTO",
+        "",
+        "POP-UP EVENT"
+      ],
+      "buttons": [
+        {
+          "text": "次回お届けに追加する",
+          "bg": "rgb(255, 250, 212)",
+          "color": "rgb(0, 0, 0)",
+          "radius": "139986px",
+          "fontSize": "14px",
+          "fontWeight": "700",
+          "w": 311,
+          "h": 56
+        },
+        {
+          "text": "イベントは終了しました",
+          "bg": "rgb(37, 37, 37)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "139986px",
+          "fontSize": "14px",
+          "fontWeight": "700",
+          "w": 269,
+          "h": 56
+        }
+      ],
+      "bgColorsByArea": [
+        [
+          "rgb(251, 251, 246)",
+          3946
+        ],
+        [
+          "rgb(0, 0, 0)",
+          1880
+        ],
+        [
+          "rgb(232, 221, 175)",
+          242
+        ],
+        [
+          "rgb(38, 44, 40)",
+          163
+        ],
+        [
+          "rgb(255, 250, 212)",
+          2
+        ],
+        [
+          "rgb(18, 113, 75)",
+          2
+        ],
+        [
+          "rgb(37, 37, 37)",
+          2
+        ]
+      ],
+      "textColors": [
+        [
+          "rgb(37, 37, 37)",
+          82
+        ],
+        [
+          "rgb(232, 221, 175)",
+          64
+        ],
+        [
+          "rgb(255, 255, 255)",
+          24
+        ],
+        [
+          "rgb(244, 201, 21)",
+          6
+        ],
+        [
+          "rgb(0, 0, 0)",
+          5
+        ],
+        [
+          "rgb(236, 223, 182)",
+          3
+        ],
+        [
+          "rgb(181, 172, 137)",
+          1
+        ],
+        [
+          "rgb(255, 250, 212)",
+          1
+        ]
+      ],
+      "fontFamilies": [
+        [
+          "Riviera, 游ゴシック体, YuGothic, \"游ゴシック Medium\", \"Yu Gothic Medium\", 游ゴシック, sans-serif",
+          505
+        ],
+        [
+          "futura-pt-bold, sans-serif",
+          22
+        ]
+      ],
+      "heroImages": [
+        {
+          "tag": "VIDEO",
+          "w": 1280,
+          "h": 800,
+          "top": 0,
+          "src": "https://green-spoon.jp/images/release/deli-bento-teaser/edit04_pc.webm"
+        },
+        {
+          "tag": "IMG",
+          "w": 600,
+          "h": 224,
+          "top": 526,
+          "src": "https://green-spoon.jp/images/release/deli-bento-teaser/logo_cover.svg"
+        }
+      ],
+      "h1Box": {
+        "top": 631,
+        "w": 375,
+        "h": 108
+      },
+      "sections": [
+        {
+          "cls": "newRelease",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgb(191, 47, 84)",
+          "h": 0
+        },
+        {
+          "cls": "introduction js-introduction js-root-ove",
+          "pt": "64px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 3145
+        },
+        {
+          "cls": "about js-about",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 2800
+        },
+        {
+          "cls": "about__section",
+          "pt": "32px",
+          "pb": "32px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 800
+        },
+        {
+          "cls": "bento-component bento-components__compon",
+          "pt": "64px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 800
+        },
+        {
+          "cls": "bento-component bento-components__compon",
+          "pt": "64px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 800
+        }
+      ],
+      "docHeight": 15415,
+      "maxWidthCandidates": [
+        "1100px"
+      ]
+    }
+  },
+  "qrio": {
+    "url": "https://iot.sonynetwork.co.jp/service/qrio/smartlock.html",
+    "styles": {
+      "title": "Qrio Lock（キュリオロック）- カギが自由になる生活。| Qrio（キュリオ） | IoTサービス | ソニーネットワークコミュニケーションズ",
+      "bodyFont": "メイリオ, Meiryo, 游ゴシック, YuGothic, \"ヒラギノ角ゴ ProN W3\", \"Hiragino Kaku Gothic ProN\", sans-serif",
+      "bodyFontSize": "16px",
+      "bodyColor": "rgb(0, 0, 0)",
+      "bodyBg": "rgb(255, 255, 255)",
+      "bodyLineHeight": "25.6px",
+      "h1": {
+        "sel": "h1",
+        "text": "",
+        "fontFamily": "FrutigerLTW01-45Light, \"Open Sans\", \"Noto Sans Japanese\", \"ヒラギノ角ゴ Pro W3\", \"Hiragino Kaku Gothic Pro\", メイリオ, Meiryo, Osaka, \"ＭＳ Ｐゴシック\", \"MS PGothic\", sans-serif",
+        "fontSize": "15px",
+        "fontWeight": "400",
+        "lineHeight": "27px",
+        "letterSpacing": "normal",
+        "color": "rgb(58, 68, 76)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2": {
+        "sel": "h2",
+        "text": "",
+        "fontFamily": "FrutigerLTW01-45Light, \"Open Sans\", \"Noto Sans Japanese\", \"ヒラギノ角ゴ Pro W3\", \"Hiragino Kaku Gothic Pro\", メイリオ, Meiryo, Osaka, \"ＭＳ Ｐゴシック\", \"MS PGothic\", sans-serif",
+        "fontSize": "22.5px",
+        "fontWeight": "400",
+        "lineHeight": "40.5px",
+        "letterSpacing": "normal",
+        "color": "rgb(58, 68, 76)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h3": {
+        "sel": "h3",
+        "text": "ライフスタイルが、\nもっと自由になるスマートロック。",
+        "fontFamily": "FrutigerLTW01-45Light, \"Open Sans\", \"Noto Sans Japanese\", \"ヒラギノ角ゴ Pro W3\", \"Hiragino Kaku Gothic Pro\", メイリオ, Meiryo, Osaka, \"ＭＳ Ｐゴシック\", \"MS PGothic\", sans-serif",
+        "fontSize": "40px",
+        "fontWeight": "300",
+        "lineHeight": "64px",
+        "letterSpacing": "normal",
+        "color": "rgb(58, 68, 76)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "p": {
+        "sel": "p",
+        "text": "",
+        "fontFamily": "メイリオ, Meiryo, 游ゴシック, YuGothic, \"ヒラギノ角ゴ ProN W3\", \"Hiragino Kaku Gothic ProN\", sans-serif",
+        "fontSize": "16px",
+        "fontWeight": "400",
+        "lineHeight": "0px",
+        "letterSpacing": "normal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2list": [
+        "",
+        "お問い合わせ",
+        "ソニーのIoTサービス"
+      ],
+      "buttons": [],
+      "bgColorsByArea": [
+        [
+          "rgb(255, 255, 255)",
+          1502
+        ],
+        [
+          "rgb(242, 242, 242)",
+          136
+        ],
+        [
+          "rgb(51, 51, 51)",
+          96
+        ],
+        [
+          "rgb(0, 0, 0)",
+          95
+        ],
+        [
+          "rgb(208, 208, 208)",
+          92
+        ],
+        [
+          "rgb(85, 85, 85)",
+          56
+        ],
+        [
+          "rgb(201, 67, 60)",
+          6
+        ]
+      ],
+      "textColors": [
+        [
+          "rgb(255, 255, 255)",
+          50
+        ],
+        [
+          "rgb(0, 0, 0)",
+          37
+        ],
+        [
+          "rgb(0, 0, 238)",
+          20
+        ],
+        [
+          "rgb(58, 68, 76)",
+          12
+        ],
+        [
+          "rgb(51, 51, 51)",
+          9
+        ],
+        [
+          "rgb(231, 231, 231)",
+          8
+        ],
+        [
+          "rgb(180, 180, 180)",
+          7
+        ],
+        [
+          "rgb(200, 200, 200)",
+          5
+        ]
+      ],
+      "fontFamilies": [
+        [
+          "メイリオ, Meiryo, 游ゴシック, YuGothic, \"ヒラギノ角ゴ ProN W3\", \"Hiragino Kaku Gothic ProN\", sans-serif",
+          179
+        ],
+        [
+          "FrutigerLTW01-45Light, \"Open Sans\", \"Noto Sans Japanese\", \"ヒラギノ角ゴ Pro W3\", \"Hiragino Kaku Gothic Pro\", メイリオ, Meiryo, Osaka, \"ＭＳ Ｐゴシック\", \"MS PGothic\", sans-serif",
+          95
+        ]
+      ],
+      "heroImages": [
+        {
+          "tag": "VIDEO",
+          "w": 1280,
+          "h": 650,
+          "top": 228,
+          "src": "https://iot.sonynetwork.co.jp/service/qrio/assets/movies/q-sl2/top_mv.mp4"
+        },
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 450,
+          "top": 878,
+          "src": "https://iot.sonynetwork.co.jp/service/qrio/assets/images/q-sl2/index/movie_thumb.jpg"
+        }
+      ],
+      "h1Box": {
+        "top": 139,
+        "w": 120,
+        "h": 24
+      },
+      "sections": [],
+      "docHeight": 6627,
+      "maxWidthCandidates": [
+        "1100px",
+        "100%",
+        "1440px",
+        "1200px"
+      ]
+    }
+  },
+  "monf": {
+    "url": "https://monf.jp/",
+    "styles": {
+      "title": "モンブラン | 福岡のブランディング × ホームページ制作",
+      "bodyFont": "\"Noto Sans JP\", \"Helvetica Neue\", Helvetica, \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", Arial, \"Yu Gothic\", Meiryo, sans-serif",
+      "bodyFontSize": "10px",
+      "bodyColor": "rgb(0, 0, 0)",
+      "bodyBg": "rgba(0, 0, 0, 0)",
+      "bodyLineHeight": "10px",
+      "h1": {
+        "sel": "h1",
+        "text": "",
+        "fontFamily": "\"Noto Sans JP\", \"Helvetica Neue\", Helvetica, \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", Arial, \"Yu Gothic\", Meiryo, sans-serif",
+        "fontSize": "10px",
+        "fontWeight": "400",
+        "lineHeight": "10px",
+        "letterSpacing": "normal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2": {
+        "sel": "h2",
+        "text": "BOOKS & AWARDS",
+        "fontFamily": "MONBRANFONT",
+        "fontSize": "26px",
+        "fontWeight": "400",
+        "lineHeight": "26px",
+        "letterSpacing": "1.04px",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h3": {
+        "sel": "h3",
+        "text": "うおみこども園",
+        "fontFamily": "\"Noto Sans JP\", \"Helvetica Neue\", Helvetica, \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", Arial, \"Yu Gothic\", Meiryo, sans-serif",
+        "fontSize": "16px",
+        "fontWeight": "700",
+        "lineHeight": "16px",
+        "letterSpacing": "normal",
+        "color": "rgb(255, 255, 255)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "p": {
+        "sel": "p",
+        "text": "",
+        "fontFamily": "\"Noto Sans JP\", \"Helvetica Neue\", Helvetica, \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", Arial, \"Yu Gothic\", Meiryo, sans-serif",
+        "fontSize": "10px",
+        "fontWeight": "400",
+        "lineHeight": "10px",
+        "letterSpacing": "normal",
+        "color": "rgb(0, 0, 0)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2list": [
+        "BOOKS & AWARDS",
+        "ブランディング実績",
+        "クリエイティブ実績",
+        "",
+        "SNSみたいなモンブランの動画",
+        "BLOG 10",
+        "NEWS 29",
+        "SEO 5",
+        "はるかの 営業日報",
+        "ブランディング はじめてばこ",
+        "モンブー＆ラン",
+        "お問い合わせ",
+        "",
+        ""
+      ],
+      "buttons": [
+        {
+          "text": "TOP",
+          "bg": "rgb(255, 255, 255)",
+          "color": "rgb(0, 0, 0)",
+          "radius": "50%",
+          "fontSize": "10px",
+          "fontWeight": "400",
+          "w": 148,
+          "h": 100
+        }
+      ],
+      "bgColorsByArea": [
+        [
+          "rgb(255, 255, 255)",
+          477
+        ],
+        [
+          "rgb(247, 247, 247)",
+          476
+        ],
+        [
+          "rgb(59, 67, 82)",
+          353
+        ],
+        [
+          "rgb(255, 130, 123)",
+          296
+        ],
+        [
+          "rgb(255, 212, 71)",
+          289
+        ],
+        [
+          "rgb(118, 214, 229)",
+          201
+        ],
+        [
+          "rgb(0, 198, 162)",
+          166
+        ],
+        [
+          "rgb(0, 103, 206)",
+          153
+        ],
+        [
+          "rgb(222, 212, 185)",
+          141
+        ],
+        [
+          "rgb(27, 173, 231)",
+          135
+        ]
+      ],
+      "textColors": [
+        [
+          "rgb(0, 0, 0)",
+          769
+        ],
+        [
+          "rgb(255, 255, 255)",
+          554
+        ],
+        [
+          "rgb(255, 212, 0)",
+          20
+        ],
+        [
+          "rgb(255, 145, 0)",
+          20
+        ],
+        [
+          "rgb(186, 186, 186)",
+          14
+        ],
+        [
+          "rgb(255, 45, 100)",
+          11
+        ],
+        [
+          "rgb(165, 165, 165)",
+          8
+        ],
+        [
+          "rgb(105, 105, 105)",
+          6
+        ]
+      ],
+      "fontFamilies": [
+        [
+          "\"Noto Sans JP\", \"Helvetica Neue\", Helvetica, \"Hiragino Sans\", \"Hiragino Kaku Gothic ProN\", Arial, \"Yu Gothic\", Meiryo, sans-serif",
+          2282
+        ],
+        [
+          "Outfit, sans-serif",
+          124
+        ],
+        [
+          "MONBRANFONT",
+          67
+        ]
+      ],
+      "heroImages": [
+        {
+          "tag": "PICTURE",
+          "w": 792,
+          "h": 15,
+          "top": 689,
+          "src": "none"
+        },
+        {
+          "tag": "IMG",
+          "w": 792,
+          "h": 354,
+          "top": 692,
+          "src": "https://monf.jp/assets/image/common/sitemap/monboo.png"
+        },
+        {
+          "tag": "IMG",
+          "w": 1230,
+          "h": 810,
+          "top": -7,
+          "src": "https://monf.jp/assets/image/home/mv-real.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1230,
+          "h": 810,
+          "top": -7,
+          "src": "https://monf.jp/assets/image/home/mv-manga.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1230,
+          "h": 815,
+          "top": -7,
+          "src": "https://monf.jp/assets/image/home/mv-bg-monboo.png"
+        }
+      ],
+      "h1Box": {
+        "top": 29,
+        "w": 280,
+        "h": 47
+      },
+      "sections": [
+        {
+          "cls": "t-home-books",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1501
+        },
+        {
+          "cls": "t-home-concept",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1062
+        },
+        {
+          "cls": "t-home-fukuonsei",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1187
+        },
+        {
+          "cls": "t-home-works -section-branding",
+          "pt": "185px",
+          "pb": "205px",
+          "bg": "rgb(59, 67, 82)",
+          "h": 1779
+        },
+        {
+          "cls": "t-home-works -section-creative",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1423
+        },
+        {
+          "cls": "t-home-about",
+          "pt": "350px",
+          "pb": "100px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 1339
+        }
+      ],
+      "docHeight": 23609,
+      "maxWidthCandidates": [
+        "1360px",
+        "1100px",
+        "330px",
+        "100%"
+      ]
+    }
+  },
+  "homelink": {
+    "url": "https://home-link.jp/",
+    "styles": {
+      "title": "HOME LINK",
+      "bodyFont": "\"Noto Sans JP\", sans-serif",
+      "bodyFontSize": "15.552px",
+      "bodyColor": "rgb(51, 51, 51)",
+      "bodyBg": "rgb(255, 255, 255)",
+      "bodyLineHeight": "22.5504px",
+      "h1": null,
+      "h2": {
+        "sel": "h2",
+        "text": "暮らしを支える、5つのサービス",
+        "fontFamily": "\"Noto Sans JP\", sans-serif",
+        "fontSize": "41.472px",
+        "fontWeight": "900",
+        "lineHeight": "60.1344px",
+        "letterSpacing": "normal",
+        "color": "rgb(0, 94, 80)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h3": {
+        "sel": "h3",
+        "text": "届いた瞬間から、守られている。",
+        "fontFamily": "\"Noto Sans JP\", sans-serif",
+        "fontSize": "41.472px",
+        "fontWeight": "900",
+        "lineHeight": "60.1344px",
+        "letterSpacing": "normal",
+        "color": "rgb(0, 94, 80)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "p": {
+        "sel": "p",
+        "text": "家族の毎日に起こりやすい“困りごと”を\n広く・やさしくカバーします。",
+        "fontFamily": "\"Noto Sans JP\", sans-serif",
+        "fontSize": "20.736px",
+        "fontWeight": "900",
+        "lineHeight": "34.2144px",
+        "letterSpacing": "normal",
+        "color": "rgb(51, 51, 51)",
+        "bg": "rgba(0, 0, 0, 0)"
+      },
+      "h2list": [
+        "暮らしを支える、5つのサービス",
+        "置き配保険",
+        "ライフコストコンシェルジュ",
+        "Wi-Fi接続機器補償",
+        "家電保証",
+        "クマモリ （広告ブロック）",
+        "守られている安心は、想像以上に心地いい。",
+        "よくあるご質問"
+      ],
+      "buttons": [
+        {
+          "text": "会員ログイン",
+          "bg": "rgb(255, 255, 255)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "6.912px",
+          "fontSize": "15.552px",
+          "fontWeight": "700",
+          "w": 132,
+          "h": 44
+        },
+        {
+          "text": "お申し込みはこちら",
+          "bg": "rgb(237, 96, 88)",
+          "color": "rgb(255, 255, 255)",
+          "radius": "6.912px",
+          "fontSize": "15.552px",
+          "fontWeight": "700",
+          "w": 276,
+          "h": 60
+        },
+        {
+          "text": "Q. サービスを利用したいけど「紹介コード」ってなに？",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        },
+        {
+          "text": "Q. 最大2ヶ月無料は本当？",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        },
+        {
+          "text": "Q. 決済方法はなにがありますか？",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        },
+        {
+          "text": "Q. サービス詳細が知りたい",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        },
+        {
+          "text": "Q. キャッシュバックがあると言われたんだけどどうしたらいい",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        },
+        {
+          "text": "Q. 紹介コードを貰った代理店がわからない、忘れた",
+          "bg": "rgb(249, 251, 221)",
+          "color": "rgb(0, 94, 80)",
+          "radius": "0px",
+          "fontSize": "20.736px",
+          "fontWeight": "700",
+          "w": 800,
+          "h": 98
+        }
+      ],
+      "bgColorsByArea": [
+        [
+          "rgb(255, 255, 255)",
+          1208
+        ],
+        [
+          "rgb(249, 251, 221)",
+          208
+        ],
+        [
+          "rgba(255, 255, 255, 0.6)",
+          16
+        ],
+        [
+          "rgb(237, 96, 88)",
+          4
+        ],
+        [
+          "rgb(0, 94, 80)",
+          3
+        ]
+      ],
+      "textColors": [
+        [
+          "rgb(0, 94, 80)",
+          59
+        ],
+        [
+          "rgb(51, 51, 51)",
+          20
+        ],
+        [
+          "rgb(255, 255, 255)",
+          6
+        ],
+        [
+          "rgb(198, 0, 0)",
+          2
+        ],
+        [
+          "rgb(102, 102, 102)",
+          1
+        ]
+      ],
+      "fontFamilies": [
+        [
+          "\"Noto Sans JP\", sans-serif",
+          152
+        ],
+        [
+          "Arial",
+          13
+        ]
+      ],
+      "heroImages": [
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 622,
+          "top": 80,
+          "src": "https://home-link.jp/assets/img/top/img_hero4.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 622,
+          "top": 80,
+          "src": "https://home-link.jp/assets/img/top/img_hero1.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 622,
+          "top": 80,
+          "src": "https://home-link.jp/assets/img/top/img_hero2.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 622,
+          "top": 80,
+          "src": "https://home-link.jp/assets/img/top/img_hero3.jpg"
+        },
+        {
+          "tag": "IMG",
+          "w": 1280,
+          "h": 622,
+          "top": 80,
+          "src": "https://home-link.jp/assets/img/top/img_hero4.jpg"
+        }
+      ],
+      "sections": [
+        {
+          "cls": "p-section-intro container animate fadeIn",
+          "pt": "0px",
+          "pb": "0px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 614
+        },
+        {
+          "cls": "p-section-service-index animate fadeIn i",
+          "pt": "103.68px",
+          "pb": "103.68px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 779
+        },
+        {
+          "cls": "p-section-service-block animate fadeIn i",
+          "pt": "0px",
+          "pb": "86.4px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 822
+        },
+        {
+          "cls": "p-section-service-block animate fadeIn i",
+          "pt": "0px",
+          "pb": "86.4px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 840
+        },
+        {
+          "cls": "p-section-service-block animate fadeIn i",
+          "pt": "0px",
+          "pb": "86.4px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 882
+        },
+        {
+          "cls": "p-section-service-block animate fadeIn i",
+          "pt": "0px",
+          "pb": "86.4px",
+          "bg": "rgba(0, 0, 0, 0)",
+          "h": 815
+        }
+      ],
+      "docHeight": 9275,
+      "maxWidthCandidates": [
+        "1440px",
+        "1420px",
+        "1220px",
+        "800px"
+      ]
+    }
+  }
+}

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="jp">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>お問い合わせ | HOME LINK</title>
+  <meta name="robots" content="index,follow">
+  <meta name="description" content="HOME LINKへのお問い合わせはこちらから。サービスに関するご質問、紹介コードの発行依頼、解約のお問い合わせなど、お気軽にご連絡ください。">
+
+  <!-- favicon -->
+  <link rel="icon" href="./assets/img/favicon/favicon.ico" sizes="any">
+  <link rel="icon" href="./assets/img/favicon/favicon.svg" type="image/svg+xml">
+  <link rel="icon" type="image/png" href="./assets/img/favicon/favicon-32x32.png" sizes="32x32">
+  <link rel="apple-touch-icon" sizes="180x180" href="./assets/img/favicon/apple-touch-icon.png">
+  <link rel="manifest" href="./assets/img/favicon/site.webmanifest">
+  <meta name="theme-color" content="#ffffff">
+
+  <!-- stylesheet -->
+  <link rel="stylesheet" type="text/css" href="./assets/css/style.css?v=202606041009" media="all">
+
+  <!-- javascript -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+
+  <style>
+    /* お問い合わせフォーム専用スタイル */
+    .p-contact-form {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 40px 20px 60px;
+    }
+    .p-contact-form .lead {
+      margin-bottom: 36px;
+      line-height: 1.8;
+      font-size: 15px;
+      color: #333;
+    }
+    .p-contact-form .form-group {
+      margin-bottom: 24px;
+    }
+    .p-contact-form label.field-label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: #1a3d2e;
+      font-size: 14px;
+      white-space: normal;
+    }
+    .p-contact-form label.field-label .required {
+      display: inline-block;
+      background: #c0392b;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin-left: 8px;
+      vertical-align: middle;
+      font-weight: 500;
+    }
+    .p-contact-form label.field-label .optional {
+      display: inline-block;
+      background: #bbb;
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 3px;
+      margin-left: 8px;
+      vertical-align: middle;
+      font-weight: 500;
+    }
+    .p-contact-form input[type="text"],
+    .p-contact-form input[type="email"],
+    .p-contact-form input[type="tel"],
+    .p-contact-form select,
+    .p-contact-form textarea {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 15px;
+      border: 1px solid #d0d6d2;
+      border-radius: 6px;
+      background: #fff;
+      font-family: inherit;
+      box-sizing: border-box;
+      transition: border-color 0.2s;
+    }
+    .p-contact-form input[type="text"]:focus,
+    .p-contact-form input[type="email"]:focus,
+    .p-contact-form input[type="tel"]:focus,
+    .p-contact-form select:focus,
+    .p-contact-form textarea:focus {
+      outline: none;
+      border-color: #2b8a6c;
+      box-shadow: 0 0 0 3px rgba(43, 138, 108, 0.12);
+    }
+    .p-contact-form textarea {
+      resize: vertical;
+      min-height: 160px;
+      line-height: 1.7;
+    }
+    .p-contact-form .consent {
+      background: #f5f7f6;
+      padding: 16px 20px;
+      border-radius: 6px;
+      margin: 24px 0 32px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .p-contact-form .consent a {
+      color: #2b8a6c;
+      text-decoration: underline;
+    }
+    .p-contact-form .consent label {
+      display: block;
+      margin-top: 10px;
+      font-weight: 500;
+      white-space: normal;
+      cursor: pointer;
+    }
+    .p-contact-form .consent input[type="checkbox"] {
+      margin-right: 6px;
+      transform: translateY(1px);
+    }
+    .p-contact-form .submit-wrap {
+      text-align: center;
+      margin-top: 32px;
+    }
+    .p-contact-form .submit-btn {
+      display: inline-block;
+      background: #2b8a6c;
+      color: #fff;
+      border: none;
+      padding: 16px 48px;
+      font-size: 16px;
+      font-weight: 600;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-family: inherit;
+    }
+    .p-contact-form .submit-btn:hover {
+      background: #1f6b53;
+    }
+    .p-contact-form .submit-btn:active {
+      transform: scale(0.98);
+    }
+    .p-contact-form .submit-btn:disabled {
+      background: #bbb;
+      cursor: not-allowed;
+    }
+    .p-contact-form .error-msg {
+      color: #c0392b;
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .p-contact-form .hp-field {
+      position: absolute;
+      left: -9999px;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+    }
+    .p-contact-form h1 {
+      text-align: center;
+      font-size: 28px;
+      color: #1a3d2e;
+      margin-bottom: 8px;
+      letter-spacing: 0.05em;
+    }
+    .p-contact-form .subtitle {
+      text-align: center;
+      color: #6b7e74;
+      font-size: 14px;
+      letter-spacing: 0.1em;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 768px) {
+      .p-contact-form {
+        padding: 24px 16px 48px;
+      }
+      .p-contact-form h1 {
+        font-size: 22px;
+      }
+    }
+  </style>
+</head>
+<body class="page-sub page-contact">
+  <header class="l-header">
+    <div class="p-header">
+      <div class="p-header__logo">
+        <a href="/"><img src="./assets/img/common/logo.svg" alt="HOME LINK"></a>
+      </div>
+      <nav class="p-header__navi">
+        <a href="/#service-index">サービス概要</a>
+        <a href="/#qa">FAQ</a>
+        <a class="show-mobile" href="/privacy_policy">プライバシーポリシー</a>
+        <a class="show-mobile" href="/legal_notice">特定商取引に基づく表示</a>
+        <a href="https://wst-corp.jp/" target="_blank">会社情報</a>
+        <a class="hide-mobile c-button" href="/member/login">会員ログイン</a>
+      </nav>
+      <div class="p-menu-btn">
+        <span class="l1"></span>
+        <span class="l2"></span>
+        <span class="l3"></span>
+      </div>
+    </div>
+  </header>
+
+  <main class="l-main">
+    <section class="p-contact-form animate fadeIn">
+      <h1>お問い合わせ</h1>
+      <p class="subtitle">CONTACT</p>
+
+      <p class="lead">
+        HOME LINKに関するお問い合わせは下記フォームよりお寄せください。<br>
+        ご入力いただいた内容を確認の上、3営業日以内にご登録いただきましたメールアドレスへ返信いたします。<br>
+        ※迷惑メール設定をされている方は、@home-link.jp ドメインの受信許可設定をお願いいたします。
+      </p>
+
+      <form id="contactForm" novalidate>
+        <!-- ハニーポット（スパムbot対策） -->
+        <div class="hp-field" aria-hidden="true">
+          <label for="hp_website">Website (do not fill)</label>
+          <input type="text" name="hp_website" id="hp_website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="name">お名前<span class="required">必須</span></label>
+          <input type="text" id="name" name="name" required maxlength="100" placeholder="例：山田 太郎">
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="email">メールアドレス<span class="required">必須</span></label>
+          <input type="email" id="email" name="email" required maxlength="200" placeholder="例：example@example.com">
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="phone">電話番号<span class="optional">任意</span></label>
+          <input type="tel" id="phone" name="phone" maxlength="20" placeholder="例：090-1234-5678">
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="category">お問い合わせ種別<span class="required">必須</span></label>
+          <select id="category" name="category" required>
+            <option value="">選択してください</option>
+            <option value="サービスについて">サービスについて</option>
+            <option value="紹介コードの発行依頼">紹介コードの発行依頼</option>
+            <option value="紹介コードを忘れた・分からない">紹介コードを忘れた・分からない</option>
+            <option value="解約について">解約について</option>
+            <option value="返金について">返金について</option>
+            <option value="お申し込み内容の確認">お申し込み内容の確認</option>
+            <option value="迷惑メール対策の解除依頼">迷惑メール対策の解除依頼</option>
+            <option value="その他">その他</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="field-label" for="message">お問い合わせ内容<span class="required">必須</span></label>
+          <textarea id="message" name="message" required maxlength="3000" placeholder="お問い合わせ内容をご記入ください"></textarea>
+        </div>
+
+        <div class="consent">
+          ご入力いただいた個人情報は、お問い合わせへの対応のみに使用し、それ以外の目的には使用いたしません。詳しくは<a href="/privacy_policy" target="_blank" rel="noopener">プライバシーポリシー</a>をご確認ください。
+          <label>
+            <input type="checkbox" id="agree" name="agree" required>
+            プライバシーポリシーに同意する
+          </label>
+        </div>
+
+        <div class="submit-wrap">
+          <button type="submit" class="submit-btn" id="submitBtn" disabled>送信する</button>
+        </div>
+      </form>
+    </section>
+  </main>
+
+  <footer class="l-footer p-footer animate fadeIn">
+    <div class="container">
+      <div class="p-footer__logo">
+        <img src="./assets/img/common/logo.svg" alt="HOME LINK">
+      </div>
+      <nav class="p-footer__navi">
+        <a href="/privacy_policy">プライバシーポリシー</a>
+        <a href="/legal_notice">特定商取引に基づく表示</a>
+        <a href="https://wst-corp.jp/" target="_blank">会社情報</a>
+      </nav>
+    </div>
+    <div class="p-footer__copyright">
+      <span>© 2026 HOME LINK All rights reserved.</span>
+    </div>
+  </footer>
+
+  <script src="/assets/js/entry_ctx.js"></script>
+  <script src="/assets/js/contact_prefill.js"></script>
+  <script>
+    // 同意チェックで送信ボタンを有効/無効切り替え
+    var agreeEl = document.getElementById('agree');
+    var submitEl = document.getElementById('submitBtn');
+    agreeEl.addEventListener('change', function(){ submitEl.disabled = !agreeEl.checked; });
+
+    // バリデーション + fetch('/api/inquiry') で送信 (F5)
+    document.getElementById('contactForm').addEventListener('submit', function(e){
+      e.preventDefault();
+      var btn = document.getElementById('submitBtn');
+      var name = document.getElementById('name').value.trim();
+      var email = document.getElementById('email').value.trim();
+      var phone = document.getElementById('phone').value.trim();
+      var category = document.getElementById('category').value;
+      var message = document.getElementById('message').value.trim();
+      var agree = document.getElementById('agree').checked;
+      var hp = document.getElementById('hp_website').value.trim();
+      var emailRe = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+
+      if (!name || !email || !category || !message) {
+        alert('必須項目を入力してください。');
+        return;
+      }
+      if (!emailRe.test(email)) {
+        alert('メールアドレスの形式が正しくありません。');
+        return;
+      }
+      if (!agree) {
+        alert('プライバシーポリシーへの同意が必要です。');
+        return;
+      }
+      btn.disabled = true;
+      btn.textContent = '送信中...';
+      fetch('/api/inquiry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, email: email, phone: phone, category: category, message: message, hp_website: hp })
+      })
+      .then(function(res) {
+        if (!res.ok) throw new Error('送信失敗');
+        return res.json();
+      })
+      .then(function() {
+        window.location.href = '/thanks';
+      })
+      .catch(function() {
+        alert('送信に失敗しました。しばらく後にお試しください。');
+        btn.disabled = !agreeEl.checked;
+        btn.textContent = '送信する';
+      });
+    });
+  </script>
+</body>
+<script src="./assets/js/common.js"></script>
+<script src="./assets/js/in-view.min.js"></script>
+</html>

@@ -1,0 +1,21 @@
+# home-link.jp トップページのリンク一覧（2026-10-08 取得）
+
+## ヘッダー / ナビ
+/                 （ロゴ）
+#service-index    サービス概要
+#qa               FAQ
+/privacy_policy   プライバシーポリシー
+/legal_notice     特定商取引に基づく表示
+https://wst-corp.jp/   会社情報（運営：株式会社WST）
+/member/login     会員ログイン
+/member/signup    お申し込みはこちら
+/contact          お問い合わせはこちら
+
+## フッター
+/privacy_policy   プライバシーポリシー
+/legal_notice     特定商取引に基づく表示
+https://wst-corp.jp/   会社情報
+
+## 備考
+- 利用規約・料金ページへの独立リンクはトップには無い（料金はトップ内セクション、規約は申込フロー側と思われる）
+- 保存済み配下ページ: homelink-privacy.html / homelink-legal.html / homelink-contact.html / homelink-signup.html / homelink-login.html
