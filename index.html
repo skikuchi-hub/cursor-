@@ -319,6 +319,7 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .panel2 .opt:disabled{opacity:.45}
 .sc .acts button:disabled{opacity:.4}
 .sc .recv{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px}
+.sc .recv.ghost{background:var(--surface);color:var(--ink-2);border:1.5px solid var(--line-2)}
 .sc .rank{display:flex;gap:10px;align-items:stretch;margin-top:9px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;background:var(--surface-2)}
 .sc .rank .rk{flex:none;width:58px;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface-sunk);color:var(--ink-2);padding:4px 0}
 .sc .rank .rk b{font-size:24px;line-height:1.15;font-family:var(--fs-display),-apple-system,sans-serif}
@@ -2414,6 +2415,7 @@ const MACHINES = ["4人機用","カリーノ用"];
 function srcDecision(key){ return (Store.data.sourcing||[]).find(d=>d.id===key || d.key===key) || null; }
 function srcState(it){
   const d = srcDecision(it.key);
+  if (/発注済/.test(it.status||"") && d && d.cancelledAt) return "cancelled";
   if (/発注済/.test(it.status||"") && d && d.receivedAt) return "received";
   if (/発注済/.test(it.status||"")) return "done";
   if (/下書き作成/.test(it.status||"")) return "drafted";
@@ -2425,7 +2427,7 @@ function srcState(it){
   return "todo";
 }
 const srcMissing = it => !it.name || !(it.qty>0) || !(it.price>0);     // メールから読み取れていない（発注できない）
-const SRC_LABEL = {check:"要確認", todo:"未判断", order:"発注予定", hold:"保留", skip:"見送り", requested:"要求中", drafted:"下書き済", done:"発注済", received:"受取済"};
+const SRC_LABEL = {check:"要確認", todo:"未判断", order:"発注予定", hold:"保留", skip:"見送り", requested:"要求中", drafted:"下書き済", done:"発注済", received:"受取済", cancelled:"キャンセル"};
 async function loadSourcing(force){
   if (!Store.online()) { renderSourcing(); return; }
   if (SRC.busy) return; SRC.busy=true;
@@ -2516,7 +2518,8 @@ function srcCard(it){
   if (it.check && /⚠|エラー/.test(it.check)) meta.push(`<span class="warn">${esc(it.check)}</span>`);
   const req = (st==="requested" && d) ? SRC.requests.find(r=>r.id===d.requestId) : null;
   let state="";
-  if (st==="done") state=`<div class="state done"><b>発注済</b>　${esc(it.status)}<div style="margin-top:8px"><button type="button" class="recv" data-recv="1">📦 受け取った</button></div></div>`;
+  if (st==="done") state=`<div class="state done"><b>発注済</b>　${esc(it.status)}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="recv" data-recv="1">📦 受け取った</button><button type="button" class="recv ghost" data-cancel="1">キャンセルした</button></div></div>`;
+  else if (st==="cancelled") state=`<div class="state bad"><b>キャンセル ${jpDate(d.cancelledAt)}</b>${d.cancelledBy?`　${esc(d.cancelledBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><br><span style="font-size:11px">景品マスタに入っている分は手で消してください。</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
   else if (st==="received") state=`<div class="state done"><b>受取済 ${jpDate(d.receivedAt)}</b>${d.receivedBy?`　${esc(d.receivedBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
   else if (st==="drafted") state=`<div class="state done"><b>Mail の下書き作成済み</b>　${esc(it.status)}<br>Mac で送信したら、スプシのメニュー「手動で送った→発注済みにして景品マスタへ登録」を実行。</div>`;
   else if (st==="requested") state=`<div class="state ${req&&req.state==="失敗"?"bad":""}"><b>発注要求 ${esc(d.requestId)}</b>　${req ? esc(req.state) : "確認中"}${req&&req.result?`<br>${esc(req.result)}`:""}${!req||req.state==="待機中"||req.state==="処理中(Mac)" ? "<br>Mac が 2 分以内に発注書と Mail の下書きを作ります。" : ""}</div>`;
@@ -2574,7 +2577,7 @@ function renderSourcing(){
   SRC.agg = null;
   const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
   const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
-  const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"],["received","受取済"]];
+  const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"],["received","受取済"],["cancelled","キャンセル"]];
   if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
   const shown = items.filter(it=>srcState(it)===SRC.filter);
@@ -2604,7 +2607,7 @@ async function srcSet(key, decision, extra){
     const r = await api("sourcingSet", Object.assign({key, decision}, extra||{}));
     Store.data.sourcing = (Store.data.sourcing||[]).filter(d=>d.id!==key && d.key!==key).concat(r.rec ? [Object.assign({id:key}, r.rec)] : []);
     const it = SRC.items.find(x=>x.key===key);
-    if (it && decision!=="received" && decision!=="unreceive"){ if (decision==="order"){ it.cases=num(extra.cases); if (extra.machine) it.machine=extra.machine; it.memo=extra.note||""; } else it.cases=null; }
+    if (it && decision!=="received" && decision!=="cancelled" && decision!=="unreceive"){ if (decision==="order"){ it.cases=num(extra.cases); if (extra.machine) it.machine=extra.machine; it.memo=extra.note||""; } else it.cases=null; }
     return true;
   } catch(e){ toast(errMsg(e)); return false; }
 }
@@ -2640,9 +2643,11 @@ function wireSourcing(){
       b.disabled=true; if (await srcSet(key, next)) { SRC.open[key]=null; toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました"); }
       renderSourcing(); return;
     }
-    if (b.dataset.recv || b.dataset.unrecv){
+    if (b.dataset.recv || b.dataset.unrecv || b.dataset.cancel){
+      if (b.dataset.cancel && !confirm(`「${it.name}」をキャンセル扱いにします。インフィニティへのキャンセル連絡は別途必要です。よろしいですか？`)) return;
       b.disabled=true;
-      if (await srcSet(key, b.dataset.recv ? "received" : "unreceive")) toast(b.dataset.recv ? "受取済みにしました" : "発注済に戻しました");
+      const dec = b.dataset.recv ? "received" : b.dataset.cancel ? "cancelled" : "unreceive";
+      if (await srcSet(key, dec)) toast(dec==="received" ? "受取済みにしました" : dec==="cancelled" ? "キャンセルにしました" : "発注済に戻しました");
       renderSourcing(); return;
     }
     if (b.dataset.sfix){ SRC.open[key]="fix"; SRC.fix[key]={name:it.name, code:it.code, qty:it.qty??"", price:it.price??""}; renderSourcing(); return; }

@@ -848,16 +848,18 @@ function exaRowByKey(sh, key) {
 /* 判断を保存。decision: skip（見送り）／hold（保留）／order（発注）／空（未判断に戻す） */
 function sourcingSet(me, key, decision, cases, machine, note) {
   key = clean(key); if (!key) throw new Error("商品キーがありません");
-  decision = clean(decision); if (["skip", "hold", "order", "received", "unreceive", ""].indexOf(decision) < 0) throw new Error("判断の値が不正です");
+  decision = clean(decision); if (["skip", "hold", "order", "received", "cancelled", "unreceive", ""].indexOf(decision) < 0) throw new Error("判断の値が不正です");
   var sh = exaSs().getSheetByName("商品一覧"); var row = exaRowByKey(sh, key);
   if (!row) throw new Error("商品一覧にこの商品が見つかりません");
   var status = clean(sh.getRange(row, EXA.status).getValue());
   var dbs = dbSheet(), r = findDbRow("sourcing", key), now = nowIso();
-  if (decision === "received" || decision === "unreceive") {       // 発注済 → 受取済（戻すこともできる）。判断レコードに受取日を持つ
-    if (!/発注済/.test(status)) throw new Error("発注済みの商品だけ受取済みにできます");
+  if (decision === "received" || decision === "cancelled" || decision === "unreceive") {   // 発注済 → 受取済／キャンセル（戻すこともできる）
+    if (!/発注済/.test(status)) throw new Error("発注済みの商品だけ受取済み・キャンセルにできます");
     var cur; try { cur = r ? JSON.parse(dbs.getRange(r, 6).getValue()) : {}; } catch (e) { cur = {}; }
     cur.key = key; cur.decision = "order";
-    if (decision === "received") { cur.receivedAt = now.slice(0, 10); cur.receivedBy = me.name; } else { delete cur.receivedAt; delete cur.receivedBy; }
+    delete cur.receivedAt; delete cur.receivedBy; delete cur.cancelledAt; delete cur.cancelledBy;
+    if (decision === "received") { cur.receivedAt = now.slice(0, 10); cur.receivedBy = me.name; }
+    if (decision === "cancelled") { cur.cancelledAt = now.slice(0, 10); cur.cancelledBy = me.name; }
     if (r) dbs.getRange(r, 4, 1, 3).setValues([[now, me.name, JSON.stringify(cur)]]);
     else dbs.appendRow(["sourcing", key, now, now, me.name, JSON.stringify(cur)]);
     cur.id = key;
