@@ -27,3 +27,10 @@ Unsplash License: 商用・非商用とも無料で利用可、許諾不要。�
 - 検索クエリ（各 per_page=20, landscape）: japanese apartment entrance delivery parcel / family relaxing living room japan / hands holding smartphone at home soft light（＋ person using smartphone sofa home warm light） / calm kitchen morning light table / elderly couple at home window（＋ senior couple back view home living room） / woman working laptop at home cozy / japanese house interior minimal
 - 顔が主役の写真、暗すぎる写真、Unsplash+ / Getty Images の有料素材は除外
 - 次点候補（未保存・必要なら同じ手順で取得可）: kurashi 58ApUELd3Ec（和室の座卓）, fta5pzyM0T8（障子と椅子）, shokutaku Tg_tL1RkgjM（森が見えるキッチン窓）, sumai FvI-fq2wdOk（縁側から庭）, kazoku wOBH1cXktKY（ストーブのそばの女性）
+
+## 使用箇所（2026-10-08）
+- hero.jpg / hero-sq.jpg ← kurashi-c6NOIRunSbI（トップ・OG画像）
+- worry.jpg ← kurashi-PGCduaeeHUk（こんな不安、ありませんか）
+- svc-okihai.jpg ← okihai-efgpRGeu9tg / svc-lifecost.jpg ← kazoku-LcFozmjuHa4 / svc-wifi.jpg ← zaitaku-VzIsqZ8K9LI / svc-kaden.jpg ← shokutaku-JPdfLlsh49c / svc-kumamori.jpg ← smartphone-j1O-tlwd_ok
+- trust.jpg ← kazoku-Fj3IBo0R2rI（守られている安心は…）
+- support.jpg ← zaitaku-BkK8Gi4uN7U（予備）

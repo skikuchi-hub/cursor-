@@ -3,10 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>会員ログイン｜くらしプラス</title>
-<meta name="description" content="くらしプラス会員ログインページ。">
-<meta property="og:title" content="会員ログイン｜くらしプラス">
-<meta property="og:description" content="くらしプラス会員ログインページ。">
+<title>お申し込み｜くらしプラス</title>
+<meta name="description" content="くらしプラスのお申し込み方法のご案内です。">
+<meta property="og:title" content="お申し込み｜くらしプラス">
+<meta property="og:description" content="くらしプラスのお申し込み方法のご案内です。">
 <meta property="og:type" content="website">
 <meta property="og:image" content="assets/img/og.png">
 <meta name="twitter:card" content="summary_large_image">
@@ -35,17 +35,24 @@
 </header>
 
 <div class="wrap">
-  <div class="auth">
-    <span class="en">Member login</span>
-    <h1>会員ログイン</h1>
-    <p class="sub">ご登録のメールアドレスとパスワードを入力してください。</p>
-    <form id="loginForm" class="form" novalidate>
-      <div class="field"><label for="email">メールアドレス</label><input id="email" name="email" type="email" autocomplete="username" required></div>
-      <div class="field"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required></div>
-      <div class="err" role="alert"></div>
-      <button type="submit" class="btn btn-primary btn-block">ログイン</button>
-    </form>
-    <div class="links"><a href="contact.html?kind=7">パスワードをお忘れの方</a><a href="signup.html">新規お申し込み</a></div>
+  <div class="page-head">
+    <div class="breadcrumb"><a href="index.html">トップ</a> › お申し込み</div>
+    <span class="en">Sign up</span>
+    <h1>お申し込みについて</h1>
+    <p>くらしプラスは、サービス説明不足や認識相違によるトラブルを防ぐため、販売パートナーの「紹介コード」をお持ちの方限定でお申し込みいただけます。初月から最大2ヶ月無料。</p>
+  </div>
+  <div class="content">
+    <ol class="flow">
+      <li><b>紹介コードを確認</b><span>販売パートナー（代理店）からお渡しした紹介コードをご用意ください。お持ちでない方は、一時的な紹介コードを発行しますのでお問い合わせください。</span></li>
+      <li><b>お申し込み手続き</b><span>お申込み窓口で紹介コードとお客様情報をご登録いただきます。</span></li>
+      <li><b>決済登録</b><span>ご登録のメールアドレスまたはSMSに決済登録URLをお送りします。お客様ご自身で決済情報をご入力いただくと、お申し込み完了です。</span></li>
+      <li><b>ご利用開始</b><span>完了後、各サービスのご案内と利用規約の控えをお送りします。</span></li>
+    </ol>
+    <div class="signup-cta">
+      <a class="btn btn-terra" id="signupBtn" href="contact.html?kind=5">お申し込み手続きへ進む <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+      <a class="btn btn-outline" href="contact.html?kind=1">紹介コードをお持ちでない方 <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+    </div>
+    <p class="fine">お申し込み前に<a href="terms/index.html">利用規約</a>・<a href="privacy.html">プライバシーポリシー</a>・<a href="legal.html">特定商取引法に基づく表示</a>をご確認ください。</p>
   </div>
 </div>
 <footer class="site-footer">

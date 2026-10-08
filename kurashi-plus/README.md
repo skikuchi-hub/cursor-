@@ -5,7 +5,8 @@ HOME LINK（home-link.jp）と同じ5サービス・同じ条件で、名称・�
 静的 HTML だけで動くので、GitHub Pages でもお名前.com などのレンタルサーバーでもそのまま公開できます。
 
 ```
-index.html            トップ（サービス一覧・特徴・流れ・料金・FAQ）
+index.html            トップ（困りごと・5つのサービス・FAQ・お申し込み導線）
+signup.html           お申し込みのご案内（紹介コードの流れ。config.js の signupUrl で会員システムへ接続）
 services/*.html       サービス詳細（okihai / wifi / gifukatsu / kumamori / kaden）
 terms/*.html          利用規約（index + サービスごと。kumamori / kaden は準備中表示）
 privacy.html          プライバシーポリシー

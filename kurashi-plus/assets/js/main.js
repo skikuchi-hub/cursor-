@@ -34,7 +34,7 @@
     }, { threshold: 0.12 });
     document.querySelectorAll('.rv').forEach(function (el) { io.observe(el); });
     // グリッド内の要素は順番に少し遅らせる
-    document.querySelectorAll('.svc-grid, .feat, .steps').forEach(function (g) {
+    document.querySelectorAll('.svc-index, .worries, .svc .text').forEach(function (g) {
       Array.prototype.forEach.call(g.children, function (c, i) { if (c.classList.contains('rv')) c.style.transitionDelay = (i * 90) + 'ms'; });
     });
   } else {
@@ -49,9 +49,15 @@
   }
   window.kpToast = toast;
 
-  // お問い合わせフォーム
+  // お申し込みボタン：会員システムの申込URLが設定されていればそちらへ
+  var su = document.getElementById('signupBtn');
+  if (su && cfg.signupUrl) su.href = cfg.signupUrl;
+
+  // お問い合わせフォーム（?kind=N で種別を選択済みにする）
   var form = document.getElementById('contactForm');
   if (form) {
+    var m = /[?&]kind=(\d+)/.exec(location.search);
+    if (m && form.kind.options[+m[1]]) form.kind.selectedIndex = +m[1];
     form.addEventListener('submit', function (ev) {
       ev.preventDefault();
       var err = form.querySelector('.err');
@@ -168,7 +174,7 @@
           if (!confirm(name + ' を解約しますか？\n解約は当月末に反映され、日割り計算はありません。')) return;
           delete subs[code]; toast(name + ' の解約を受け付けました');
         } else {
-          if (!confirm(name + ' に申し込みますか？\n月額 ' + (it.dataset.price || '') + '（税抜）')) return;
+          if (!confirm(name + ' に申し込みますか？')) return;
           subs[code] = { since: new Date().toISOString() }; toast(name + ' のお申し込みを受け付けました');
         }
         localStorage.setItem(subsKey, JSON.stringify(subs));
