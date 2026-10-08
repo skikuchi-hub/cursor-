@@ -63,6 +63,17 @@ HANDOVER.md                  この文書
   Drive「クレーンログ写真／_チェック結果」に `check_YYYYMMDD_HHmm.json` を置く。Apps Script の `importPhotoChecks()` が「写真」タブ I〜Q 列へ取り込む
   （アプリ起動時に 10 分に 1 回自動。取り込んだ JSON は `done_` 付きに改名）。手順・列・JSON 形式・判定ルールは `docs/PHOTO_CHECK.md`。
   データが貯まったら週1（例：月曜 22:07）に変える（このスレッドで「週1にして」と頼めば cron を変更する）。
+- **仕入れタブ（2026-10-08 追加。EXAmuse 発注の入口をアプリに移した）**：下部メニュー 5 つ目「仕入れ」。Apps Script が `SpreadsheetApp.openById` で
+  仕入れ想定商品スプシ（1c2dDei3-…）の「商品一覧」を読み（action `sourcing`、90 秒キャッシュ、直近 60 日）、写真つきカードで表示。
+  判断は _app_db の `sourcing`（id＝商品キー、decision: skip／hold／order、cases、machine、note、requestId）。
+  「発注する」でケース数（0.5＝ハーフ可）・機械タイプ・備考 → `sourcingSet` が 商品一覧 の N 発注ケース数・Q 機械タイプ・R 発注備考 にも書く（見送り／保留にすると N を空に）。
+  「直す」→ `sourcingFix` が B 商品名・C 品番・E 入数・F 単価・H 上代 を書き、Y メール原文に「アプリで修正」を追記（メール解析漏れの手直し用）。
+  「発注要求を出す」→ `sourcingSubmit` が EXAmuse 側 submitRequest と同じ形で「発注要求」タブの 2 行目に行を挿入
+  （要求ID R+yyyyMMddHHmmss、状態「待機中」、モード「下書き」、件数、合計、内容(JSON)[{key,name,code,qty,price,cases,pcs,amount,memo,kind}]、担当者＝PIN の本人）。
+  あとは Mac の examuse_sync（2 分ごと）が拾って発注書と Mail 下書きを作る。**Mac 側・EXAmuse 側 Apps Script の変更は不要**。
+  発注済（S 列「発注済」）／下書き済（S 列「下書き作成」）はスプシの状態から表示。発注要求の進み（待機中→処理中(Mac)→完了／失敗）もカードと下部の一覧に出る。
+  初回だけ Apps Script エディタで `authorizeExamuse` を実行して別スプシへのアクセスを承認する。
+  カードの画像は商品一覧 U 列の IMAGE 式の URL（lh3.googleusercontent.com）をそのまま使う。Drive 側の共有設定によってはスタッフの端末で表示できないことがある（その場合「画像を表示できません」）。
 - **景品ラボ「部屋の位置」タブ**：店舗×機械ごとに部屋 A〜D／枠番号の払出を比較（4人機は払出とプレイ数、BOX は空いた回数／見た回数）。
 
 ### 成績タブの「パーティ（協力）」の仕掛け（2026-10-07 追加）
@@ -125,6 +136,7 @@ HANDOVER.md                  この文書
 | `setup`（写真対応で再実行） | 「写真」タブと Drive「クレーンログ写真／_チェック結果」フォルダを作る | **未**（写真対応の Code.gs を貼ったあとに実行） |
 | `importPhotoChecks` | _チェック結果 の JSON を「写真」タブに取り込む（通常は自動。手動で急ぐとき） | 随時 |
 | `pendingPhotos` | 未チェックの写真を実行ログに出す（確認用） | 随時 |
+| `authorizeExamuse` | 仕入れタブ用。仕入れ想定商品スプシへのアクセスを初回承認（商品件数が出れば OK） | **未**（仕入れ対応の Code.gs を貼ったあとに 1 回） |
 
 ## 6. 既知の注意点・今後の候補
 - 日付はスプシのタイムゾーンで解釈（`Utilities.parseDate(…, getSpreadsheetTimeZone())`）。初期はスプシが America/Los_Angeles で1日ずれたが、修復済み＋スプシを東京に変更済み。
@@ -138,7 +150,8 @@ HANDOVER.md                  この文書
 - 関係者：菊地（amuse@exploration-holdings.jp、Apple Mail アカウント「EXAmuse」、Mac）／石原さん（巡回担当、Thunderbird。スプシのメニューから発注要求）／仕入先 株式会社インフィニティ inf_main@8infinity.jp
 - 仕入れ想定商品スプシ：https://docs.google.com/spreadsheets/d/1c2dDei3-fMUtsAFXl4cnqvTMTuhjKrLEVSi0NSwEtAw
   タブ：商品一覧（A受信日…N発注ケース数 O発注個数 P発注金額 Q発注備考 R発注状況 …V商品キー W メール原文 X チェック結果 Y 機械タイプ）／発注要求／画像一覧／発注履歴／設定
-  メニュー「EXAmuse発注」：①発注内容チェック ②Mailに下書き作成 ③発注メール送信 ④下書きを手動で送った→発注済みにして景品マスタへ登録／状況確認／体裁を整える
+  メニュー「EXAmuse発注」：①発注内容チェック ②Mailに下書き作成 ③（削除済み）④下書きを手動で送った→発注済みにして景品マスタへ登録／状況確認／体裁を整える
+  **2026-10-08 から、数量入力と ①② はクレーンログの「仕入れ」タブで行う（上記 2 章）。スプシのメニューも引き続き使える。④は今もスプシのメニューで行う。**
   Apps Script はバージョン8。コードは Mac の ~/EXAmuse景品仕入れ/GoogleSheets連携_AppsScript.gs。doPost を変えたときだけ「新しいデプロイ」が必要で、URL が変わるので Mac の gsheet.json も更新。
 - 景品マスタへの追加ルール：発注メールを③送信（または Mac のボタンで送信）したときのみ自動追加。下書きは追加しない。既存行は上書きせず同名の直下に挿入。手動送信は④で登録。
 - Mac 側：~/Library/Application Support/examuse-order/（examuse_common.py, examuse_sync.py, examuse_gsheet.py, examuse_order.py, gen_gs.py, master_snapshot.py, gsheet.json, db.json）。出力 ~/EXAmuse景品仕入れ（デスクトップのものはショートリンク。実体を戻さない）。launchd com.exploration.examuse-sync（2分ごと＋Mail更新時）。ログ ~/Library/Logs/examuse-sync.log

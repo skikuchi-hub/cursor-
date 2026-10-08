@@ -18,7 +18,7 @@
 var DB_SHEET = "_app_db";
 var STAFF_SHEET = "スタッフ";
 var ID_HEADER = "アプリID";
-var COLS = ["weekly", "prizes", "expenses", "settings"];
+var COLS = ["weekly", "prizes", "expenses", "settings", "sourcing"];   // sourcing＝仕入れ候補の判断（見送り／保留／発注）
 var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
@@ -42,6 +42,10 @@ function doPost(e) {
       case "put":    return out(withLock(function () { return putDoc(me, req.col, req.id, req.obj); }));
       case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.kind); }));
       case "update": return out(withLock(function () { return updateDoc(me, req.col, req.id, req.obj); }));
+      case "sourcing":       return out(Object.assign({ ok: true }, readSourcing(!!req.force)));
+      case "sourcingSet":    return out(withLock(function () { return sourcingSet(me, req.key, req.decision, req.cases, req.machine, req.note); }));
+      case "sourcingFix":    return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
+      case "sourcingSubmit": return out(withLock(function () { return sourcingSubmit(me, req.keys); }));
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -730,6 +734,154 @@ function pendingPhotos() {
   var out = [];
   v.forEach(function (r) { if (r[6] && !r[8]) out.push({ date: r[0], store: r[1], machine: r[2], staff: r[3], kind: r[4], url: r[5], fid: r[6] }); });
   Logger.log(JSON.stringify(out)); return out;
+}
+
+/* ===================== 仕入れ（EXAmuse 仕入れ想定商品スプシとの連携） =====================
+   アプリの「仕入れ」タブ用。インフィニティからのメールを Mac が解析して書く「商品一覧」を読み、
+   見送り／保留／発注の判断は _app_db（col=sourcing、id=商品キー）に持つ。
+   「発注」にした商品は 商品一覧 の N 発注ケース数・Q 機械タイプ・R 発注備考 にも書く（スプシ側のメニューと同じ状態になる）。
+   「発注要求を出す」は、EXAmuse 側 Apps Script の submitRequest と同じ形で「発注要求」タブの 2 行目に行を挿入する
+   （状態=待機中、モード=下書き、内容(JSON)）。あとは Mac の examuse_sync が 2 分以内に拾い、発注書と Mail 下書きを作る。 */
+var EXAMUSE_SHEET_ID = "1c2dDei3-fMUtsAFXl4cnqvTMTuhjKrLEVSi0NSwEtAw";
+var EXA = { date: 1, name: 2, code: 3, maker: 4, qty: 5, price: 6, caseAmt: 7, retail: 8, variety: 9, lead: 10, half: 11, ship: 12, caution: 13,
+  cases: 14, pcs: 15, amount: 16, machine: 17, memo: 18, status: 19, check: 20, image: 21, subject: 22, mailId: 23, key: 24, raw: 25 };
+var SOURCING_DAYS = 60;      // 何日前までの商品を返すか
+function exaSs() { return SpreadsheetApp.openById(EXAMUSE_SHEET_ID); }
+function exaItems() {
+  var sh = exaSs().getSheetByName("商品一覧"); if (!sh) return [];
+  var last = sh.getLastRow(); if (last < 2) return [];
+  var ncol = Math.max(sh.getLastColumn(), EXA.raw);
+  var v = sh.getRange(2, 1, last - 1, ncol).getValues();
+  var f = sh.getRange(2, EXA.image, last - 1, 1).getFormulas();
+  var tz = sheetTz(), out = [];
+  var since = new Date(Date.now() - SOURCING_DAYS * 864e5);
+  for (var i = 0; i < v.length; i++) {
+    var r = v[i]; var key = clean(r[EXA.key - 1]); if (!key) continue;
+    var d = r[EXA.date - 1]; var date = d instanceof Date ? Utilities.formatDate(d, tz, "yyyy-MM-dd") : String(d || "").slice(0, 10);
+    if (d instanceof Date && d < since) continue;
+    var m = String(f[i][0] || "").match(/IMAGE\("([^"]+)"/);
+    out.push({
+      row: i + 2, key: key, date: date, name: clean(r[EXA.name - 1]), code: clean(r[EXA.code - 1]), maker: clean(r[EXA.maker - 1]),
+      qty: numOrNull(r[EXA.qty - 1]), price: numOrNull(r[EXA.price - 1]), retail: numOrNull(r[EXA.retail - 1]),
+      variety: clean(r[EXA.variety - 1]), lead: clean(r[EXA.lead - 1]), half: clean(r[EXA.half - 1]), ship: clean(r[EXA.ship - 1]), caution: clean(r[EXA.caution - 1]),
+      cases: numOrNull(r[EXA.cases - 1]), machine: clean(r[EXA.machine - 1]), memo: clean(r[EXA.memo - 1]), status: clean(r[EXA.status - 1]), check: clean(r[EXA.check - 1]),
+      img: m ? m[1] : "", subject: clean(r[EXA.subject - 1]), mailId: String(r[EXA.mailId - 1] || "").replace(/\.0$/, ""), raw: clean(r[EXA.raw - 1])
+    });
+  }
+  return out;
+}
+function numOrNull(x) { if (x === "" || x === null || x === undefined) return null; var n = parseFloat(x); return isFinite(n) ? n : null; }
+function exaRequests(n) {
+  var sh = exaSs().getSheetByName("発注要求"); if (!sh) return [];
+  var last = sh.getLastRow(); if (last < 2) return [];
+  var v = sh.getRange(2, 1, Math.min(last - 1, n || 10), 10).getValues(), out = [];
+  v.forEach(function (r) { if (!r[0]) return; out.push({ id: String(r[0]), at: String(r[1]), state: String(r[2]), mode: String(r[3]), n: num(r[4]), amount: num(r[5]), result: String(r[6] || ""), orderNo: String(r[7] || ""), staff: String(r[9] || "") }); });
+  return out;
+}
+function exaSetting(name) {
+  var sh = exaSs().getSheetByName("設定"); if (!sh) return "";
+  var v = sh.getDataRange().getValues();
+  for (var i = 1; i < v.length; i++) if (clean(v[i][0]) === name) return v[i][1];
+  return "";
+}
+function readSourcing(force) {
+  var cache = CacheService.getScriptCache(), hit = force ? null : cache.get("sourcing");
+  if (hit) { try { return JSON.parse(hit); } catch (e) {} }
+  var res = { items: exaItems(), requests: exaRequests(10), limit: num(exaSetting("発注金額の上限警告")) || 300000, time: nowIso() };
+  try { cache.put("sourcing", JSON.stringify(res), 90); } catch (e) {}
+  return res;
+}
+function exaRowByKey(sh, key) {
+  var last = sh.getLastRow(); if (last < 2) return 0;
+  var v = sh.getRange(2, EXA.key, last - 1, 1).getValues();
+  for (var i = 0; i < v.length; i++) if (clean(v[i][0]) === key) return i + 2;
+  return 0;
+}
+/* 判断を保存。decision: skip（見送り）／hold（保留）／order（発注）／空（未判断に戻す） */
+function sourcingSet(me, key, decision, cases, machine, note) {
+  key = clean(key); if (!key) throw new Error("商品キーがありません");
+  decision = clean(decision); if (["skip", "hold", "order", ""].indexOf(decision) < 0) throw new Error("判断の値が不正です");
+  var sh = exaSs().getSheetByName("商品一覧"); var row = exaRowByKey(sh, key);
+  if (!row) throw new Error("商品一覧にこの商品が見つかりません");
+  var status = clean(sh.getRange(row, EXA.status).getValue());
+  if (/発注済/.test(status)) throw new Error("この商品は発注済みです");
+  if (decision === "order") {
+    cases = num(cases); if (!(cases > 0)) throw new Error("ケース数を入れてください");
+    machine = clean(machine); if (["4人機用", "カリーノ用", ""].indexOf(machine) < 0) throw new Error("機械タイプの値が不正です");
+    sh.getRange(row, EXA.cases).setValue(cases);
+    if (machine) sh.getRange(row, EXA.machine).setValue(machine);
+    sh.getRange(row, EXA.memo).setValue(clean(note || ""));
+  } else {
+    sh.getRange(row, EXA.cases).setValue("");          // 発注をやめたら N を空に（スプシ側の ① チェックに拾われないように）
+  }
+  var rec = { key: key, decision: decision, cases: decision === "order" ? num(cases) : null, machine: clean(machine || ""), note: clean(note || ""), by: me.name, at: nowIso() };
+  var dbs = dbSheet(), r = findDbRow("sourcing", key), now = nowIso();
+  if (decision === "") { if (r) dbs.deleteRow(r); return { ok: true, rec: null }; }
+  if (r) dbs.getRange(r, 4, 1, 3).setValues([[now, me.name, JSON.stringify(rec)]]);
+  else dbs.appendRow(["sourcing", key, now, now, me.name, JSON.stringify(rec)]);
+  rec.id = key;
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  return { ok: true, rec: rec };
+}
+/* 解析漏れの手直し：商品名・品番・入数・単価 を 商品一覧 に書く */
+function sourcingFix(me, key, fields) {
+  key = clean(key); fields = fields || {};
+  var sh = exaSs().getSheetByName("商品一覧"); var row = exaRowByKey(sh, key);
+  if (!row) throw new Error("商品一覧にこの商品が見つかりません");
+  if (fields.name !== undefined) sh.getRange(row, EXA.name).setValue(clean(fields.name));
+  if (fields.code !== undefined) sh.getRange(row, EXA.code).setValue(clean(fields.code));
+  if (fields.qty !== undefined) sh.getRange(row, EXA.qty).setValue(fields.qty === "" ? "" : num(fields.qty));
+  if (fields.price !== undefined) sh.getRange(row, EXA.price).setValue(fields.price === "" ? "" : num(fields.price));
+  if (fields.retail !== undefined) sh.getRange(row, EXA.retail).setValue(fields.retail === "" ? "" : num(fields.retail));
+  var raw = clean(sh.getRange(row, EXA.raw).getValue());
+  sh.getRange(row, EXA.raw).setValue((raw ? raw + " ／ " : "") + "アプリで修正(" + me.name + " " + nowIso().slice(0, 10) + ")");
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  return { ok: true };
+}
+/* 「発注」にした商品をまとめて発注要求タブへ（EXAmuse 側 submitRequest と同じ行形式） */
+function sourcingSubmit(me, keys) {
+  keys = (keys || []).map(clean).filter(Boolean);
+  if (!keys.length) throw new Error("発注する商品がありません");
+  var ss2 = exaSs(), sh = ss2.getSheetByName("商品一覧"), rq = ss2.getSheetByName("発注要求");
+  if (!sh || !rq) throw new Error("仕入れ想定商品スプシのタブが見つかりません");
+  var items = [], errors = [], total = 0;
+  keys.forEach(function (key) {
+    var row = exaRowByKey(sh, key); if (!row) { errors.push(key + "：商品一覧にない"); return; }
+    var r = sh.getRange(row, 1, 1, EXA.raw).getValues()[0];
+    var name = clean(r[EXA.name - 1]), qty = num(r[EXA.qty - 1]), price = num(r[EXA.price - 1]), cases = num(r[EXA.cases - 1]);
+    var status = clean(r[EXA.status - 1]);
+    if (/発注済|下書き作成/.test(status)) { errors.push(name + "：すでに " + status); return; }
+    if (!name) { errors.push(key + "：商品名が空（「直す」で入れてください）"); return; }
+    if (!(qty > 0)) { errors.push(name + "：入数が空"); return; }
+    if (!(price > 0)) { errors.push(name + "：単価が空"); return; }
+    if (!(cases > 0)) { errors.push(name + "：ケース数が空"); return; }
+    var pcs = Math.round(qty * cases), amount = Math.round(price * pcs); total += amount;
+    items.push({ key: key, name: name, code: clean(r[EXA.code - 1]), qty: qty, price: price, cases: cases, pcs: pcs, amount: amount, memo: clean(r[EXA.memo - 1]), kind: clean(r[EXA.machine - 1]) });
+  });
+  if (errors.length) throw new Error("発注できない商品があります：\n" + errors.join("\n"));
+  var tz = "Asia/Tokyo", now = new Date();
+  var reqId = "R" + Utilities.formatDate(now, tz, "yyyyMMddHHmmss");
+  rq.insertRowBefore(2);
+  rq.getRange(2, 1, 1, 10).setValues([[reqId, Utilities.formatDate(now, tz, "yyyy-MM-dd HH:mm:ss"), "待機中", "下書き", items.length, total, "", "", JSON.stringify(items), me.name]]);
+  rq.getRange(2, 6).setNumberFormat("#,##0");
+  // 判断レコードを「要求済み」に
+  var dbs = dbSheet();
+  items.forEach(function (it) {
+    var r = findDbRow("sourcing", it.key); var rec;
+    try { rec = r ? JSON.parse(dbs.getRange(r, 6).getValue()) : {}; } catch (e) { rec = {}; }
+    rec.key = it.key; rec.decision = "order"; rec.requestId = reqId; rec.requestedAt = nowIso(); rec.by = rec.by || me.name;
+    if (r) dbs.getRange(r, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(rec)]]);
+    else dbs.appendRow(["sourcing", it.key, nowIso(), nowIso(), me.name, JSON.stringify(rec)]);
+  });
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  return { ok: true, requestId: reqId, n: items.length, total: total, warn: total > (num(exaSetting("発注金額の上限警告")) || 300000) ? "合計が上限警告額を超えています" : "" };
+}
+
+/* 仕入れ連携の初回認可用：エディタで一度 ▶ 実行し、仕入れ想定商品スプシへのアクセスを承認する（以後は不要） */
+function authorizeExamuse() {
+  var name = exaSs().getName(); var n = exaItems().length;
+  var msg = "仕入れ想定商品スプシ「" + name + "」を読めました：商品 " + n + " 件（直近 " + SOURCING_DAYS + " 日）";
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
 
 /* ===================== 手動メンテ用（エディタから実行） ===================== */
