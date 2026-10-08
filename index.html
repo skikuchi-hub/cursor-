@@ -1991,7 +1991,7 @@ function buildRooms(force){
       <div class="zgrid">${R.rooms.filter(rm=>rm.k===a||rm.k===b).map(roomCell).join("")}</div>
       <div class="pair">
         <span class="pk">${a}＋${b} 累計売上</span>
-        <input class="yen" type="text" inputmode="numeric" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
+        <input class="yen" type="text" inputmode="numeric" maxlength="6" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
         <span class="u">円</span><span class="pp" data-p="${f}"></span>
       </div>`).join("");
     setVal('[data-f="sAB"]', R.sAB); setVal('[data-f="sCD"]', R.sCD);
@@ -2006,7 +2006,7 @@ function buildRooms(force){
     grid.innerHTML = `
       <div class="pair">
         <span class="pk">累計売上</span>
-        <input class="yen" type="text" inputmode="numeric" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
+        <input class="yen" type="text" inputmode="numeric" maxlength="6" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
         <span class="u">円</span><span class="pp" data-p="sBox"></span>
       </div>
       <div class="modes">
@@ -2188,6 +2188,10 @@ function onRoomClick(e){
 function onRoomInput(e){
   const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
   const f = el.dataset.f, k = el.dataset.k;
+  if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。カウンター値などの誤入力を防ぐ
+    const digits = String(el.value).replace(/[^\d]/g,"").slice(0,6);
+    if (digits !== el.value){ el.value = digits; if (digits.length>=6 && String(e.target.value).length>6) toast("売上は 6 桁（99万円）までです"); }
+  }
   if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
   else R[f] = el.value;
   updateDerived();
