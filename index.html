@@ -346,7 +346,7 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 /* ============ tabs ============ */
 .tabbar{
   position:fixed;bottom:0;left:0;right:0;z-index:50;
-  display:grid;grid-template-columns:repeat(5,1fr);
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));
   background:color-mix(in srgb,var(--surface) 94%,transparent);
   backdrop-filter:blur(12px);border-top:1px solid var(--line);
   padding-bottom:env(safe-area-inset-bottom);
@@ -1437,6 +1437,13 @@ let gqWho = me();                                                      // 成果
 /* 本人確認（PIN）。スタッフごとの PIN はスプレッドシート「スタッフ」タブで管理。
    PIN で入ると担当が固定される（管理者だけ切り替え可）。 */
 let ME = null;                                   // {name, role:"admin"|"staff"}
+/* 仕入れタブは 管理者か、スタッフタブ「仕入れ」にチェックのある人だけ */
+const canSource = () => !!(ME && (ME.role==="admin" || ME.sourcing));
+function applyPerms(){
+  const t=document.querySelector('.tab[data-p="p-src"]'); if (!t) return;
+  const ok=canSource(); t.hidden=!ok;
+  if (!ok && $("#p-src").classList.contains("on")){ document.querySelector('.tab[data-p="p-log"]').click(); }
+}
 function lockStaff(on){
   $$("#staffIn, .staff-sel").forEach(s=>s.disabled = on);
   const b=$("#meBadge"); if (b) b.textContent = "担当："+me()+(on ? "" : "（管理者）");
@@ -1598,6 +1605,7 @@ const Store = {
     if (Array.isArray(r.staff) && r.staff.length){ STAFF.splice(0, STAFF.length, ...r.staff); }
     ME = r.me || ME;
     if (ME && ME.name){ if (STAFF.indexOf(ME.name)<0) STAFF.push(ME.name); setMe(ME.name); lockStaff(ME.role!=="admin"); }
+    applyPerms();
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
     applySheetData(r.sheet_master, r.stores);
@@ -1616,6 +1624,7 @@ const Store = {
       const d=r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
       if (Array.isArray(r.staff) && r.staff.length) STAFF.splice(0, STAFF.length, ...r.staff);
       ME = r.me||null; if (ME && ME.name && STAFF.includes(ME.name)){ setMe(ME.name); lockStaff(ME.role!=="admin"); }
+      applyPerms();
       applySheetData(r.sheet_master, r.stores); this.mode="offline"; snapshotSeen(); }catch(e){}
   },
   saveCache(r){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({docs:r.docs, staff:r.staff, me:r.me, sheet_master:r.sheet_master, stores:r.stores})); }catch(e){} },
@@ -2377,6 +2386,8 @@ function updateReadouts(){
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
 const SRC = { items:[], requests:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, busy:false };
 const SRC_KEY = "crane-lab-sourcing-v1";
+/* lh3.googleusercontent.com/d/ID は末尾に =w480 を付けると縮小版が返る（iPhone での読み込みを軽くする） */
+const thumbSrc = u => /lh3\.googleusercontent\.com\/d\/[^=?]+$/.test(u||"") ? u + "=w480" : u;
 const MACHINES = ["4人機用","カリーノ用"];
 function srcDecision(key){ return (Store.data.sourcing||[]).find(d=>d.id===key || d.key===key) || null; }
 function srcState(it){
@@ -2448,7 +2459,7 @@ function srcCard(it){
       <div class="row"><button type="button" class="ok" data-fok="1">スプシに保存</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
     </div>` : "";
   return `<div class="sc ${st}" data-key="${esc(it.key)}">
-    ${it.img ? `<img class="pic" src="${esc(it.img)}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic none',textContent:'画像を表示できません'}))">` : `<div class="pic none">画像なし</div>`}
+    ${it.img ? `<img class="pic" src="${esc(thumbSrc(it.img))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic none',textContent:'画像を表示できません'}))">` : `<div class="pic none">画像なし</div>`}
     <div class="bd">
       <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
       <div class="sub">${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>

@@ -42,10 +42,10 @@ function doPost(e) {
       case "put":    return out(withLock(function () { return putDoc(me, req.col, req.id, req.obj); }));
       case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.kind); }));
       case "update": return out(withLock(function () { return updateDoc(me, req.col, req.id, req.obj); }));
-      case "sourcing":       return out(Object.assign({ ok: true }, readSourcing(!!req.force)));
-      case "sourcingSet":    return out(withLock(function () { return sourcingSet(me, req.key, req.decision, req.cases, req.machine, req.note); }));
-      case "sourcingFix":    return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
-      case "sourcingSubmit": return out(withLock(function () { return sourcingSubmit(me, req.keys); }));
+      case "sourcing":       requireSourcing(me); return out(Object.assign({ ok: true }, readSourcing(!!req.force)));
+      case "sourcingSet":    requireSourcing(me); return out(withLock(function () { return sourcingSet(me, req.key, req.decision, req.cases, req.machine, req.note); }));
+      case "sourcingFix":    requireSourcing(me); return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
+      case "sourcingSubmit": requireSourcing(me); return out(withLock(function () { return sourcingSubmit(me, req.keys); }));
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -91,22 +91,44 @@ function staffRows() {
   var sh = ensureStaffSheet();
   var last = sh.getLastRow();
   if (last < 2) return [];
-  var v = sh.getRange(2, 1, last - 1, 4).getValues();
+  var ncol = Math.max(5, sh.getLastColumn());
+  var hdr = sh.getRange(1, 1, 1, ncol).getValues()[0].map(function (h) { return clean(h); });
+  var sc = hdr.indexOf("仕入れ");                                    // 「仕入れ」列（チェック）。管理者は常に可
+  var v = sh.getRange(2, 1, last - 1, ncol).getValues();
   var rows = [];
+  var yes = function (x) { return x === true || String(x).toUpperCase() === "TRUE" || x === 1; };
   v.forEach(function (r) {
     var name = clean(r[0]); if (!name) return;
     var pin = clean(r[1]);
     var role = clean(r[2]) === "管理者" ? "admin" : "staff";
-    var on = r[3] === true || String(r[3]).toUpperCase() === "TRUE" || r[3] === 1;
-    rows.push({ name: name, pin: pin, role: role, active: on });
+    rows.push({ name: name, pin: pin, role: role, active: yes(r[3]), sourcing: role === "admin" || (sc >= 0 && yes(r[sc])) });
   });
   return rows;
+}
+/* スタッフタブに「仕入れ」列（F）を足す。管理者と石原さんに初期チェック。再実行しても安全 */
+function ensureSourcingColumn() {
+  var sh = ensureStaffSheet();
+  var ncol = Math.max(5, sh.getLastColumn());
+  var hdr = sh.getRange(1, 1, 1, ncol).getValues()[0].map(function (h) { return clean(h); });
+  if (hdr.indexOf("仕入れ") >= 0) return "already";
+  var c = 6;
+  if (clean(sh.getRange(1, c).getValue())) sh.insertColumnBefore(c);
+  sh.getRange(1, c).setValue("仕入れ").setFontWeight("bold");
+  sh.getRange(2, c, 50, 1).insertCheckboxes();
+  var last = sh.getLastRow();
+  if (last >= 2) {
+    var v = sh.getRange(2, 1, last - 1, 3).getValues();
+    v.forEach(function (r, i) { if (clean(r[2]) === "管理者" || clean(r[0]) === "石原里基") sh.getRange(i + 2, c).setValue(true); });
+  }
+  var note = clean(sh.getRange(1, 8).getValue());
+  sh.getRange(1, 8).setValue((note ? note + " " : "") + "「仕入れ」にチェックのある人だけ、アプリの仕入れタブ（EXAmuse の発注）を使える。管理者は常に可。");
+  return "added";
 }
 function auth(pin) {
   pin = clean(pin);
   if (!pin) return null;
   var hit = staffRows().filter(function (r) { return r.active && r.pin && r.pin === pin; })[0];
-  return hit ? { name: hit.name, role: hit.role } : null;
+  return hit ? { name: hit.name, role: hit.role, sourcing: !!hit.sourcing } : null;
 }
 function staffNames() {
   return staffRows().filter(function (r) { return r.active; }).map(function (r) { return r.name; });
@@ -164,6 +186,7 @@ function addDoc(me, col, rec) {
   if (col === "weekly") applySalesDelta(rec, docs.weekly);   // 売上は月の累計入力 → 前回との差分を記録
   materialize(col, rec, docs);
   dbSheet().appendRow([col, rec.id, rec.createdAt, now, me.name, JSON.stringify(stripId(rec))]);
+  if (col === "prizes") dropCache("sheet_master");
   return { ok: true, rec: rec };
 }
 
@@ -264,6 +287,7 @@ function removeDoc(me, col, id) {
     dbSheet().deleteRow(row);
   }
   dematerialize(col, id);
+  if (col === "prizes") dropCache("sheet_master");
   return { ok: true };
 }
 /* 記録の修正（登録した本人か管理者）。巡回の記録のみ。
@@ -324,16 +348,27 @@ function putDoc(me, col, id, obj) {
 
 /* ===================== 起動時にアプリへ渡すもの ===================== */
 function bootstrap(me) {
-  try { importPhotoChecksIfDue(); } catch (e) { Logger.log("importPhotoChecks: " + e); }
+  if (!PropertiesService.getScriptProperties().getProperty("photoTrigger")) {   // 10分ごとのトリガーが無いときだけ、起動時に取り込む（遅くなるので setup でトリガーを入れる）
+    try { importPhotoChecksIfDue(); } catch (e) { Logger.log("importPhotoChecks: " + e); }
+  }
   return {
     me: me,
     staff: staffNames(),
     docs: readAllDocs(),
-    sheet_master: readPrizeMaster(),
-    stores: readPastStores(),
+    sheet_master: cachedJson("sheet_master", 120, readPrizeMaster),
+    stores: cachedJson("stores", 300, readPastStores),
     time: nowIso()
   };
 }
+/* 読むだけで変わりにくいものは CacheService に数分置く（アプリの起動を速くする） */
+function cachedJson(key, sec, fn) {
+  var c = CacheService.getScriptCache();
+  try { var hit = c.get("bs_" + key); if (hit) return JSON.parse(hit); } catch (e) {}
+  var val = fn();
+  try { c.put("bs_" + key, JSON.stringify(val), sec); } catch (e) {}
+  return val;
+}
+function dropCache(key) { try { CacheService.getScriptCache().remove("bs_" + key); } catch (e) {} }
 
 /* 景品マスタタブ → {updatedAt, source, rows:[{name,vendor,kind,cost,rate,qty,stock,memo}]} */
 function readPrizeMaster() {
@@ -747,6 +782,7 @@ var EXA = { date: 1, name: 2, code: 3, maker: 4, qty: 5, price: 6, caseAmt: 7, r
   cases: 14, pcs: 15, amount: 16, machine: 17, memo: 18, status: 19, check: 20, image: 21, subject: 22, mailId: 23, key: 24, raw: 25 };
 var SOURCING_DAYS = 60;      // 何日前までの商品を返すか
 function exaSs() { return SpreadsheetApp.openById(EXAMUSE_SHEET_ID); }
+function requireSourcing(me) { if (!me || !(me.role === "admin" || me.sourcing)) throw new Error("仕入れの操作は許可された人だけです（スタッフタブの「仕入れ」にチェック）"); }
 function exaItems() {
   var sh = exaSs().getSheetByName("商品一覧"); if (!sh) return [];
   var last = sh.getLastRow(); if (last < 2) return [];
@@ -943,7 +979,15 @@ function fixVisitDates() {
   var msg = "訪問日を直しました：" + n + " 件 → " + repairDates();
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
+/* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
+function installTriggers() {
+  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "importPhotoChecks") ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger("importPhotoChecks").timeBased().everyMinutes(10).create();
+  PropertiesService.getScriptProperties().setProperty("photoTrigger", "1");
+  return "importPhotoChecks を 10 分ごとに実行するトリガーを入れました";
+}
 function setup() {            // 初回：スタッフタブと _app_db を作る（再実行しても安全）
   ensureStaffSheet(); dbSheet(); renameDateHeaders(); photoSheet(); photoCheckDir();
-  SpreadsheetApp.getActive().toast("スタッフタブ・_app_db・写真タブ・Drive の写真フォルダを用意しました。");
+  var sc = ensureSourcingColumn(); var tr = installTriggers();
+  SpreadsheetApp.getActive().toast("スタッフタブ（仕入れ列 " + sc + "）・_app_db・写真タブ・Drive の写真フォルダ・" + tr);
 }
