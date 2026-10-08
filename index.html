@@ -340,6 +340,26 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .state b{font-size:13px}
 .src-req{font-size:12px;color:var(--ink-2);padding:9px 12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
 .src-req .st{font-weight:800;white-space:nowrap}
+/* 訪問日時（ふだんは閉じている） */
+.when-line{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--ink-2);margin-bottom:12px}
+.qhelp{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-3);font-size:11px;font-weight:800;padding:0;vertical-align:middle}
+.qlong{display:block;margin-top:6px;color:var(--ink-3)}
+/* 保存前の確認カード */
+.cf-ov{position:fixed;inset:0;z-index:200;background:rgba(10,18,36,.55);display:flex;align-items:flex-end;justify-content:center}
+.cf-card{width:100%;max-width:560px;max-height:88vh;overflow:auto;background:var(--surface);border-radius:18px 18px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:0 -10px 40px rgba(0,0,0,.25)}
+.cf-ttl{font-weight:900;font-size:15px;margin-bottom:8px;color:var(--ink)}
+.cf-h{font-weight:800;font-size:16px}.cf-h span{font-weight:500;color:var(--ink-2)}
+.cf-sub{font-size:12px;color:var(--ink-3);margin:2px 0 8px}
+.cf-warn{background:var(--danger-wash);color:var(--danger-ink);border-radius:10px;padding:8px 10px;font-size:12.5px;line-height:1.5;margin-bottom:8px;font-weight:700}
+.cf-t{width:100%;border-collapse:collapse;font-size:13px}
+.cf-t td{padding:6px 4px;border-top:1px solid var(--line);vertical-align:top;text-align:left}
+.cf-t td.k{width:44px;font-weight:800;color:var(--ink-2);white-space:nowrap}
+.cf-t .dim{color:var(--ink-3)}.cf-t .warn{color:var(--danger-ink);font-weight:700}
+.cf-tot{margin-top:10px;padding-top:8px;border-top:2px solid var(--line);font-size:13.5px}
+.cf-memo{font-size:12px;color:var(--ink-2);margin-top:4px}
+.cf-acts{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:14px}
+.cf-back{padding:14px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px}
+.cf-ok{padding:14px;border-radius:12px;border:0;background:var(--navy);color:var(--gold);font-weight:900;font-size:16px}
 /* 記録の修正中 */
 .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:2px solid var(--gold);color:var(--ink);font-size:13px;font-weight:700}
 .editbar .btn{flex:none;white-space:nowrap;padding:7px 12px;font-size:12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
@@ -977,6 +997,8 @@ body{font-variant-numeric:tabular-nums}
 
       <div class="card">
         <div class="step"><em>3</em><h3>訪問の記録</h3></div>
+        <div class="when-line" id="whenLine"><span id="whenTxt">訪問日時：きょう・保存した時刻</span><button type="button" class="chip mini" id="whenEdit">日時を変える</button></div>
+        <div id="whenBox" hidden>
         <div class="field" style="margin-bottom:10px">
           <span class="lbl">訪問日</span>
           <div class="num-row">
@@ -997,6 +1019,7 @@ body{font-variant-numeric:tabular-nums}
             <select class="txt" id="staffIn"></select>
             <p class="hint" id="staffHint"></p>
           </div>
+        </div>
         </div>
         <div class="field">
           <span class="lbl">メモ</span>
@@ -1021,7 +1044,7 @@ body{font-variant-numeric:tabular-nums}
         <p class="hint" style="margin-top:5px">登録すると、巡回ログの景品チップと原価の自動計算に出てきます。スプレッドシート「景品マスタ」にある景品も、下の一覧とチップに自動で出ます。</p>
       </div>
       <div class="card">
-        <div class="field">
+        <div class="field" hidden>
           <span class="lbl">担当</span>
           <select class="txt staff-sel" id="pzStaff"></select>
         </div>
@@ -1084,7 +1107,7 @@ body{font-variant-numeric:tabular-nums}
         <p class="hint" style="margin-top:5px">ガソリン代・駐車場代を使った日に、店舗を選んで入れます。</p>
       </div>
       <div class="card">
-        <div class="field">
+        <div class="field" hidden>
           <span class="lbl">担当</span>
           <select class="txt staff-sel" id="exStaff"></select>
         </div>
@@ -1103,6 +1126,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="field" id="exStoreField">
           <span class="lbl">店舗<span class="req">*</span></span>
           <div class="chips scroll" id="exStoreRow"></div>
+          <p class="hint" id="exStoreAutoNote" hidden>きょう最後に巡回報告した店を選んであります。違うときはタップで変えてください。</p>
         </div>
         <p class="hint" id="exStoreNote" hidden style="margin:-4px 0 12px">ガソリン代は店舗に属さない経費として登録します（店舗の選択は不要）。</p>
         <div class="grid2">
@@ -1970,6 +1994,10 @@ function buildRooms(force){
     if (R && R.type==="box") drawSlots();   // 景品登録・シート取り込みが届いたら、補充チップを即座に更新
     updateDerived(); return;
   }
+  if (changed && !EDIT && R && builtFor){                       // 別の機械へ移る前に、入力途中を下書きとして残す
+    const [ps,pm,pw] = builtFor.split("|");
+    if (ps && pm){ const memo = clean($("#memoIn").value); if (rHasInput(R) || memo) DRAFTS[builtFor] = {R, memo, at:Date.now()}; else delete DRAFTS[builtFor]; try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(DRAFTS)); }catch(e){} }
+  }
   builtFor = key;
   const grid=$("#roomGrid");
   if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; }
@@ -1980,18 +2008,26 @@ function buildRooms(force){
     return;
   }
   resetRooms(!changed);
+  if (changed && !EDIT && DRAFTS[key] && DRAFTS[key].R && DRAFTS[key].R.type===R.type){   // 下書きがあれば戻す
+    const d = DRAFTS[key]; R = Object.assign(R, d.R); $("#memoIn").value = d.memo||""; toast("入力途中の下書きを戻しました");
+  } else if (changed && !EDIT) { $("#memoIn").value=""; }
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
-  $("#zhint").innerHTML = t==="4p"
-    ? "並びは「<b>Z</b>」の書き順（左上A・右上B・左下C・右下D）。売上は <b>A＋B</b> と <b>C＋D</b> のペアごとに、機械に出ている<b>今月の累計額</b>をそのまま入力。前回訪問との差を今回分として記録します。<b>カウンターと取られた数</b>（機械の払出表示）を毎回入れると、景品ごとの売上・獲得率・原価率がデータになります。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
-    : "枠の中身は前回のまま出ています。<b>① 空いていた枠をタップ</b>（＝出た景品）→ <b>② 補充した枠をタップ</b>。写真を撮らなくても、何が何個出たかが残ります。";
+  $("#zhint").innerHTML = (t==="4p"
+    ? `部屋ごとに <b>取られた数</b> と <b>カウンター</b>、ペアごとに <b>今月の累計売上</b> を入れる。`
+    : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ。`)
+    + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
+    + (t==="4p"
+      ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+      : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。並べ替えは「③ 並べ替え」から。")
+    + `</span>`;
 
   if (t==="4p"){
     grid.innerHTML = PAIRS.map(([a,b,f])=>`
       <div class="zgrid">${R.rooms.filter(rm=>rm.k===a||rm.k===b).map(roomCell).join("")}</div>
       <div class="pair">
         <span class="pk">${a}＋${b} 累計売上</span>
-        <input class="yen" type="text" inputmode="numeric" maxlength="6" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
+        <input class="yen" type="text" inputmode="numeric" maxlength="8" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
         <span class="u">円</span><span class="pp" data-p="${f}"></span>
       </div>`).join("");
     setVal('[data-f="sAB"]', R.sAB); setVal('[data-f="sCD"]', R.sCD);
@@ -2006,7 +2042,7 @@ function buildRooms(force){
     grid.innerHTML = `
       <div class="pair">
         <span class="pk">累計売上</span>
-        <input class="yen" type="text" inputmode="numeric" maxlength="6" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
+        <input class="yen" type="text" inputmode="numeric" maxlength="8" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
         <span class="u">円</span><span class="pp" data-p="sBox"></span>
       </div>
       <div class="modes">
@@ -2035,7 +2071,7 @@ function buildRooms(force){
   }
   updateDerived();
 }
-function setVal(sel,v){ const el=document.querySelector("#roomGrid "+sel); if(el) el.value = v===undefined?"":v; }
+function setVal(sel,v){ const el=document.querySelector("#roomGrid "+sel); if(!el) return; const isYen = /data-f="s(AB|CD|Box)"/.test(sel); el.value = v===undefined||v===null||v===""?"":(isYen ? Number(String(v).replace(/[^\d]/g,"")||0).toLocaleString("ja-JP") : v); }
 
 /* 補充欄をひらく（4人機） */
 function openAdd(k, silent){
@@ -2188,9 +2224,13 @@ function onRoomClick(e){
 function onRoomInput(e){
   const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
   const f = el.dataset.f, k = el.dataset.k;
-  if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。カウンター値などの誤入力を防ぐ
-    const digits = String(el.value).replace(/[^\d]/g,"").slice(0,6);
-    if (digits !== el.value){ el.value = digits; if (digits.length>=6 && String(e.target.value).length>6) toast("売上は 6 桁（99万円）までです"); }
+  if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。3 桁区切りで表示して桁ミスに気づきやすく
+    const raw = String(el.value).replace(/[^\d]/g,"");
+    const digits = raw.slice(0,6);
+    if (raw.length>6) toast("売上は 6 桁（99万円）までです");
+    const shown = digits ? Number(digits).toLocaleString("ja-JP") : "";
+    if (shown !== el.value){ el.value = shown; }
+    R[f] = digits; updateDerived(); saveDraft(); return;
   } else if (f==="taken" || f==="before" || f==="add" || f==="take"){   // 個数は 3 桁まで
     const digits = String(el.value).replace(/[^\d]/g,"").slice(0,3);
     if (digits !== el.value) el.value = digits;
@@ -2201,7 +2241,7 @@ function onRoomInput(e){
   }
   if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
   else R[f] = el.value;
-  updateDerived();
+  updateDerived(); saveDraft();
 }
 
 /* ========== 集計 ========== */
@@ -2344,7 +2384,11 @@ function lastVisitDate(storeName){
 }
 function renderStoreRow(){
   const doneKeys = new Set(Store.data.weekly.filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
-  $("#storeRow").innerHTML = storesBySales().map(s=>{
+  const ordered = storesBySales().slice().sort((a,b)=>{                       // きょう全台終わった店は後ろへ
+    const da = a.machines.every(m=>doneKeys.has(a.n+"|"+m)), db = b.machines.every(m=>doneKeys.has(b.n+"|"+m));
+    return (da?1:0)-(db?1:0);
+  });
+  $("#storeRow").innerHTML = ordered.map(s=>{
     const total = s.machines.length;
     const done = s.machines.filter(m=>doneKeys.has(s.n+"|"+m)).length;
     const lv = lastVisitDate(s.n);
@@ -2651,8 +2695,12 @@ function wireSourcing(){
       const dec=b.dataset.sd, cur=srcState(it);
       if (dec==="order"){ SRC.open[key] = SRC.open[key]==="order" ? null : "order"; renderSourcing(); return; }
       const next = cur===dec ? "" : dec;               // 同じボタンをもう一度で未判断に戻す
-      b.disabled=true; if (await srcSet(key, next)) { SRC.open[key]=null; toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました"); }
-      renderSourcing(); return;
+      // 先に画面を更新してから通信する（待たせない）。失敗したら元に戻す
+      const prevDocs = (Store.data.sourcing||[]).slice();
+      Store.data.sourcing = prevDocs.filter(d=>d.id!==key && d.key!==key).concat(next ? [{id:key, key, decision:next, by:me(), at:new Date().toISOString(), _pending:true}] : []);
+      SRC.open[key]=null; renderSourcing(); toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました");
+      srcSet(key, next).then(ok=>{ if (!ok){ Store.data.sourcing = prevDocs; renderSourcing(); } });
+      return;
     }
     if (b.dataset.recv || b.dataset.unrecv || b.dataset.cancel){
       if (b.dataset.cancel && !confirm(`「${it.name}」をキャンセル扱いにします。インフィニティへのキャンセル連絡は別途必要です。よろしいですか？`)) return;
@@ -2762,6 +2810,57 @@ function photoThumbs(r){
 function playCatch(){}
 function confetti(){}
 
+/* ===================== 下書き（入力途中を店舗×機械ごとに保持。別の機械やタブに移っても消えない） ===================== */
+const DRAFT_KEY = "crane-lab-drafts-v1";
+let DRAFTS = {}; try { DRAFTS = JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}")||{}; } catch(e){ DRAFTS = {}; }
+const draftKey = () => F.store && F.machine ? `${F.store}|${F.machine}|${F.week}` : "";
+function rHasInput(r){
+  if (!r) return false;
+  if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="") return true;
+  if ((r.rooms||[]).some(rm=>rm.counter!=="" || rm.taken!=="" || rm.before!=="" || num(rm.add)>0 || num(rm.take)>0 || (rm.prizeWas!==undefined && rm.prize!==rm.prizeWas))) return true;
+  if ((r.slots||[]).some(sl=>sl.out || (sl.filled && sl.filled!==sl.prize))) return true;
+  return false;
+}
+let draftT;
+function saveDraft(){
+  if (EDIT) return;
+  const k = draftKey(); if (!k || !R) return;
+  const memo = clean(($("#memoIn")||{}).value||"");
+  if (rHasInput(R) || memo) DRAFTS[k] = {R, memo, at:Date.now()}; else delete DRAFTS[k];
+  clearTimeout(draftT); draftT = setTimeout(()=>{ try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(DRAFTS)); }catch(e){} }, 300);
+}
+function clearDraft(k){ delete DRAFTS[k||draftKey()]; try{ localStorage.setItem(DRAFT_KEY, JSON.stringify(DRAFTS)); }catch(e){} }
+function draftCount(){ const cutoff=Date.now()-3*864e5; Object.keys(DRAFTS).forEach(k=>{ if ((DRAFTS[k].at||0)<cutoff) delete DRAFTS[k]; }); return Object.keys(DRAFTS).length; }
+
+/* ===================== 保存前の確認カード（最後の砦） ===================== */
+function visitSummaryHtml(warns){
+  const t = totals();
+  const rowsHtml = R.type==="4p"
+    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>${addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)?` ${esc(addPrizeOf(rm))}`:""}`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
+        return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
+    : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
+        return `<tr><td class="k">出た</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">補充</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>`; })();
+  const sales = ["sAB","sCD","sBox"].filter(f=> R.type==="4p" ? f!=="sBox" : f==="sBox").map(f=>{ const d=salesDelta(f); return `<tr><td class="k">${FN[f]}</td><td>累計 ${yen(d.cur)}円${d.has?`（前回 ${yen(d.prev)}円）`:""}</td><td>今回分 <b>${yen(d.delta)}円</b>${d.reset?' <span class="warn">リセット扱い</span>':""}</td></tr>`; }).join("");
+  const nB=PHOTOS.filter(p=>p.kind==="before").length, nA=PHOTOS.filter(p=>p.kind==="after").length;
+  const when = `${jpDate(F.week)} ${$("#timeIn").value || nowHM()}`;
+  return `<div class="cf-h">${esc(F.store)}　<span>${esc(F.machine)}</span></div>
+    <div class="cf-sub">${when}　${esc(me())}</div>
+    ${warns.length?`<div class="cf-warn">${warns.map(w=>`<div>⚠ ${esc(w)}</div>`).join("")}</div>`:""}
+    <table class="cf-t">${sales}${rowsHtml}</table>
+    <div class="cf-tot">今回分 <b>${yen(t.sales)}円</b>＝${t.plays}プレイ　払出 <b>${t.pays}</b>こ　写真 前${nB}／後${nA}${clean($("#memoIn").value)?`<div class="cf-memo">メモ：${esc(clean($("#memoIn").value))}</div>`:""}</div>`;
+}
+const nowHM = () => { const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
+function confirmSheet(html, okLabel){
+  return new Promise(res=>{
+    const ov=document.createElement("div"); ov.className="cf-ov"; ov.innerHTML=`<div class="cf-card" role="dialog" aria-modal="true"><div class="cf-ttl">この内容で保存します</div>${html}<div class="cf-acts"><button type="button" class="cf-back" id="cfBack">戻って直す</button><button type="button" class="cf-ok" id="cfSave">${okLabel||"保存する"}</button></div></div>`;
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); res(v); };
+    ov.querySelector("#cfBack").onclick = ()=>done(false);
+    ov.querySelector("#cfSave").onclick = ()=>done(true);
+    ov.addEventListener("click", e=>{ if (e.target===ov) done(false); });
+  });
+}
+
 /* 保存前の入力チェック。block＝保存できない、ask＝確認してから保存 */
 const FN = {sAB:"A＋B", sCD:"C＋D", sBox:"BOX"};
 function validateVisit(){
@@ -2798,13 +2897,15 @@ const SALES_SANITY = 100000;      // 1回の訪問でこれを超える「今回
 async function saveLog(){
   const t = totals();
   if (!F.store || !F.machine || t.sales<=0) return;
+  const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
+  const warns = v.ask.slice();
   if (t.sales > SALES_SANITY){
     const big = ["sAB","sCD","sBox"].map(f=>({f, d:salesDelta(f)})).filter(x=>x.d.delta>SALES_SANITY);
-    const where = big.map(x=>`${x.f==="sAB"?"A＋B":x.f==="sCD"?"C＋D":"BOX"} 累計 ${yen(x.d.cur)}円（前回 ${yen(x.d.prev)}円）`).join("、");
-    if (!confirm(`今回分の売上が ${yen(t.sales)}円 になります。\n${where}\n\n累計の入力ミス（桁が多い・カウンターの数字を入れた）ではありませんか？\n本当にこの金額で保存するなら OK を押してください。`)) return;
+    warns.unshift(`今回分の売上が ${yen(t.sales)}円。` + big.map(x=>`${FN[x.f]} 累計 ${yen(x.d.cur)}円（前回 ${yen(x.d.prev)}円）`).join("、") + "。累計の入力ミス（桁が多い・カウンターの数字を入れた）ではありませんか？");
   }
-  const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
-  if (v.ask.length && !confirm("確認してください：\n・" + v.ask.join("\n・") + "\n\nこのまま保存しますか？")) return;
+  if (!EDIT && !PHOTOS.some(p=>p.kind==="before")) warns.push("補充前の写真がありません（撮り忘れ？）");
+  if (!$("#timeIn").value) $("#timeIn").value = nowHM();                       // 時刻は保存時の「いま」
+  if (!(await confirmSheet(visitSummaryHtml(warns), EDIT ? "修正を保存する" : "保存する"))) return;
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
@@ -2829,21 +2930,35 @@ async function saveLog(){
     const id = EDIT.id;
     if (!(await Store.update("weekly", id, rec))){ btn.disabled=false; return; }
     EDIT=null; toast(`修正を保存しました（スプレッドシートも書き直しました）`);
-    $("#memoIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
-    F.machine=""; R=null; builtFor="";
+    $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
+    F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
     renderEditBar(); renderMachineRow(); buildRooms(true); render();
     if (PHOTOS.length) await uploadPhotos(id);
     return;
   }
   const before = new Set((Store.data.weekly||[]).map(x=>x.id));
+  const savedKey = draftKey(), savedMachine = F.machine;
   if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
   playCatch();
-  toast(`GET! ${F.store} ${yen(t.sales)}円 を記録`);
-  $("#memoIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
-  F.machine=""; R=null; builtFor="";
+  clearDraft(savedKey);
+  $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
+  // 同じ店で、きょうまだ記録していない次の機械を選んでおく
+  const st = storeOf(F.store);
+  const doneKeys = new Set((Store.data.weekly||[]).filter(r=>r.week===F.week).map(r=>r.store+"|"+r.machine));
+  const next = st ? st.machines.find(m=>m!==savedMachine && !doneKeys.has(st.n+"|"+m)) : "";
+  F.machine = next || ""; R=null; builtFor="";
+  toast(next ? `GET! ${yen(t.sales)}円 を記録。次は ${next}` : `GET! ${yen(t.sales)}円 を記録。${F.store} は全台 完了`);
+  setWhenOpen(false);
   renderMachineRow(); buildRooms(true); render();
   const added = (Store.data.weekly||[]).find(x=>!before.has(x.id) && !x._local);
   if (added && PHOTOS.length) await uploadPhotos(added.id);
+}
+/* 訪問日時の欄を開く／閉じる */
+function setWhenOpen(on){
+  const box=$("#whenBox"), line=$("#whenLine"); if (!box) return;
+  box.hidden = !on; line.hidden = on;
+  const today = F.week===iso(new Date());
+  $("#whenTxt").textContent = today ? "訪問日時：きょう・保存した時刻" : `訪問日：${jpDate(F.week)}${$("#timeIn").value?" "+$("#timeIn").value:""}`;
 }
 
 /* ===================== 記録の修正（登録した本人と管理者） =====================
@@ -2879,7 +2994,7 @@ function startEdit(id){
     }
     buildRooms(true);
   }
-  $("#timeIn").value = r.time||""; $("#memoIn").value = r.memo||"";
+  $("#timeIn").value = r.time||""; $("#memoIn").value = r.memo||""; setWhenOpen(true);
   if (r.staff && $("#staffIn").querySelector(`option[value="${CSS.escape(r.staff)}"]`)) $("#staffIn").value = r.staff;
   updateDerived();
   const t=totals();
@@ -2890,7 +3005,7 @@ function startEdit(id){
 }
 function cancelEdit(){
   EDIT=null; $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
-  F.machine=""; R=null; builtFor="";
+  F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
   renderEditBar(); renderMachineRow(); buildRooms(true); render(); toast("修正をやめました");
 }
 
@@ -3042,14 +3157,21 @@ function renderPrizeList(){
 }
 
 /* ===================== 経費 ===================== */
-let exStore = "";
+let exStore = "", exStoreAuto = false;
 const EX_STORES = () => STORES.map(s=>s.n).concat(["その他"]);
 function lastPayee(kind){
   const r = Store.rows("expenses").find(x=>x.kind===kind && x.payee); return r ? r.payee : "";
 }
 const exNoStore = () => $("#exKind").value==="ガソリン代";           // ガソリン代は店舗に属さない（store は「共通」で保存）
+function todayLastStore(){
+  const today = iso(new Date());
+  const r = (Store.data.weekly||[]).filter(x=>x.week===today && staffOf(x)===me()).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
+  return r ? r.store : "";
+}
 function renderCostForm(){
-  chipRow($("#exStoreRow"), EX_STORES(), exStore, v=>{exStore=v;renderCostForm();});
+  if (!exStore){ const s = todayLastStore(); if (s) { exStore = s; exStoreAuto = true; } }
+  chipRow($("#exStoreRow"), EX_STORES(), exStore, v=>{exStore=v; exStoreAuto=false; renderCostForm();});
+  const an=$("#exStoreAutoNote"); if (an) an.hidden = !(exStoreAuto && exStore);
   const gas = exNoStore();
   $("#exStoreField").hidden = gas; $("#exStoreNote").hidden = !gas;
   const pe=$("#exPayee"); if (pe && !pe.value && !pe.dataset.touched) pe.value = lastPayee($("#exKind").value);
@@ -4271,6 +4393,10 @@ function wire(){
   $("#exDate").onchange = renderCostForm;
   $("#saveCost").onclick = saveCost;
 
+  // 訪問日時を変える／説明の「？」
+  $("#whenEdit").onclick = ()=>setWhenOpen(true);
+  $("#zhint").addEventListener("click", e=>{ const b=e.target.closest("[data-qhelp]"); if(!b) return; const l=$("#zhint .qlong"); l.hidden=!l.hidden; });
+  $("#memoIn").addEventListener("input", saveDraft);
   // 記録の修正
   document.addEventListener("click", e=>{ const b=e.target.closest("[data-edit]"); if(!b) return; startEdit(b.dataset.edit); });
   $("#editCancel").onclick = cancelEdit; $("#editCancel2").onclick = cancelEdit;
