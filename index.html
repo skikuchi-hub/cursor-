@@ -340,6 +340,33 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .state b{font-size:13px}
 .src-req{font-size:12px;color:var(--ink-2);padding:9px 12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
 .src-req .st{font-weight:800;white-space:nowrap}
+.sizeng{margin-top:6px;font-size:12px;font-weight:700;color:var(--danger-ink);background:var(--danger-wash);border-radius:8px;padding:5px 8px;display:inline-block}
+/* 一覧の折り畳み見出し */
+.xhead.fold{cursor:pointer;user-select:none;-webkit-user-select:none}
+.xhead.fold .chev{width:22px;height:22px;border-radius:50%;background:var(--surface);border:1px solid var(--line-2);display:grid;place-items:center;flex:none}
+.xhead.fold .chev::before{content:"▾";font-size:13px;line-height:1;color:var(--ink-2);transition:transform .18s}
+.xhead.fold[aria-expanded="true"] .chev::before{transform:rotate(180deg)}
+.xhead.fold[aria-expanded="false"] .ct::after{content:"　タップで表示";color:var(--sky-ink);font-family:var(--fs-body);font-weight:700}
+/* 入力順ガイド */
+.gbar{position:fixed;left:0;right:0;z-index:49;max-width:560px;margin:0 auto;padding:0 10px;pointer-events:none}
+.gbar .in{display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;border-radius:12px;padding:8px 8px 8px 12px;box-shadow:0 10px 26px -10px rgba(27,45,91,.7);font-size:13px;font-weight:700;pointer-events:auto}
+.gbar .nx{font-size:10px;background:var(--gold);color:var(--navy);border-radius:6px;padding:2px 6px;flex:none;font-weight:900}
+.gbar .tx{flex:1;min-width:0;line-height:1.35}
+.gbar button{border:0;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:800;background:rgba(255,255,255,.16);color:#fff;flex:none}
+.gbar button.go{background:var(--gold);color:var(--navy)}
+body.gbar-on #p-log{padding-bottom:64px}
+.gnow{position:relative;border-radius:10px;background:var(--gold-wash);animation:gpulse 1.6s ease-in-out infinite;transform:translateY(-2px);z-index:1}
+.rm .gnow,.pair.gnow{padding:4px 5px;margin:-4px -5px}
+.gnow::before{content:"つぎはここ";position:absolute;top:-12px;left:6px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;padding:1px 7px;border-radius:999px;z-index:2;letter-spacing:.04em;white-space:nowrap}
+.gnow.nob::before{content:none}
+.gnow.nob{transform:none}
+.save.gnow{animation:gpulse 1.2s ease-in-out infinite}
+@keyframes gpulse{0%,100%{box-shadow:0 0 0 3px var(--gold),0 10px 20px -10px rgba(181,127,0,.7)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--gold) 40%,transparent),0 10px 20px -10px rgba(181,127,0,.7)}}
+.rm.gcell{border-color:var(--gold);box-shadow:0 8px 18px -10px rgba(181,127,0,.7)}
+.card.gcur{border-color:var(--navy-2);box-shadow:var(--shadow)}
+.step em.cur{background:var(--gold);color:var(--navy);box-shadow:0 0 0 3px var(--gold-wash)}
+.step em.done{background:var(--green);color:#fff;font-size:0}
+.step em.done::before{content:"✓";font-size:11px}
 /* 訪問日時（ふだんは閉じている） */
 .when-line{display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--ink-2);margin-bottom:12px}
 .qhelp{width:20px;height:20px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-3);font-size:11px;font-weight:800;padding:0;vertical-align:middle}
@@ -843,6 +870,7 @@ body{font-variant-numeric:tabular-nums}
 .gq-dexi.new{border-color:#7fb8ea}
 .gq-dexi.unseen{opacity:.55;border-style:dashed}
 .gq-dexi.unseen .nm{color:#a8b8d4}
+.gq-dexmore{grid-column:1/-1;background:#0f1930;border:2px dashed #2a4a8c;border-radius:6px;color:#f5c542;font-weight:800;font-size:12px;padding:9px;font-family:inherit}
 /* 景品ラボ */
 .gq-labtabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:9px}
 .gq-labtabs .chip{background:#14203a;border-color:#2a4a8c;color:#eef3fb}
@@ -1028,12 +1056,13 @@ body{font-variant-numeric:tabular-nums}
       </div>
 
       <button class="save" id="saveLog">巡回を報告</button>
+      <div class="gbar" id="gbar" hidden><div class="in"><span class="nx">つぎ</span><span class="tx" id="gbarTx"></span><button type="button" id="gbarSkip" hidden>とばす</button><button type="button" class="go" id="gbarGo">ここへ</button></div></div>
       <button type="button" class="save-cancel" id="editCancel2" hidden>← 修正をやめて元に戻る</button>
       <p class="save-note" id="saveNote">店舗・機械・プレイ数を入れると押せます</p>
 
       <div class="card flush" style="margin-top:12px">
-        <div class="xhead"><span class="nm">最近の巡回ログ</span><span class="ct" id="logCt">0件</span></div>
-        <div id="logList"></div>
+        <div class="xhead fold" data-fold="logList" role="button" tabindex="0" aria-expanded="false"><span class="nm">最近の巡回ログ</span><span class="ct" id="logCt">0件</span><span class="chev" aria-hidden="true"></span></div>
+        <div id="logList" hidden></div>
       </div>
     </section>
 
@@ -1095,8 +1124,8 @@ body{font-variant-numeric:tabular-nums}
       <button class="save" id="savePrize">景品を登録する</button>
 
       <div class="card flush" style="margin-top:12px">
-        <div class="xhead"><span class="nm">景品マスタ</span><span class="ct" id="pzCt">0件</span></div>
-        <div id="pzList"></div>
+        <div class="xhead fold" data-fold="pzList" role="button" tabindex="0" aria-expanded="false"><span class="nm">景品マスタ</span><span class="ct" id="pzCt">0件</span><span class="chev" aria-hidden="true"></span></div>
+        <div id="pzList" hidden></div>
       </div>
     </section>
 
@@ -1147,8 +1176,8 @@ body{font-variant-numeric:tabular-nums}
       <button class="save" id="saveCost">台帳に追加する</button>
 
       <div class="card flush" style="margin-top:12px">
-        <div class="xhead"><span class="nm">経費台帳</span><span class="ct" id="exCt">0件</span></div>
-        <div id="exList"></div>
+        <div class="xhead fold" data-fold="exList" role="button" tabindex="0" aria-expanded="false"><span class="nm">経費台帳</span><span class="ct" id="exCt">0件</span><span class="chev" aria-hidden="true"></span></div>
+        <div id="exList" hidden></div>
       </div>
     </section>
 
@@ -1376,7 +1405,7 @@ body{font-variant-numeric:tabular-nums}
     </section>
     <section class="panel" id="p-src" role="tabpanel" aria-label="仕入れ">
       <div class="card">
-        <h2 style="font-family:var(--fs-display);font-size:16px;font-weight:900">📦 とどいた商品</h2>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="font-family:var(--fs-display);font-size:16px;font-weight:900;margin:0">📦 とどいた商品</h2><button type="button" class="chip mini" id="srcReload">最新を取り直す</button><span class="hint" id="srcAt" style="margin:0"></span></div>
         <p class="hint" style="margin-top:5px">インフィニティからのメールが自動で並びます。写真と単価を見て <b>見送り／保留／発注</b> をタップ。「発注要求を出す」で、Mac が発注書と Mail の下書きを作ります。</p>
       </div>
       <div class="src-sum" id="srcSum" hidden><div><div style="font-size:11px;opacity:.8">発注予定</div><b id="srcSumTxt">0件</b></div><button type="button" class="btn" id="srcSubmit">発注要求を出す</button></div>
@@ -1386,7 +1415,6 @@ body{font-variant-numeric:tabular-nums}
         <div class="xhead"><span class="nm">発注要求の状況</span><span class="ct" id="srcReqCt"></span></div>
         <div id="srcReqs"></div>
       </div>
-      <p class="hint" style="text-align:center;margin-top:10px"><button type="button" class="chip mini" id="srcReload">最新を取り直す</button>　<span id="srcAt"></span></p>
     </section>
   </main>
 
@@ -2000,7 +2028,7 @@ function buildRooms(force){
   }
   builtFor = key;
   const grid=$("#roomGrid");
-  if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; }
+  if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; GUIDE.skip={}; }
   if (!F.machine){
     grid.innerHTML = `<p class="hint" style="margin:0">先に店舗と機械を選んでください</p>`;
     $("#mType").textContent=""; $("#zhint").textContent=""; $("#sumLine").innerHTML="";
@@ -2014,8 +2042,8 @@ function buildRooms(force){
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
   $("#zhint").innerHTML = (t==="4p"
-    ? `部屋ごとに <b>取られた数</b> と <b>カウンター</b>、ペアごとに <b>今月の累計売上</b> を入れる。`
-    : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ。`)
+    ? `<b>A→B→C→D</b> の順に「取られた数」→ <b>A＋B・C＋D</b> の累計売上。黄色の枠が「つぎはここ」。`
+    : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
       ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
@@ -2456,6 +2484,7 @@ function updateReadouts(){
     : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
     : (F.machine && R && R.type==="4p") ? ""
     : "押せるようになるまで：" + missing.join(" → ");
+  renderGuide();
 }
 
 /* ===================== 仕入れ（EXAmuse 仕入れ想定商品スプシの「商品一覧」をカードで仕分ける） =====================
@@ -2558,8 +2587,23 @@ function srcOrderOf(it){
   const pcs = Math.round(num(it.qty)*cases), amount = Math.round(num(it.price)*pcs);
   return {cases, pcs, amount, machine:(d&&d.machine)||it.machine||"", note:(d&&d.note)||it.memo||""};
 }
+/* 景品サイズ：商品名・件名・注意・メール原文から「〇cm」「W10×H20×D5cm」「130mm」を拾い、一辺の最大値を返す（取れなければ null） */
+function srcSizeCm(it){
+  const t = [it.name, it.subject, it.caution, it.memo, it.variety, it.raw].filter(Boolean).join(" ").replace(/[０-９．]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/，/g,",");
+  let max = null;
+  const take = (n, unit) => { const v = /mm|ミリ/.test(unit) ? n/10 : n; if (v>0 && v<300 && (max===null || v>max)) max = v; };
+  // 「W10×H20×D5cm」「10x20x5 cm」のように、単位が最後にだけ付くもの
+  for (const m of t.matchAll(/((?:[WHDwhd全長高幅奥行約]*\s*\d+(?:\.\d+)?\s*(?:[×xX＊*]|\s)\s*){1,3}[WHDwhd全長高幅奥行約]*\s*\d+(?:\.\d+)?)\s*(cm|㎝|ｃｍ|センチ|mm|ミリ)/g))
+    m[1].match(/\d+(?:\.\d+)?/g).forEach(n=>take(Number(n), m[2]));
+  // 「約25cm」「H13cm」単独
+  for (const m of t.matchAll(/(\d+(?:\.\d+)?)\s*(cm|㎝|ｃｍ|センチ|mm|ミリ)/g)) take(Number(m[1]), m[2]);
+  return max;
+}
+const SIZE_LIMIT_CM = 13;
+const srcTooBig = it => { const c = srcSizeCm(it); return c!==null && c>SIZE_LIMIT_CM ? c : null; };
 function srcCard(it){
   const st = srcState(it), d = srcDecision(it.key);
+  const big = srcTooBig(it);
   const o = srcOrderOf(it);
   const miss = srcMissing(it);
   const caseAmt = (it.qty>0 && it.price>0) ? it.qty*it.price : null;
@@ -2615,6 +2659,7 @@ function srcCard(it){
       <div class="sub">${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
       <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
+      ${big ? `<div class="sizeng">📏 一辺 ${big}cm（${SIZE_LIMIT_CM}cm 超）→ <b>見送り候補</b></div>` : ""}
       ${it.name ? rankBlock(it) : ""}
       ${state}
       ${canAct ? `<div class="acts">
@@ -2636,7 +2681,7 @@ function renderSourcing(){
   if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
   const shown = items.filter(it=>srcState(it)===SRC.filter);
-  if (SRC.filter==="todo") shown.sort((a,b)=>srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順
+  if (SRC.filter==="todo") shown.sort((a,b)=>(srcTooBig(a)?1:0)-(srcTooBig(b)?1:0) || srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順（13cm 超は後ろ）
   list.innerHTML = shown.length ? shown.map(srcCard).join("")
     : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : SRC.error ? `<span style="color:var(--critical-ink)">読み込めませんでした：${esc(SRC.error)}</span>` : (Store.online() ? (SRC.at ? "まだ商品が届いていません。" : "読み込み中…") : "オンラインのときに読み込まれます。")}</div>`;
   // 発注予定のまとめ
@@ -2768,6 +2813,7 @@ function renderPhotoRow(){
     el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
     const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
     btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
+    renderGuide();
     const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）" : "補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）");
   });
 }
@@ -2809,6 +2855,71 @@ function photoThumbs(r){
 /* クレーン演出は撤去（保存の流れはそのまま） */
 function playCatch(){}
 function confetti(){}
+
+/* ===================== 一覧の折り畳み（巡回ログ・景品マスタ・経費台帳はふだん閉じている。見出しをタップで開く） ===================== */
+const FOLDS = {};
+function applyFolds(){
+  document.querySelectorAll(".xhead.fold[data-fold]").forEach(h=>{
+    const id=h.dataset.fold, body=document.getElementById(id); if(!body) return;
+    const open=!!FOLDS[id]; body.hidden=!open; h.setAttribute("aria-expanded", open?"true":"false");
+  });
+}
+function openFold(id){ FOLDS[id]=true; applyFolds(); }
+document.addEventListener("click", e=>{
+  const h=e.target.closest(".xhead.fold[data-fold]"); if(!h) return;
+  FOLDS[h.dataset.fold]=!FOLDS[h.dataset.fold]; applyFolds();
+});
+document.addEventListener("keydown", e=>{ const h=e.target.closest && e.target.closest(".xhead.fold[data-fold]"); if(h && (e.key==="Enter"||e.key===" ")){ e.preventDefault(); h.click(); } });
+
+/* ===================== 入力順ガイド（つぎに入れる欄を黄色く浮かせ、下のバーに「つぎ」を出す） ===================== */
+const GUIDE = { skip:{} };
+function guideTarget(){
+  if (EDIT) return null;
+  if (!F.store) return {sec:1, el:$("#storeRow"), nob:true, txt:"店舗をえらぶ"};
+  if (!F.machine) return {sec:1, el:$("#machineRow"), txt:"機械をえらぶ"};
+  if (!R) return null;
+  const pf = k => { const b=document.querySelector(`.photo-btn[data-kind="${k}"]`); return b ? b.closest(".photo-field") : null; };
+  if (!PHOTOS.some(p=>p.kind==="before") && !GUIDE.skip.before) return {sec:2, el:pf("before"), txt:"補充前の写真をとる（1枚）", skip:"before"};
+  if (R.type==="4p"){
+    for (const rm of R.rooms){
+      const first = prevStock(rm.k)===null, f = first ? "before" : "taken";
+      const v = rm[f];
+      if (v==="" || v===undefined || v===null){
+        const el = document.querySelector(`#roomGrid [data-k="${rm.k}"][data-f="${f}"]`);
+        return {sec:2, el: el && el.parentElement, focus:el, cell:rm.k, txt: first ? `${rm.k} の「いま入っている数」` : `${rm.k} の「取られた数」（出ていなければ 0）`};
+      }
+    }
+    if (R.sAB==="") { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
+    if (R.sCD==="") { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
+  } else {
+    if (!GUIDE.skip.slots && !R.slots.some(sl=>sl.out||(sl.filled&&sl.filled!==sl.prize))) return {sec:2, el:$("#slotGrid"), txt:"空いていた枠 → 補充した枠 をタップ", skip:"slots"};
+    if (R.sBox==="") { const el=$('#roomGrid [data-f="sBox"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"累計売上（機械の表示どおり）"}; }
+  }
+  if (!PHOTOS.some(p=>p.kind==="after") && !GUIDE.skip.after) return {sec:2, el:pf("after"), txt:"補充後の写真をとる（1枚）", skip:"after"};
+  return {sec:3, el:$("#saveLog"), nob:true, txt:"「巡回を報告」を押す（内容の確認が出ます）"};
+}
+let GT = null;
+function renderGuide(){
+  document.querySelectorAll(".gnow,.gcell,.gcur").forEach(el=>el.classList.remove("gnow","nob","gcell","gcur"));
+  document.querySelectorAll("#p-log .step em").forEach(em=>em.classList.remove("done","cur"));
+  const bar=$("#gbar"); if (!bar) return;
+  GT = guideTarget();
+  if (!GT || !GT.el){ bar.hidden=true; document.body.classList.remove("gbar-on"); return; }
+  const ems = [...document.querySelectorAll("#p-log .step em")];
+  ems.forEach((em,i)=>{ const n=i+1; if (n<GT.sec) em.classList.add("done"); else if (n===GT.sec) em.classList.add("cur"); });
+  const card = GT.el.closest(".card"); if (card) card.classList.add("gcur");
+  GT.el.classList.add("gnow"); if (GT.nob) GT.el.classList.add("nob");
+  if (GT.cell){ const c=document.querySelector(`#roomGrid [data-cell="${GT.cell}"]`); if (c) c.classList.add("gcell"); }
+  $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`;
+  $("#gbarSkip").hidden = !GT.skip;
+  const tb=document.querySelector(".tabbar"); bar.style.bottom = ((tb ? tb.offsetHeight : 58) + 6) + "px";
+  bar.hidden=false; document.body.classList.add("gbar-on");
+}
+function guideGo(){
+  if (!GT || !GT.el) return;
+  GT.el.scrollIntoView({block:"center", behavior:"smooth"});
+  if (GT.focus) setTimeout(()=>GT.focus.focus({preventScroll:true}), 350);
+}
 
 /* ===================== 下書き（入力途中を店舗×機械ごとに保持。別の機械やタブに移っても消えない） ===================== */
 const DRAFT_KEY = "crane-lab-drafts-v1";
@@ -3820,6 +3931,8 @@ function renderCostCheck(){
   $("#gqCostSub").textContent = rows.length ? (flagged ? `要注意 ${flagged}台` : "全台 問題なし") : "";
 }
 
+let DEX_OPEN = false;
+document.addEventListener("click", e=>{ const b=e.target.closest("[data-dexmore]"); if(!b) return; DEX_OPEN=!DEX_OPEN; renderDex(); if (!DEX_OPEN) $("#gqDex").scrollIntoView({block:"start"}); });
 /* 景品ずかん：使った景品ごとに払出数・人気度（★）。景品マスタにあってまだ使っていないものは「みはっけん」 */
 function renderDex(){
   const el=$("#gqDex"); if(!el) return;
@@ -3836,9 +3949,15 @@ function renderDex(){
   const masterNames = allPrizes().map(p=>p.name).filter(Boolean);
   const unseen = masterNames.filter(n=>!stats[n]);
   const recent = (n)=> daysSince(stats[n].last)!==null && daysSince(stats[n].last)<=7;
-  el.innerHTML = ranked.map(n=>`<div class="gq-dexi ${recent(n)?"new":""}"><div class="nm">${esc(n)}</div><div class="rar">${starOf(n)}</div>
-      <div class="st"><span>払出 <b>${stats[n].pays}</b></span><span>${stats[n].uses}回使用</span></div></div>`).join("")
-    + unseen.slice(0,6).map(n=>`<div class="gq-dexi unseen"><div class="nm">${esc(n)}</div><div class="rar">？？？？？</div><div class="st"><span>みはっけん</span><span>マスタにあり</span></div></div>`).join("");
+  const DEX_TOP = 30;                                                // 上位 30 はそのまま、それ以下は折り畳み
+  const card = n => `<div class="gq-dexi ${recent(n)?"new":""}"><div class="nm">${esc(n)}</div><div class="rar">${starOf(n)}</div>
+      <div class="st"><span>払出 <b>${stats[n].pays}</b></span><span>${stats[n].uses}回使用</span></div></div>`;
+  const unseenHtml = unseen.slice(0,6).map(n=>`<div class="gq-dexi unseen"><div class="nm">${esc(n)}</div><div class="rar">？？？？？</div><div class="st"><span>みはっけん</span><span>マスタにあり</span></div></div>`).join("");
+  const rest = ranked.slice(DEX_TOP);
+  el.innerHTML = ranked.slice(0,DEX_TOP).map(card).join("")
+    + (rest.length ? `<button type="button" class="gq-dexmore" data-dexmore aria-expanded="${DEX_OPEN?"true":"false"}">${DEX_OPEN?"▴ とじる":`▾ ${DEX_TOP+1}位以下 ${rest.length}件 を見る`}</button>` : "")
+    + (rest.length && DEX_OPEN ? rest.map(card).join("") : "")
+    + unseenHtml;
   $("#gqDexSub").textContent = `はっけん ${names.length}／${names.length+unseen.length}`;
   $("#gqDexNote").innerHTML = names.length
     ? `★は払出数の順位（上位20%が★5）。<b style="color:#f5c542">${esc(ranked[0])}</b> がいちばん取られている景品。新しい景品を使うと図鑑が埋まる。`
@@ -4395,6 +4514,9 @@ function wire(){
 
   // 訪問日時を変える／説明の「？」
   $("#whenEdit").onclick = ()=>setWhenOpen(true);
+  $("#gbarGo").onclick = guideGo;
+  $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); } };
+  applyFolds();
   $("#zhint").addEventListener("click", e=>{ const b=e.target.closest("[data-qhelp]"); if(!b) return; const l=$("#zhint .qlong"); l.hidden=!l.hidden; });
   $("#memoIn").addEventListener("input", saveDraft);
   // 記録の修正
