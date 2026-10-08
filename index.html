@@ -1141,17 +1141,17 @@ body{font-variant-numeric:tabular-nums}
           <span class="lbl">担当</span>
           <select class="txt staff-sel" id="exStaff"></select>
         </div>
+        <div class="field">
+          <span class="lbl">区分<span class="req">*</span></span>
+          <div class="chips" id="exKindRow"><!-- ボタン式（タップ 1 回で選べる）。中身は下の select と同期 --></div>
+          <select class="txt" id="exKind" hidden>
+            <option>ガソリン代</option><option>駐車場代</option>
+          </select>
+        </div>
         <div class="grid2">
           <div class="field">
             <span class="lbl">日付<span class="req">*</span></span>
             <input class="txt" type="date" id="exDate">
-          </div>
-          <div class="field">
-            <span class="lbl">区分<span class="req">*</span></span>
-            <div class="chips" id="exKindRow"><!-- ボタン式（タップ 1 回で選べる）。中身は下の select と同期 --></div>
-            <select class="txt" id="exKind" hidden>
-              <option>ガソリン代</option><option>駐車場代</option>
-            </select>
           </div>
         </div>
         <div class="field" id="exStoreField">
