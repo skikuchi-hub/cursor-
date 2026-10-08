@@ -1148,7 +1148,8 @@ body{font-variant-numeric:tabular-nums}
           </div>
           <div class="field">
             <span class="lbl">区分<span class="req">*</span></span>
-            <select class="txt" id="exKind">
+            <div class="chips" id="exKindRow"><!-- ボタン式（タップ 1 回で選べる）。中身は下の select と同期 --></div>
+            <select class="txt" id="exKind" hidden>
               <option>ガソリン代</option><option>駐車場代</option>
             </select>
           </div>
@@ -3300,6 +3301,10 @@ function todayLastStore(){
   const r = (Store.data.weekly||[]).filter(x=>x.week===today && staffOf(x)===me()).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
   return r ? r.store : "";
 }
+function renderExKindRow(){
+  const sel=$("#exKind"), row=$("#exKindRow"); if (!sel || !row) return;
+  chipRow(row, [...sel.options].map(o=>o.value), sel.value, v=>{ if (sel.value===v) return; sel.value=v; sel.dispatchEvent(new Event("change")); renderExKindRow(); });
+}
 function renderCostForm(){
   if (!exStore){ const s = todayLastStore(); if (s) { exStore = s; exStoreAuto = true; } }
   chipRow($("#exStoreRow"), EX_STORES(), exStore, v=>{exStore=v; exStoreAuto=false; renderCostForm();});
@@ -4530,6 +4535,7 @@ function wire(){
   $("#exNet").oninput = renderCostForm;
   $("#exPayee").oninput = e => { e.target.dataset.touched = "1"; };
   $("#exKind").onchange = () => { const pe=$("#exPayee"); pe.dataset.touched=""; pe.value=""; renderCostForm(); };
+  renderExKindRow();
   $("#exDate").onchange = renderCostForm;
   $("#saveCost").onclick = saveCost;
 
