@@ -842,7 +842,8 @@ function sourcingSet(me, key, decision, cases, machine, note) {
   var status = clean(sh.getRange(row, EXA.status).getValue());
   if (/発注済/.test(status)) throw new Error("この商品は発注済みです");
   if (decision === "order") {
-    cases = num(cases); if (!(cases > 0)) throw new Error("ケース数を入れてください");
+    cases = num(cases); if (!(cases > 0)) throw new Error("数量を選んでください");
+    if (!(cases === 0.5 || cases === Math.floor(cases))) throw new Error("数量は ハーフ（0.5）か 1 ケース単位です");
     machine = clean(machine); if (["4人機用", "カリーノ用", ""].indexOf(machine) < 0) throw new Error("機械タイプの値が不正です");
     sh.getRange(row, EXA.cases).setValue(cases);
     if (machine) sh.getRange(row, EXA.machine).setValue(machine);
@@ -866,9 +867,11 @@ function sourcingFix(me, key, fields) {
   if (!row) throw new Error("商品一覧にこの商品が見つかりません");
   if (fields.name !== undefined) sh.getRange(row, EXA.name).setValue(clean(fields.name));
   if (fields.code !== undefined) sh.getRange(row, EXA.code).setValue(clean(fields.code));
-  if (fields.qty !== undefined) sh.getRange(row, EXA.qty).setValue(fields.qty === "" ? "" : num(fields.qty));
-  if (fields.price !== undefined) sh.getRange(row, EXA.price).setValue(fields.price === "" ? "" : num(fields.price));
-  if (fields.retail !== undefined) sh.getRange(row, EXA.retail).setValue(fields.retail === "" ? "" : num(fields.retail));
+  // 入数・単価は金額に直結するので管理者だけ（スタッフからの指定は無視する）
+  if (me.role === "admin") {
+    if (fields.qty !== undefined) sh.getRange(row, EXA.qty).setValue(fields.qty === "" ? "" : num(fields.qty));
+    if (fields.price !== undefined) sh.getRange(row, EXA.price).setValue(fields.price === "" ? "" : num(fields.price));
+  }
   var raw = clean(sh.getRange(row, EXA.raw).getValue());
   sh.getRange(row, EXA.raw).setValue((raw ? raw + " ／ " : "") + "アプリで修正(" + me.name + " " + nowIso().slice(0, 10) + ")");
   try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}

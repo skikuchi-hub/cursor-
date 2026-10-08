@@ -66,8 +66,10 @@ HANDOVER.md                  この文書
 - **仕入れタブ（2026-10-08 追加。EXAmuse 発注の入口をアプリに移した）**：下部メニュー 5 つ目「仕入れ」。Apps Script が `SpreadsheetApp.openById` で
   仕入れ想定商品スプシ（1c2dDei3-…）の「商品一覧」を読み（action `sourcing`、90 秒キャッシュ、直近 60 日）、写真つきカードで表示。
   判断は _app_db の `sourcing`（id＝商品キー、decision: skip／hold／order、cases、machine、note、requestId）。
-  「発注する」でケース数（0.5＝ハーフ可）・機械タイプ・備考 → `sourcingSet` が 商品一覧 の N 発注ケース数・Q 機械タイプ・R 発注備考 にも書く（見送り／保留にすると N を空に）。
-  「直す」→ `sourcingFix` が B 商品名・C 品番・E 入数・F 単価・H 上代 を書き、Y メール原文に「アプリで修正」を追記（メール解析漏れの手直し用）。
+  「発注する」は **1ケース（入数こ）／ハーフ（半分）** の選択式。1ケースのときだけケース数を ＋− で増やせる。数量を選ぶまで確定ボタンは押せない。
+  ハーフ列が「不可」の商品はハーフを選べない。機械タイプ・備考 → `sourcingSet` が 商品一覧 の N 発注ケース数・Q 機械タイプ・R 発注備考 にも書く（見送り／保留にすると N を空に）。
+  **読み取れていない商品**（商品名・入数・単価のどれかが空）は「要確認」グループに分かれ、発注ボタンが押せない。メール原文と件名をカードに出す。
+  「直す」→ `sourcingFix`。商品名・品番は誰でも、**入数・単価は管理者だけ**（スタッフの指定はサーバーで無視）。上代は扱わない。Y メール原文に「アプリで修正」を追記。
   「発注要求を出す」→ `sourcingSubmit` が EXAmuse 側 submitRequest と同じ形で「発注要求」タブの 2 行目に行を挿入
   （要求ID R+yyyyMMddHHmmss、状態「待機中」、モード「下書き」、件数、合計、内容(JSON)[{key,name,code,qty,price,cases,pcs,amount,memo,kind}]、担当者＝PIN の本人）。
   あとは Mac の examuse_sync（2 分ごと）が拾って発注書と Mail 下書きを作る。**Mac 側・EXAmuse 側 Apps Script の変更は不要**。

@@ -310,6 +310,14 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .panel2 input.num{width:90px;font-size:16px;padding:8px}
 .sc .panel2 input.txt{font-size:16px;padding:8px}
 .sc .panel2 .ok{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:10px 14px;font-weight:800;font-size:13px}
+.sc .panel2 .ok:disabled{background:var(--surface-sunk);color:var(--ink-3)}
+.sc .panel2 .opt{flex:1;min-width:120px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:10px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink)}
+.sc .panel2 .opt b{font-size:14px}
+.sc .panel2 .opt small{font-size:11px;color:var(--ink-2)}
+.sc .panel2 .opt.on{background:var(--navy);border-color:var(--navy);color:#fff}
+.sc .panel2 .opt.on small{color:#dbe3ee}
+.sc .panel2 .opt:disabled{opacity:.45}
+.sc .acts button:disabled{opacity:.4}
 .sc .panel2 .cancel{background:none;border:0;color:var(--ink-3);font-size:12px;padding:10px 6px}
 .sc .state{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--gold-wash);font-size:12.5px;line-height:1.5}
 .sc .state.done{background:var(--aqua-wash);color:var(--aqua-ink)}
@@ -2384,7 +2392,7 @@ function updateReadouts(){
    品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
    判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, busy:false };
+const SRC = { items:[], requests:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false };
 const SRC_KEY = "crane-lab-sourcing-v1";
 /* lh3.googleusercontent.com/d/ID は末尾に =w480 を付けると縮小版が返る（iPhone での読み込みを軽くする） */
 const thumbSrc = u => /lh3\.googleusercontent\.com\/d\/[^=?]+$/.test(u||"") ? u + "=w480" : u;
@@ -2398,9 +2406,11 @@ function srcState(it){
   if (d && d.decision==="order") return "order";
   if (d && d.decision==="hold") return "hold";
   if (d && d.decision==="skip") return "skip";
+  if (srcMissing(it)) return "check";
   return "todo";
 }
-const SRC_LABEL = {todo:"未判断", order:"発注予定", hold:"保留", skip:"見送り", requested:"要求中", drafted:"下書き済", done:"発注済"};
+const srcMissing = it => !it.name || !(it.qty>0) || !(it.price>0);     // メールから読み取れていない（発注できない）
+const SRC_LABEL = {check:"要確認", todo:"未判断", order:"発注予定", hold:"保留", skip:"見送り", requested:"要求中", drafted:"下書き済", done:"発注済"};
 async function loadSourcing(force){
   if (!Store.online()) { renderSourcing(); return; }
   if (SRC.busy) return; SRC.busy=true;
@@ -2421,8 +2431,9 @@ function srcOrderOf(it){
 function srcCard(it){
   const st = srcState(it), d = srcDecision(it.key);
   const o = srcOrderOf(it);
-  const miss = !it.name || !(it.qty>0) || !(it.price>0);
+  const miss = srcMissing(it);
   const caseAmt = (it.qty>0 && it.price>0) ? it.qty*it.price : null;
+  const halfNG = /不可|×|NG/.test(it.half||"");
   const meta = [];
   if (it.lead) meta.push(`<span>納期 ${esc(it.lead)}</span>`);
   if (it.half) meta.push(`<span>ハーフ ${esc(it.half)}</span>`);
@@ -2435,26 +2446,33 @@ function srcCard(it){
   if (st==="done") state=`<div class="state done"><b>発注済</b>　${esc(it.status)}</div>`;
   else if (st==="drafted") state=`<div class="state done"><b>Mail の下書き作成済み</b>　${esc(it.status)}<br>Mac で送信したら、スプシのメニュー「手動で送った→発注済みにして景品マスタへ登録」を実行。</div>`;
   else if (st==="requested") state=`<div class="state ${req&&req.state==="失敗"?"bad":""}"><b>発注要求 ${esc(d.requestId)}</b>　${req ? esc(req.state) : "確認中"}${req&&req.result?`<br>${esc(req.result)}`:""}${!req||req.state==="待機中"||req.state==="処理中(Mac)" ? "<br>Mac が 2 分以内に発注書と Mail の下書きを作ります。" : ""}</div>`;
-  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases}ケース（${o.pcs}こ）＝ <b>${yen(o.amount)}円</b>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}</div>`;
+  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(o.amount)}円</b>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}</div>`;
+  else if (st==="check") state=`<div class="state bad"><b>メールから読み取れていません</b>　${[!it.name&&"商品名", !(it.qty>0)&&"入数", !(it.price>0)&&"単価"].filter(Boolean).join("・")} が空です。${ME&&ME.role==="admin" ? "「直す」でメールを見て入力するか、見送りにしてください。" : "菊地さんに確認してください（単価・入数は管理者だけが直せます）。"}${it.raw?`<br><span style="font-size:11px">メールの原文：${esc(it.raw)}</span>`:""}${it.subject?`<br><span style="font-size:11px;color:var(--ink-3)">件名：${esc(it.subject)}</span>`:""}</div>`;
   const openOrder = SRC.open[it.key]==="order", openFix = SRC.open[it.key]==="fix";
-  const canAct = st==="todo"||st==="order"||st==="hold"||st==="skip";
+  const canAct = st==="todo"||st==="order"||st==="hold"||st==="skip"||st==="check";
+  const canOrder = canAct && !miss;
+  // 発注の選択：1ケース（入数）か ハーフ（入数の半分）。ケース数は 1 のときだけ増やせる
+  const sel = SRC.sel[it.key] || {mode: o.cases===0.5 ? "half" : (o.cases>=1 ? "case" : ""), n: o.cases>=1 ? o.cases : 1};
+  const selCases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? sel.n : 0;
+  const selPcs = Math.round(num(it.qty)*selCases), selAmt = Math.round(num(it.price)*selPcs);
   const orderPanel = openOrder ? `<div class="panel2" data-key="${esc(it.key)}">
-      <div class="row"><span class="k">ケース数（1ケース＝${it.qty||"?"}こ、ハーフは 0.5）</span>
-        ${[0.5,1,2,3].map(c=>`<button type="button" class="chip mini" data-sc="${c}" aria-pressed="${o.cases===c}">${c}</button>`).join("")}
-        <input class="num" type="number" inputmode="decimal" step="0.5" min="0" data-sci="1" value="${o.cases||""}" placeholder="他">
+      <div class="row"><span class="k">数量を選ぶ</span>
+        <button type="button" class="opt ${sel.mode==="case"?"on":""}" data-smode="case"><b>1ケース</b><small>${yen(it.qty)}こ ＝ ${yen(caseAmt)}円</small></button>
+        <button type="button" class="opt ${sel.mode==="half"?"on":""}" data-smode="half" ${halfNG?"disabled":""}><b>ハーフ</b><small>${halfNG?"ハーフ不可":`${yen(Math.round(it.qty/2))}こ ＝ ${yen(Math.round(caseAmt/2))}円`}</small></button>
       </div>
+      ${sel.mode==="case" ? `<div class="row"><span class="k">ケース数</span><button type="button" class="chip mini" data-sn="-1">−</button><b style="font-size:18px;min-width:28px;text-align:center">${sel.n}</b><button type="button" class="chip mini" data-sn="1">＋</button><span style="font-size:12px;color:var(--ink-2)">＝ ${yen(selPcs)}こ ${yen(selAmt)}円</span></div>` : ""}
       <div class="row"><span class="k">機械タイプ</span>${MACHINES.map(m=>`<button type="button" class="chip mini" data-sm="${esc(m)}" aria-pressed="${o.machine===m}">${m}</button>`).join("")}</div>
-      <div class="row"><span class="k">備考（発注書には出ません）</span><input class="txt" data-sn="1" value="${esc(o.note)}" placeholder="例：下山門用"></div>
-      <div class="row"><button type="button" class="ok" data-sok="1">発注予定に入れる</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
+      <div class="row"><span class="k">備考（発注書には出ません）</span><input class="txt" data-snote="1" value="${esc(o.note)}" placeholder="例：下山門用"></div>
+      <div class="row"><button type="button" class="ok" data-sok="1" ${selCases>0?"":"disabled"}>${selCases>0?`${selCases===0.5?"ハーフ":selCases+"ケース"}（${yen(selPcs)}こ ${yen(selAmt)}円）で発注予定に入れる`:"数量を選んでください"}</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
     </div>` : "";
-  const f = SRC.fix[it.key] || {name:it.name, code:it.code, qty:it.qty??"", price:it.price??"", retail:it.retail??""};
+  const isAdmin = !!(ME && ME.role==="admin");
+  const f = SRC.fix[it.key] || {name:it.name, code:it.code, qty:it.qty??"", price:it.price??""};
   const fixPanel = openFix ? `<div class="panel2" data-key="${esc(it.key)}">
       <div class="row"><span class="k">商品名</span><input class="txt" data-fx="name" value="${esc(f.name||"")}" style="flex:1"></div>
       <div class="row"><span class="k">品番</span><input class="txt" data-fx="code" value="${esc(f.code||"")}" style="flex:1"></div>
-      <div class="row"><span class="k">入数（1ケース）／ 単価（税抜）／ 上代</span>
+      ${isAdmin ? `<div class="row"><span class="k">入数（1ケース）／ 単価（税抜）　※管理者のみ</span>
         <input class="num" type="number" inputmode="numeric" data-fx="qty" value="${esc(String(f.qty))}" placeholder="入数">
-        <input class="num" type="number" inputmode="numeric" data-fx="price" value="${esc(String(f.price))}" placeholder="単価">
-        <input class="num" type="number" inputmode="numeric" data-fx="retail" value="${esc(String(f.retail))}" placeholder="上代"></div>
+        <input class="num" type="number" inputmode="numeric" data-fx="price" value="${esc(String(f.price))}" placeholder="単価"></div>` : `<div class="row"><span class="k">入数・単価はメールのとおり（管理者だけが直せます）</span></div>`}
       ${it.raw?`<div class="row"><span class="k">メールの数量・金額の原文：${esc(it.raw)}</span></div>`:""}
       <div class="row"><button type="button" class="ok" data-fok="1">スプシに保存</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
     </div>` : "";
@@ -2463,16 +2481,16 @@ function srcCard(it){
     <div class="bd">
       <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
       <div class="sub">${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
-      <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}${it.retail>0?`<span class="per">上代 ${yen(it.retail)}円</span>`:""}</div>
+      <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
       ${state}
       ${canAct ? `<div class="acts">
         <button type="button" class="${st==="skip"?"on":""}" data-sd="skip">見送り</button>
         <button type="button" class="${st==="hold"?"on":""}" data-sd="hold">保留</button>
-        <button type="button" class="go ${st==="order"?"on":""}" data-sd="order">${st==="order"?"発注予定 ✓":"発注する"}</button>
+        <button type="button" class="go ${st==="order"?"on":""}" data-sd="order" ${canOrder?"":"disabled"}>${st==="order"?"発注予定 ✓":"発注する"}</button>
       </div>` : ""}
       ${orderPanel}${fixPanel}
-      ${canAct && !openFix ? `<button type="button" class="fix" data-sfix="1">${miss?"⚠ 読み取れていない項目を直す":"商品名・入数・単価を直す"}</button>` : ""}
+      ${canAct && !openFix ? `<button type="button" class="fix" data-sfix="1">${miss?"⚠ 読み取れていない項目を直す":"商品名・品番を直す"}</button>` : ""}
     </div>
   </div>`;
 }
@@ -2480,7 +2498,7 @@ function renderSourcing(){
   const list=$("#srcList"); if (!list) return;
   const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
   const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
-  const groups = [["todo","未判断"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"]];
+  const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"]];
   if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
   const shown = items.filter(it=>srcState(it)===SRC.filter);
@@ -2545,14 +2563,17 @@ function wireSourcing(){
       b.disabled=true; if (await srcSet(key, next)) { SRC.open[key]=null; toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました"); }
       renderSourcing(); return;
     }
-    if (b.dataset.sfix){ SRC.open[key]="fix"; SRC.fix[key]={name:it.name, code:it.code, qty:it.qty??"", price:it.price??"", retail:it.retail??""}; renderSourcing(); return; }
+    if (b.dataset.sfix){ SRC.open[key]="fix"; SRC.fix[key]={name:it.name, code:it.code, qty:it.qty??"", price:it.price??""}; renderSourcing(); return; }
     if (b.dataset.scancel){ SRC.open[key]=null; renderSourcing(); return; }
-    if (b.dataset.sc){ const p=card.querySelector("[data-sci]"); p.value=b.dataset.sc; card.querySelectorAll("[data-sc]").forEach(x=>x.setAttribute("aria-pressed", String(x===b))); return; }
+    const keepPanel = () => { const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const nt=card.querySelector("[data-snote]"); SRC.keep = {machine: mb?mb.dataset.sm:"", note: nt?nt.value:""}; };
+    if (b.dataset.smode){ keepPanel(); const cur=SRC.sel[key]||{mode:"",n:1}; SRC.sel[key]={mode: cur.mode===b.dataset.smode ? "" : b.dataset.smode, n: cur.n||1}; renderSourcing(); restorePanel(card.dataset.key); return; }
+    if (b.dataset.sn){ keepPanel(); const cur=SRC.sel[key]||{mode:"case",n:1}; SRC.sel[key]={mode:"case", n: Math.max(1, (cur.n||1)+num(b.dataset.sn))}; renderSourcing(); restorePanel(card.dataset.key); return; }
     if (b.dataset.sm){ card.querySelectorAll("[data-sm]").forEach(x=>x.setAttribute("aria-pressed", String(x===b && x.getAttribute("aria-pressed")!=="true"))); return; }
     if (b.dataset.sok){
-      const cases=num(card.querySelector("[data-sci]").value); if (!(cases>0)){ toast("ケース数を入れてください"); return; }
+      const sel=SRC.sel[key]||{}; const cases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? num(sel.n)||1 : 0;
+      if (!(cases>0)){ toast("数量を選んでください"); return; }
       const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const machine = mb ? mb.dataset.sm : "";
-      const note=clean(card.querySelector("[data-sn]").value);
+      const note=clean(card.querySelector("[data-snote]").value);
       b.disabled=true;
       if (await srcSet(key,"order",{cases, machine, note})){ SRC.open[key]=null; toast(`発注予定に入れました（${cases}ケース）`); }
       renderSourcing(); return;
@@ -2560,12 +2581,17 @@ function wireSourcing(){
     if (b.dataset.fok){
       const fields={}; card.querySelectorAll("[data-fx]").forEach(i=>{ fields[i.dataset.fx]=i.value; });
       b.disabled=true;
-      try { await api("sourcingFix",{key, fields}); Object.assign(it,{name:clean(fields.name), code:clean(fields.code), qty:fields.qty===""?null:num(fields.qty), price:fields.price===""?null:num(fields.price), retail:fields.retail===""?null:num(fields.retail)}); SRC.open[key]=null; toast("スプシに保存しました"); }
+      try { await api("sourcingFix",{key, fields}); Object.assign(it,{name:clean(fields.name), code:clean(fields.code)}); if ("qty" in fields) it.qty = fields.qty===""?null:num(fields.qty); if ("price" in fields) it.price = fields.price===""?null:num(fields.price); SRC.open[key]=null; toast("スプシに保存しました"); }
       catch(err){ toast(errMsg(err)); }
       renderSourcing(); return;
     }
   });
-  $("#srcList").addEventListener("input", e=>{ const i=e.target.closest("[data-sci]"); if(!i) return; const card=i.closest(".sc"); card.querySelectorAll("[data-sc]").forEach(x=>x.setAttribute("aria-pressed", String(num(x.dataset.sc)===num(i.value)))); });
+}
+/* 数量ボタンで描き直したあと、機械タイプと備考の入力を戻す */
+function restorePanel(key){
+  const k=SRC.keep; if (!k) return; const card=document.querySelector(`.sc[data-key="${CSS.escape(key)}"]`); if(!card) return;
+  card.querySelectorAll("[data-sm]").forEach(x=>x.setAttribute("aria-pressed", String(x.dataset.sm===k.machine)));
+  const nt=card.querySelector("[data-snote]"); if (nt) nt.value=k.note; SRC.keep=null;
 }
 
 /* ===================== 写真添付 =====================
