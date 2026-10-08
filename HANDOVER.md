@@ -176,6 +176,7 @@ HANDOVER.md                  この文書
 | `fixVisitDates` | 移行4件の訪問日を 10/5→10/6 に修正（＋repairDates） | 済 |
 | `recomputeSalesDeltas` | 全記録を累計→差分で再計算し、巡回ログ E・J、部屋別ログ F・G を更新 | 済 |
 | `renameDateHeaders` | A1 見出しの改名（setup から呼ばれる） | 済 |
+| `allocateBulkCost` | まとめ買い（エスプラン一括 ¥110,000 税抜）の単価を、仕入先一致・単価 0 の行に数量按分で入れる。先頭の `BULK_TOTAL`／`BULK_VENDOR`／`BULK_WEIGHT_BIG`（カリーノ用の重み）を変えて再利用可。メモ列に按分の記録 | 未（2026-10-08 案内） |
 | `rebuildPrizeStats` | 「景品実績」タブを全記録から作り直す | 済（2026-10-07、4行） |
 | `setup`（再実行） | 部屋別ログ M1「回収数」、景品マスタ J列の数式を回収対応に更新（`upgradeStockFormulas`） | 済（2026-10-07） |
 | `setup`（写真対応で再実行） | 「写真」タブと Drive「クレーンログ写真／_チェック結果」フォルダを作る | **未**（写真対応の Code.gs を貼ったあとに実行） |

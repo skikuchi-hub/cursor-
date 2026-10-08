@@ -1008,6 +1008,41 @@ function fixVisitDates() {
   var msg = "訪問日を直しました：" + n + " 件 → " + repairDates();
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
+/* まとめ買いした景品の仕入単価を数量で按分して景品マスタ D 列に入れる（2026-10-08 エスプラン一括 ¥110,000 税抜）。
+   対象＝B 列 仕入先が BULK_VENDOR で、D 列 仕入単価が 0 または空の行。1 個あたり ＝ 合計 ÷ Σ(買った数量 × 重み)。
+   重み：BULK_WEIGHT_BIG は機械タイプ「カリーノ用」（大物）の 1 個を 4人機用の何個分と見るか。1 なら全部同じ単価。
+   再実行しても安全（単価が入った行は対象外になる）。やり直すときは D 列を 0 に戻してから実行。K 列メモに按分の記録を残す */
+var BULK_TOTAL = 110000, BULK_VENDOR = "株式会社エスプラン", BULK_WEIGHT_BIG = 1;
+function allocateBulkCost() {
+  var sh = ss().getSheetByName("景品マスタ"); if (!sh) return "景品マスタがありません";
+  var v = sh.getDataRange().getValues(); if (v.length < 2) return "行がありません";
+  var hdr = v[0].map(function (h) { return String(h || "").replace(/\s/g, ""); });
+  function ci(name) { for (var i = 0; i < hdr.length; i++) if (hdr[i].indexOf(name) === 0) return i; return -1; }
+  var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), qty: ci("買った数量"), memo: ci("メモ") };
+  var rows = [], wsum = 0;
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i]; if (!clean(r[C.name])) continue;
+    if (clean(r[C.vendor]) !== BULK_VENDOR) continue;
+    if (num(r[C.cost]) > 0) continue;
+    var q = num(r[C.qty]); if (!(q > 0)) continue;
+    var w = /カリーノ/.test(clean(r[C.kind])) ? BULK_WEIGHT_BIG : 1;
+    rows.push({ i: i + 1, q: q, w: w }); wsum += q * w;
+  }
+  if (!rows.length || !(wsum > 0)) return "対象の行がありません（仕入先 " + BULK_VENDOR + "・単価 0・数量あり）";
+  var unit = BULK_TOTAL / wsum, total = 0, lines = [];
+  rows.forEach(function (x) {
+    var c = Math.round(unit * x.w); total += c * x.q;
+    sh.getRange(x.i, C.cost + 1).setValue(c);
+    var memo = clean(v[x.i - 1][C.memo]);
+    var note = "一括¥" + BULK_TOTAL.toLocaleString() + "（税抜）を数量按分 " + nowIso().slice(0, 10);
+    if (memo.indexOf("数量按分") < 0) sh.getRange(x.i, C.memo + 1).setValue(memo ? memo + " ／ " + note : note);
+    lines.push(clean(v[x.i - 1][C.name]) + " ×" + x.q + " @" + c);
+  });
+  dropCache("sheet_master");
+  var msg = rows.length + " 行に単価を入れました。1個 ≒ ¥" + Math.round(unit) + (BULK_WEIGHT_BIG !== 1 ? "（カリーノ用は ×" + BULK_WEIGHT_BIG + "）" : "") +
+    "。単価×数量の合計 ¥" + total.toLocaleString() + "（端数の差 ¥" + (total - BULK_TOTAL).toLocaleString() + "）\n" + lines.join("\n");
+  Logger.log(msg); SpreadsheetApp.getActive().toast(rows.length + " 行に単価を入れました（1個 ≒ ¥" + Math.round(unit) + "）"); return msg;
+}
 /* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "importPhotoChecks") ScriptApp.deleteTrigger(t); });
