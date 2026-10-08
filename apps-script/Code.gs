@@ -1008,40 +1008,71 @@ function fixVisitDates() {
   var msg = "訪問日を直しました：" + n + " 件 → " + repairDates();
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
-/* まとめ買いした景品の仕入単価を数量で按分して景品マスタ D 列に入れる（2026-10-08 エスプラン一括 ¥110,000 税抜）。
-   対象＝B 列 仕入先が BULK_VENDOR で、D 列 仕入単価が 0 または空の行。1 個あたり ＝ 合計 ÷ Σ(買った数量 × 重み)。
-   重み：BULK_WEIGHT_BIG は機械タイプ「カリーノ用」（大物）の 1 個を 4人機用の何個分と見るか。1 なら全部同じ単価。
-   再実行しても安全（単価が入った行は対象外になる）。やり直すときは D 列を 0 に戻してから実行。K 列メモに按分の記録を残す */
+/* まとめ買いした景品（2026-10-08 エスプラン一括 ¥110,000 税抜）の仕入単価を景品マスタ D 列に入れる。
+   ロット＝K 列メモに BULK_MARK（「一括¥110,000」）がある行 ＋ B 列仕入先が BULK_VENDOR で D 列が 0 の行。
+   そのうち「単価が分かっている行」（D 列に手で入れた単価があり、メモに「数量按分」が無い行）はその単価のまま、
+   残り ＝ 合計 − Σ(分かっている単価 × 数量) を、残りの行に数量で按分する（1 個 ＝ 残り ÷ Σ(数量 × 重み)）。
+   重み BULK_WEIGHT_BIG は機械タイプ「カリーノ用」1 個を 4人機用の何個分と見るか。1 なら同じ単価。
+   按分で入れた行はメモに「数量按分」が付くので、再実行すると按分し直される（手で入れた単価の行は触らない）。
+   手順：resetBulkCost で按分分を 0 に戻す → 分かっている単価を D 列に手で入れる → allocateBulkCost */
 var BULK_TOTAL = 110000, BULK_VENDOR = "株式会社エスプラン", BULK_WEIGHT_BIG = 1;
-function allocateBulkCost() {
-  var sh = ss().getSheetByName("景品マスタ"); if (!sh) return "景品マスタがありません";
-  var v = sh.getDataRange().getValues(); if (v.length < 2) return "行がありません";
+var BULK_MARK = "一括¥" + BULK_TOTAL.toLocaleString();
+function bulkRows_() {
+  var sh = ss().getSheetByName("景品マスタ"); if (!sh) throw new Error("景品マスタがありません");
+  var v = sh.getDataRange().getValues();
   var hdr = v[0].map(function (h) { return String(h || "").replace(/\s/g, ""); });
   function ci(name) { for (var i = 0; i < hdr.length; i++) if (hdr[i].indexOf(name) === 0) return i; return -1; }
   var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), qty: ci("買った数量"), memo: ci("メモ") };
-  var rows = [], wsum = 0;
+  var rows = [];
   for (var i = 1; i < v.length; i++) {
-    var r = v[i]; if (!clean(r[C.name])) continue;
-    if (clean(r[C.vendor]) !== BULK_VENDOR) continue;
-    if (num(r[C.cost]) > 0) continue;
-    var q = num(r[C.qty]); if (!(q > 0)) continue;
-    var w = /カリーノ/.test(clean(r[C.kind])) ? BULK_WEIGHT_BIG : 1;
-    rows.push({ i: i + 1, q: q, w: w }); wsum += q * w;
+    var r = v[i]; var name = clean(r[C.name]); if (!name) continue;
+    var memo = clean(r[C.memo]), cost = num(r[C.cost]), q = num(r[C.qty]);
+    var inLot = memo.indexOf(BULK_MARK) >= 0 || (clean(r[C.vendor]) === BULK_VENDOR && !(cost > 0));
+    if (!inLot) continue;
+    rows.push({ i: i + 1, name: name, q: q, cost: cost, memo: memo, w: /カリーノ/.test(clean(r[C.kind])) ? BULK_WEIGHT_BIG : 1,
+                auto: memo.indexOf("数量按分") >= 0 });
   }
-  if (!rows.length || !(wsum > 0)) return "対象の行がありません（仕入先 " + BULK_VENDOR + "・単価 0・数量あり）";
-  var unit = BULK_TOTAL / wsum, total = 0, lines = [];
-  rows.forEach(function (x) {
-    var c = Math.round(unit * x.w); total += c * x.q;
-    sh.getRange(x.i, C.cost + 1).setValue(c);
-    var memo = clean(v[x.i - 1][C.memo]);
-    var note = "一括¥" + BULK_TOTAL.toLocaleString() + "（税抜）を数量按分 " + nowIso().slice(0, 10);
-    if (memo.indexOf("数量按分") < 0) sh.getRange(x.i, C.memo + 1).setValue(memo ? memo + " ／ " + note : note);
-    lines.push(clean(v[x.i - 1][C.name]) + " ×" + x.q + " @" + c);
+  return { sh: sh, C: C, rows: rows };
+}
+function resetBulkCost() {                      // 按分で入れた単価を 0 に戻す（ロットの印は残す）。手で入れた単価はそのまま
+  var b = bulkRows_(), n = 0;
+  b.rows.forEach(function (x) {
+    if (!x.auto) return;
+    b.sh.getRange(x.i, b.C.cost + 1).setValue(0);
+    var base = x.memo.replace(/\s*／?\s*一括¥[\d,]+（税抜）を数量按分\s*[\d-]*/g, "").replace(/^\s*／\s*|\s*／\s*$/g, "");
+    b.sh.getRange(x.i, b.C.memo + 1).setValue((base ? base + " ／ " : "") + BULK_MARK + "（税抜）");   // ロットの印は必ず残す
+    n++;
   });
   dropCache("sheet_master");
-  var msg = rows.length + " 行に単価を入れました。1個 ≒ ¥" + Math.round(unit) + (BULK_WEIGHT_BIG !== 1 ? "（カリーノ用は ×" + BULK_WEIGHT_BIG + "）" : "") +
-    "。単価×数量の合計 ¥" + total.toLocaleString() + "（端数の差 ¥" + (total - BULK_TOTAL).toLocaleString() + "）\n" + lines.join("\n");
-  Logger.log(msg); SpreadsheetApp.getActive().toast(rows.length + " 行に単価を入れました（1個 ≒ ¥" + Math.round(unit) + "）"); return msg;
+  var msg = "按分していた " + n + " 行の単価を 0 に戻しました。分かっている単価を D 列に入れてから allocateBulkCost を実行してください";
+  Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
+}
+function allocateBulkCost() {
+  var b = bulkRows_(), known = [], unknown = [], knownSum = 0, wsum = 0;
+  b.rows.forEach(function (x) {
+    if (x.cost > 0 && !x.auto) { known.push(x); knownSum += x.cost * x.q; }
+    else if (x.q > 0) { unknown.push(x); wsum += x.q * x.w; }
+  });
+  if (!unknown.length) return "按分する行がありません（単価 0 の行、または「数量按分」の行が無い）";
+  var remain = BULK_TOTAL - knownSum;
+  if (!(remain > 0)) return "分かっている単価の合計 ¥" + knownSum.toLocaleString() + " が一括金額 ¥" + BULK_TOTAL.toLocaleString() + " を超えています。単価を見直してください";
+  var unit = remain / wsum, total = knownSum, lines = [];
+  unknown.forEach(function (x) {
+    var c = Math.round(unit * x.w); total += c * x.q;
+    b.sh.getRange(x.i, b.C.cost + 1).setValue(c);
+    var base = x.memo.replace(/\s*／?\s*一括¥[\d,]+（税抜）を数量按分\s*[\d-]*/g, "").replace(/^\s*／\s*|\s*／\s*$/g, "");
+    var note = BULK_MARK + "（税抜）を数量按分 " + nowIso().slice(0, 10);
+    b.sh.getRange(x.i, b.C.memo + 1).setValue(base ? base + " ／ " + note : note);
+    lines.push(x.name + " ×" + x.q + " @" + c);
+  });
+  known.forEach(function (x) {                   // 分かっている単価の行にはロットの印だけ付ける（既にあれば何もしない）
+    if (x.memo.indexOf(BULK_MARK) < 0) b.sh.getRange(x.i, b.C.memo + 1).setValue((x.memo ? x.memo + " ／ " : "") + BULK_MARK + "（税抜）単価確定");
+  });
+  dropCache("sheet_master");
+  var msg = "分かっている単価 " + known.length + " 行（合計 ¥" + knownSum.toLocaleString() + "）＋ 按分 " + unknown.length + " 行（残り ¥" + remain.toLocaleString() + " → 1個 ≒ ¥" + Math.round(unit) +
+    (BULK_WEIGHT_BIG !== 1 ? "、カリーノ用は ×" + BULK_WEIGHT_BIG : "") + "）。単価×数量の合計 ¥" + total.toLocaleString() + "（端数の差 ¥" + (total - BULK_TOTAL).toLocaleString() + "）\n" +
+    (known.length ? "【確定】" + known.map(function (x) { return x.name + " ×" + x.q + " @" + x.cost; }).join("、") + "\n" : "") + "【按分】\n" + lines.join("\n");
+  Logger.log(msg); SpreadsheetApp.getActive().toast("按分 " + unknown.length + " 行（1個 ≒ ¥" + Math.round(unit) + "）、確定 " + known.length + " 行"); return msg;
 }
 /* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
 function installTriggers() {
