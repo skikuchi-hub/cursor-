@@ -1679,7 +1679,7 @@ const Store = {
   },
   async sync(first){
     if (this.syncing || !PIN) return; this.syncing=true;
-    try { const r = await api("bootstrap"); this.applyBootstrap(r); checkAppUpdate(); }
+    try { const started=Date.now(); const r = await api("bootstrap"); r.__started=started; this.applyBootstrap(r); checkAppUpdate(); }
     catch(e){
       if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; this.mode="offline"; this.paintMode(); showGate("PINが無効です。入り直してください"); }
       else { this.mode="offline"; this.paintMode(); if (first) toast(errMsg(e)); }
@@ -1692,6 +1692,7 @@ const Store = {
     applyPerms();
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+    overlaySourcing(r.__started||0);               // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
     applySheetData(r.sheet_master, r.stores);
     this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
@@ -2501,7 +2502,23 @@ function updateReadouts(){
    品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
    判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false, agg:null };
+const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false, agg:null, local:{} };
+/* 端末で変えた判断（key → {doc, at, pending}）。bootstrap の応答がその変更より前に取りに行ったものなら、応答で上書きせず端末の値を残す。
+   送信中（pending）の間は同じ商品の二重タップを受け付けない */
+function setLocalSourcing(key, doc, pending){
+  SRC.local[key] = {doc, at:Date.now(), pending:!!pending};
+  Store.data.sourcing = (Store.data.sourcing||[]).filter(d=>d.id!==key && d.key!==key).concat(doc ? [doc] : []);
+}
+function overlaySourcing(started){
+  if (typeof SRC==="undefined" || !SRC.local) return;
+  let docs = Store.data.sourcing||[];
+  Object.keys(SRC.local).forEach(k=>{
+    const e = SRC.local[k];
+    if (!e.pending && e.at < started){ delete SRC.local[k]; return; }     // この応答はその変更より後に取りに行ったもの → サーバーの値で良い
+    docs = docs.filter(d=>d.id!==k && d.key!==k).concat(e.doc ? [e.doc] : []);
+  });
+  Store.data.sourcing = docs;
+}
 const SRC_KEY = "crane-lab-sourcing-v1";
 /* lh3.googleusercontent.com/d/ID は末尾に =w480 を付けると縮小版が返る（iPhone での読み込みを軽くする） */
 const thumbSrc = u => /lh3\.googleusercontent\.com\/d\/[^=?]+$/.test(u||"") ? u + "=w480" : u;
@@ -2718,7 +2735,7 @@ async function srcSet(key, decision, extra){
   if (!Store.online()){ toast("いまは保存できません（オフライン）"); return false; }
   try {
     const r = await api("sourcingSet", Object.assign({key, decision}, extra||{}));
-    Store.data.sourcing = (Store.data.sourcing||[]).filter(d=>d.id!==key && d.key!==key).concat(r.rec ? [Object.assign({id:key}, r.rec)] : []);
+    setLocalSourcing(key, r.rec ? Object.assign({id:key}, r.rec) : null, false);
     const it = SRC.items.find(x=>x.key===key);
     if (it && decision!=="received" && decision!=="cancelled" && decision!=="unreceive"){ if (decision==="order"){ it.cases=num(extra.cases); if (extra.machine) it.machine=extra.machine; it.memo=extra.note||""; } else it.cases=null; }
     return true;
@@ -2752,12 +2769,13 @@ function wireSourcing(){
     if (b.dataset.sd){
       const dec=b.dataset.sd, cur=srcState(it);
       if (dec==="order"){ SRC.open[key] = SRC.open[key]==="order" ? null : "order"; renderSourcing(); return; }
+      if (SRC.local[key] && SRC.local[key].pending){ toast("前の操作を送信中です。少し待ってください"); return; }
       const next = cur===dec ? "" : dec;               // 同じボタンをもう一度で未判断に戻す
-      // 先に画面を更新してから通信する（待たせない）。失敗したら元に戻す
-      const prevDocs = (Store.data.sourcing||[]).slice();
-      Store.data.sourcing = prevDocs.filter(d=>d.id!==key && d.key!==key).concat(next ? [{id:key, key, decision:next, by:me(), at:new Date().toISOString(), _pending:true}] : []);
+      // 先に画面を更新してから通信する（待たせない）。失敗したらこの商品だけ元に戻す
+      const prevDoc = srcDecision(key) ? Object.assign({}, srcDecision(key)) : null;
+      setLocalSourcing(key, next ? {id:key, key, decision:next, by:me(), at:new Date().toISOString(), _pending:true} : null, true);
       SRC.open[key]=null; renderSourcing(); toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました");
-      srcSet(key, next).then(ok=>{ if (!ok){ Store.data.sourcing = prevDocs; renderSourcing(); } });
+      srcSet(key, next).then(ok=>{ if (!ok){ setLocalSourcing(key, prevDoc, false); renderSourcing(); } });
       return;
     }
     if (b.dataset.recv || b.dataset.unrecv || b.dataset.cancel){
