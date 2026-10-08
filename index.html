@@ -318,6 +318,19 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .panel2 .opt.on small{color:#dbe3ee}
 .sc .panel2 .opt:disabled{opacity:.45}
 .sc .acts button:disabled{opacity:.4}
+.sc .rank{display:flex;gap:10px;align-items:stretch;margin-top:9px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;background:var(--surface-2)}
+.sc .rank .rk{flex:none;width:58px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface-sunk);color:var(--ink-2);padding:6px 0}
+.sc .rank .rk b{font-size:24px;line-height:1;font-family:var(--fs-display)}
+.sc .rank .rk small{font-size:9px;line-height:1.2;text-align:center;margin-top:3px;opacity:.8}
+.sc .rank .rt{flex:1;min-width:0;padding:7px 9px 7px 0;font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.sc .rank .rt .w{font-weight:800;color:var(--ink);font-size:12.5px}
+.sc .rank .rt .bs{font-weight:600;color:var(--ink-3);margin-left:6px;font-size:11px}
+.sc .rank .rt .g{color:var(--ink-3);font-size:11px}
+.sc .rank.s .rk{background:var(--gold);color:#1b2d5b}
+.sc .rank.a .rk{background:var(--aqua-wash);color:var(--aqua-ink)}
+.sc .rank.b .rk{background:var(--sky-wash,#e3effb);color:var(--navy)}
+.sc .rank.c .rk{background:var(--surface-sunk);color:var(--ink-3)}
+.sc .rank.none .rk{background:var(--surface-sunk);color:var(--ink-3)}
 .sc .panel2 .cancel{background:none;border:0;color:var(--ink-3);font-size:12px;padding:10px 6px}
 .sc .state{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--gold-wash);font-size:12.5px;line-height:1.5}
 .sc .state.done{background:var(--aqua-wash);color:var(--aqua-ink)}
@@ -2392,7 +2405,7 @@ function updateReadouts(){
    品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
    判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false };
+const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false, agg:null };
 const SRC_KEY = "crane-lab-sourcing-v1";
 /* lh3.googleusercontent.com/d/ID は末尾に =w480 を付けると縮小版が返る（iPhone での読み込みを軽くする） */
 const thumbSrc = u => /lh3\.googleusercontent\.com\/d\/[^=?]+$/.test(u||"") ? u + "=w480" : u;
@@ -2417,12 +2430,66 @@ async function loadSourcing(force){
   const el=$("#srcAt"); if (el) el.textContent="読み込み中…";
   try {
     const r = await api("sourcing", {force:!!force});
-    SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now(); SRC.error = "";
-    try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, limit:SRC.limit, at:SRC.at})); } catch(e){}
+    SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.history = r.history||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now(); SRC.error = "";
+    try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, history:SRC.history, limit:SRC.limit, at:SRC.at})); } catch(e){}
   } catch(e){ SRC.error = e && e.code==="unknown_action" ? "Apps Script がまだ古い版です。「デプロイを管理 → 新バージョン」を行ってください" : errMsg(e); toast(SRC.error); }
   finally { SRC.busy=false; renderSourcing(); }
 }
-function srcLoadCache(){ try { const r=JSON.parse(localStorage.getItem(SRC_KEY)||"null"); if (r){ SRC.items=r.items||[]; SRC.requests=r.requests||[]; SRC.limit=r.limit||300000; SRC.at=r.at||0; } } catch(e){} }
+function srcLoadCache(){ try { const r=JSON.parse(localStorage.getItem(SRC_KEY)||"null"); if (r){ SRC.items=r.items||[]; SRC.requests=r.requests||[]; SRC.history=r.history||[]; SRC.limit=r.limit||300000; SRC.at=r.at||0; } } catch(e){} }
+
+/* ===================== 仕入れランク（過去の売れ行きから、この商品が出そうかを判定） =====================
+   根拠は 3 つ。① 同系統（キャラ・ブランド・品種の語が一致する景品）の払出ペースと原価率
+   ② 同じ価格帯（仕入単価の帯）の景品の払出ペース ③ 過去に発注した商品か（発注履歴）。
+   データが無いときは無理に判定せず「初めての系統」とし、原価率の目安（推奨 1/N）だけ出す */
+const IP_WORDS = ["サンリオ","ハローキティ","キティ","シナモン","クロミ","マイメロ","ポムポムプリン","ハンギョドン","ポチャッコ","けろっぴ","ちいかわ","ハチワレ","うさぎ","ポケモン","ピカチュウ","モンコレ","イーブイ","ディズニー","トイストーリー","トイ・ストーリー","ミッキー","プーさん","スティッチ","スヌーピー","すみっコ","ドラえもん","クレヨンしんちゃん","しんちゃん","NICI","FUGGLER","ファグラー","シマエナガ","kirby","カービィ","ミッフィー","リラックマ","たまごっち","ワンピース","鬼滅","呪術","ハイキュー","SPY","ジブリ","トトロ","まっくろくろすけ","ムーミン","スポンジボブ","ミニオン","カピバラ","しろたん","ころはむ","ZEESEA","ズーシー","rom&nd","ロムアンド","AMUSE","ペリペラ","PERIPERA","コスメ","リップ","アイシャドウ","ぬいぐるみ","マスコット","キーリング","キーホルダー","クッション","ブランケット","ポーチ","パスケース","フィギュア","じゃがりこ","お菓子","タオル","ランプ","ファン","時計","ヘアクリップ","nici","nica","BABYFUGG"];
+const normName = s => String(s||"").normalize("NFKC").toLowerCase().replace(/[\s【】\[\]（）()・、,．.「」『』!！?？&＆\-_／\/●★☆×]/g,"");
+function nameTokens(s){
+  const n=normName(s), t=new Set();
+  IP_WORDS.forEach(w=>{ if (n.includes(normName(w))) t.add(normName(w)); });
+  (String(s||"").normalize("NFKC").match(/[ァ-ヴー]{3,}/g)||[]).forEach(k=>t.add(normName(k)));
+  return t;
+}
+const priceBand = p => p<=300 ? "〜300円" : p<=600 ? "301〜600円" : p<=1000 ? "601〜1,000円" : "1,001円〜";
+function srcRank(it){
+  const agg = SRC.agg || (SRC.agg = labAgg());
+  const list = Object.values(agg).filter(P=>P.days>0);
+  const toks = nameTokens(it.name);
+  const hits = toks.size ? list.filter(P=>{ const pt=nameTokens(P.prize); return [...toks].some(t=>pt.has(t)); }) : [];
+  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
+  const paceOf = arr => avg(arr.map(P=>P.pacePerWeek));
+  let score=null, basis="", detail=[];
+  if (hits.length){
+    const pace=paceOf(hits), ratios=hits.filter(P=>P.ratio!==null).map(P=>P.ratio), ratio=avg(ratios);
+    const best=hits.slice().sort((a,b)=>b.pacePerWeek-a.pacePerWeek)[0];
+    score = pace;
+    basis = `同系統 ${hits.length}件`;
+    detail.push(`「${best.prize}」など 週 ${pace>=10?Math.round(pace):pace.toFixed(1)}こ${ratio!==null?`・原価率 ${pct(ratio,0)}`:""}${best.nOf?`・1/${Math.round(best.nOf)}`:""}`);
+    const bestStore = Object.entries(best.stores||{}).sort((a,b)=>b[1].paysPerDay-a[1].paysPerDay)[0];
+    if (bestStore && bestStore[1].pays>0) detail.push(`よく出た店：${String(bestStore[0]).replace(/店$/,"")}`);
+  } else if (it.price>0){
+    const band = priceBand(it.price), same = list.filter(P=>P.unit>0 && priceBand(P.unit)===band);
+    if (same.length){ score = paceOf(same)*0.8; basis=`価格帯 ${band} の平均`; detail.push(`同じ価格帯 ${same.length}件が 週 ${paceOf(same).toFixed(1)}こ（系統の実績はまだ無し）`); }
+  }
+  const hist = SRC.history.filter(h=>normName(h.name)===normName(it.name) || (toks.size && [...nameTokens(h.name)].some(t=>toks.has(t) && t.length>=4)));
+  const exact = hist.find(h=>normName(h.name)===normName(it.name));
+  if (exact) detail.push(`再発注：${jpDate(exact.date)} に ${exact.cases}ケース`);
+  else if (hist.length) detail.push(`同系統を ${jpDate(hist[0].date)} に発注済み（${hist[0].name.slice(0,14)}…）`);
+  // 原価率の目安（4人機 100円/プレイ想定）
+  let guide="";
+  if (it.price>0){ const [lo,hi]=targetBand(it.price); guide=`原価率 ${pct(lo,0)}〜${pct(hi,0)} なら 1/${Math.round(it.price/(hi*PLAY_PRICE))}〜1/${Math.round(it.price/(lo*PLAY_PRICE))}`; }
+  let rank, cls, why;
+  if (score===null){ rank="？"; cls="none"; why = it.name ? "初めての系統。実績データなし" : ""; }
+  else if (score>=5){ rank="S"; cls="s"; why="よく出る系統"; }
+  else if (score>=2){ rank="A"; cls="a"; why="出る系統"; }
+  else if (score>=0.7){ rank="B"; cls="b"; why="ふつう"; }
+  else { rank="C"; cls="c"; why="出が弱い系統"; }
+  if (exact && rank!=="S" && score!==null) { /* 再発注は実績ありの証拠。1段上げる */ const up={C:"B",B:"A",A:"S"}; if (up[rank]){ rank=up[rank]; cls=rank.toLowerCase(); why+="・再発注"; } }
+  return {rank, cls, why, basis, detail, guide, score: score===null ? -1 : score};
+}
+function rankBlock(it){
+  const r = srcRank(it);
+  return `<div class="rank ${r.cls}"><div class="rk"><b>${r.rank}</b><small>仕入れ<br>ランク</small></div><div class="rt"><div class="w">${esc(r.why)}${r.basis?`<span class="bs">${esc(r.basis)}</span>`:""}</div>${r.detail.map(d=>`<div>${esc(d)}</div>`).join("")}${r.guide?`<div class="g">${esc(r.guide)}</div>`:""}</div></div>`;
+}
 function srcOrderOf(it){
   const d=srcDecision(it.key); const cases = d && d.cases!=null ? num(d.cases) : num(it.cases);
   const pcs = Math.round(num(it.qty)*cases), amount = Math.round(num(it.price)*pcs);
@@ -2456,7 +2523,7 @@ function srcCard(it){
   const selCases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? sel.n : 0;
   const selPcs = Math.round(num(it.qty)*selCases), selAmt = Math.round(num(it.price)*selPcs);
   const orderPanel = openOrder ? `<div class="panel2" data-key="${esc(it.key)}">
-      <div class="row"><span class="k">数量を選ぶ</span>
+      <div class="row"><span class="k">数量（入数）を選ぶ</span>
         <button type="button" class="opt ${sel.mode==="case"?"on":""}" data-smode="case"><b>1ケース</b><small>${yen(it.qty)}こ ＝ ${yen(caseAmt)}円</small></button>
         <button type="button" class="opt ${sel.mode==="half"?"on":""}" data-smode="half" ${halfNG?"disabled":""}><b>ハーフ</b><small>${halfNG?"ハーフ不可":`${yen(Math.round(it.qty/2))}こ ＝ ${yen(Math.round(caseAmt/2))}円`}</small></button>
       </div>
@@ -2483,6 +2550,7 @@ function srcCard(it){
       <div class="sub">${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
       <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
+      ${it.name ? rankBlock(it) : ""}
       ${state}
       ${canAct ? `<div class="acts">
         <button type="button" class="${st==="skip"?"on":""}" data-sd="skip">見送り</button>
@@ -2496,12 +2564,14 @@ function srcCard(it){
 }
 function renderSourcing(){
   const list=$("#srcList"); if (!list) return;
+  SRC.agg = null;
   const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
   const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
   const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"]];
   if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
   const shown = items.filter(it=>srcState(it)===SRC.filter);
+  if (SRC.filter==="todo") shown.sort((a,b)=>srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順
   list.innerHTML = shown.length ? shown.map(srcCard).join("")
     : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : SRC.error ? `<span style="color:var(--critical-ink)">読み込めませんでした：${esc(SRC.error)}</span>` : (Store.online() ? (SRC.at ? "まだ商品が届いていません。" : "読み込み中…") : "オンラインのときに読み込まれます。")}</div>`;
   // 発注予定のまとめ
@@ -4229,6 +4299,7 @@ updateReadouts();
 updatePzGauge();
 render();
 Store.init().then(render);
+if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store};   // ローカル検証用
 
 
 })();

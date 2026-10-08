@@ -814,6 +814,18 @@ function exaRequests(n) {
   v.forEach(function (r) { if (!r[0]) return; out.push({ id: String(r[0]), at: String(r[1]), state: String(r[2]), mode: String(r[3]), n: num(r[4]), amount: num(r[5]), result: String(r[6] || ""), orderNo: String(r[7] || ""), staff: String(r[9] || "") }); });
   return out;
 }
+/* 発注履歴タブ（直近 n 行）：過去に何を何ケース買ったか。仕入れランクの「再発注」判定に使う */
+function exaHistory(n) {
+  var sh = exaSs().getSheetByName("発注履歴"); if (!sh) return [];
+  var last = sh.getLastRow(); if (last < 2) return [];
+  var v = sh.getRange(2, 1, Math.min(last - 1, n || 200), 9).getValues(), out = [], tz = sheetTz();
+  v.forEach(function (r) {
+    if (!r[3]) return;
+    var d = r[0] instanceof Date ? Utilities.formatDate(r[0], tz, "yyyy-MM-dd") : String(r[0] || "").slice(0, 10);
+    out.push({ date: d, orderNo: String(r[1] || ""), mode: String(r[2] || ""), name: clean(r[3]), code: clean(r[4]), cases: num(r[5]), pcs: num(r[6]), price: num(r[7]), amount: num(r[8]) });
+  });
+  return out;
+}
 function exaSetting(name) {
   var sh = exaSs().getSheetByName("設定"); if (!sh) return "";
   var v = sh.getDataRange().getValues();
@@ -823,7 +835,7 @@ function exaSetting(name) {
 function readSourcing(force) {
   var cache = CacheService.getScriptCache(), hit = force ? null : cache.get("sourcing");
   if (hit) { try { return JSON.parse(hit); } catch (e) {} }
-  var res = { items: exaItems(), requests: exaRequests(10), limit: num(exaSetting("発注金額の上限警告")) || 300000, time: nowIso() };
+  var res = { items: exaItems(), requests: exaRequests(10), history: exaHistory(200), limit: num(exaSetting("発注金額の上限警告")) || 300000, time: nowIso() };
   try { cache.put("sourcing", JSON.stringify(res), 90); } catch (e) {}
   return res;
 }
