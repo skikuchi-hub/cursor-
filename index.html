@@ -356,12 +356,12 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .gbar button{border:0;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:800;background:rgba(255,255,255,.16);color:#fff;flex:none}
 .gbar button.go{background:var(--gold);color:var(--navy)}
 body.gbar-on #p-log{padding-bottom:64px}
-.gnow{position:relative;border-radius:10px;background:var(--gold-wash);animation:gpulse 1.6s ease-in-out infinite;transform:translateY(-2px);z-index:1}
+/* 入力欄を含む要素に animation / transform を付けると iOS Safari が入力中の文字を描き直さないことがあるので、枠は静的な影だけにする */
+.gnow{position:relative;border-radius:10px;background:var(--gold-wash);box-shadow:0 0 0 3px var(--gold),0 10px 20px -10px rgba(181,127,0,.7);z-index:1}
 .rm .gnow,.pair.gnow{padding:4px 5px;margin:-4px -5px}
 .gnow::before{content:"つぎはここ";position:absolute;top:-12px;left:6px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;padding:1px 7px;border-radius:999px;z-index:2;letter-spacing:.04em;white-space:nowrap}
 .gnow.nob::before{content:none}
-.gnow.nob{transform:none}
-.save.gnow{animation:gpulse 1.2s ease-in-out infinite}
+.save.gnow,.photo-field.gnow,#slotGrid.gnow,#machineRow.gnow{animation:gpulse 1.4s ease-in-out infinite}   /* 入力欄を含まない所だけ脈動 */
 @keyframes gpulse{0%,100%{box-shadow:0 0 0 3px var(--gold),0 10px 20px -10px rgba(181,127,0,.7)}50%{box-shadow:0 0 0 6px color-mix(in srgb,var(--gold) 40%,transparent),0 10px 20px -10px rgba(181,127,0,.7)}}
 .rm.gcell{border-color:var(--gold);box-shadow:0 8px 18px -10px rgba(181,127,0,.7)}
 .card.gcur{border-color:var(--navy-2);box-shadow:var(--shadow)}
