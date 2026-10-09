@@ -348,12 +348,11 @@ def build_index():
   <div class="media">
     <picture>
       <source media="(max-width:860px)" srcset="assets/img/photo/hero-sp.jpg">
-      <img src="assets/img/photo/hero-pc.jpg" alt="" width="1200" height="1500" fetchpriority="high">
+      <img src="assets/img/photo/hero-pc.jpg" alt="" width="2000" height="1250" fetchpriority="high">
     </picture>
   </div>
-  <div class="stamp">初月から<b>{SITE['free']}</b></div>
   <div class="panel">
-    <p class="tate">暮らしに、ひとつ足す。</p>
+    <div class="stamp">初月から<b>{SITE['free']}</b></div>
     <div class="copy">
       <h1><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
       <p class="lead pc">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
