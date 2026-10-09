@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>会員ログイン｜くらしプラス</title>
+<meta name="description" content="くらしプラス会員ログインページ。">
+<meta property="og:title" content="会員ログイン｜くらしプラス">
+<meta property="og:description" content="くらしプラス会員ログインページ。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css?v=ddcc24a9">
+<script src="config.js?v=b9616672"></script>
+
+</head>
+<body class="">
+<header class="site-header ">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="くらしプラス トップへ"><svg class="mark" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#2A5BD7"/></svg><span class="word">くらしプラス</span></a>
+    <button class="menu-btn" aria-label="メニュー" aria-expanded="false"><span></span><span></span><span></span></button>
+    <nav class="nav">
+      <a href="index.html#services">サービス</a>
+      <a href="index.html#faq">よくある質問</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="login.html">会員ログイン</a>
+      <a class="cta" href="signup.html">お申し込み</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="auth">
+    <h1>会員ログイン</h1>
+    <p class="sub">ご登録のメールアドレスとパスワードを入力してください。</p>
+    <form id="loginForm" class="form" novalidate>
+      <div class="field"><label for="email">メールアドレス</label><input id="email" name="email" type="email" autocomplete="username" required></div>
+      <div class="field"><label for="password">パスワード</label><input id="password" name="password" type="password" autocomplete="current-password" minlength="8" required></div>
+      <div class="err" role="alert"></div>
+      <button type="submit" class="btn btn-primary btn-block">ログイン</button>
+    </form>
+    <div class="links"><a href="contact.html?kind=7">パスワードをお忘れの方</a><a href="signup.html">新規お申し込み</a></div>
+  </div>
+</div>
+<footer class="site-footer ">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#2A5BD7"/></svg><span class="word">くらしプラス</span></a>
+        <p class="tag">毎日の「もしも」に、ひとつ足す安心。<small>株式会社WSTが提供する、暮らしの会員サービス</small></p>
+      </div>
+      <a class="btn btn-terra" href="signup.html">お申し込みはこちら</a>
+    </div>
+    <div class="links">
+      <a href="services/okihai.html">置き配保険</a><a href="services/lifecost.html">ライフコストコンシェルジュ</a><a href="services/wifi.html">Wi-Fi接続機器補償</a><a href="services/kaden.html">家電保証</a><a href="services/kumamori.html">クマモリ（広告ブロック）</a><span class="sep"></span>
+      <a href="index.html#faq">よくある質問</a>
+      <a href="signup.html">お申し込みについて</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="login.html">会員ログイン</a>
+    </div>
+    <div class="copy">
+      <span>© 株式会社WST</span>
+      <span><a href="https://wst-corp.jp/" target="_blank" rel="noopener">会社情報</a>　<a href="terms/index.html">利用規約</a>　<a href="privacy.html">プライバシーポリシー</a>　<a href="legal.html">特定商取引法に基づく表示</a></span>
+    </div>
+  </div>
+</footer>
+<script src="assets/js/main.js?v=d3b17241"></script>
+</body>
+</html>

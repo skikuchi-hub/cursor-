@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>お問い合わせ｜くらしプラス</title>
+<meta name="description" content="くらしプラスへのお問い合わせフォームです。">
+<meta property="og:title" content="お問い合わせ｜くらしプラス">
+<meta property="og:description" content="くらしプラスへのお問い合わせフォームです。">
+<meta property="og:type" content="website">
+<meta property="og:image" content="assets/img/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="assets/img/favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="assets/img/icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@500;700&family=Nunito:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/style.css?v=ddcc24a9">
+<script src="config.js?v=b9616672"></script>
+
+</head>
+<body class="">
+<header class="site-header ">
+  <div class="wrap">
+    <a class="brand" href="index.html" aria-label="くらしプラス トップへ"><svg class="mark" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#2A5BD7"/></svg><span class="word">くらしプラス</span></a>
+    <button class="menu-btn" aria-label="メニュー" aria-expanded="false"><span></span><span></span><span></span></button>
+    <nav class="nav">
+      <a href="index.html#services">サービス</a>
+      <a href="index.html#faq">よくある質問</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="login.html">会員ログイン</a>
+      <a class="cta" href="signup.html">お申し込み</a>
+    </nav>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="page-head">
+    <div class="breadcrumb"><a href="index.html">トップ</a> › お問い合わせ</div>
+    <h1>お問い合わせ</h1>
+    <p>サービス内容やお申し込み、解約についてのご相談はこちらから。ご入力いただいた日より3営業日以内に、ご登録のメールアドレスへご返信します（ヘルプデスク：平日12:00〜18:00、土日祝日・年末年始を除く）。</p>
+  </div>
+  <div class="content">
+    <form id="contactForm" class="form" novalidate>
+      <div class="field"><label for="kind">お問い合わせ種別</label><select id="kind" name="kind"><option>サービスについて</option><option>紹介コードの発行依頼</option><option>紹介コードを忘れた・分からない</option><option>解約について</option><option>返金について</option><option>お申し込み内容の確認</option><option>迷惑メール対策の解除依頼</option><option>その他</option></select></div>
+      <div class="field"><label for="name">お名前<span class="req">必須</span></label><input id="name" name="name" type="text" autocomplete="name" placeholder="山田 太郎" required></div>
+      <div class="field"><label for="email">メールアドレス<span class="req">必須</span></label><input id="email" name="email" type="email" autocomplete="email" placeholder="example@example.com" required></div>
+      <div class="field"><label for="tel">電話番号</label><input id="tel" name="tel" type="tel" autocomplete="tel" placeholder="090-0000-0000"><div class="help">お急ぎの場合はご記入ください。</div></div>
+      <div class="field"><label for="message">お問い合わせ内容<span class="req">必須</span></label><textarea id="message" name="message" required placeholder="ご契約中の方は、ご契約のサービス名や紹介コードもあわせてご記入ください。"></textarea></div>
+      <label class="check"><input type="checkbox" name="agree"><span><a href="privacy.html" target="_blank" rel="noopener">プライバシーポリシー</a>に同意のうえ送信します。</span></label>
+      <div class="err" role="alert"></div>
+      <button type="submit" class="btn btn-primary btn-block">送信する</button>
+    </form>
+    <p class="fine" style="margin-top:28px">迷惑メール設定をされている場合は、当社ドメインからのメールを受信できるようご設定ください。</p>
+  </div>
+</div>
+<footer class="site-footer ">
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <a class="brand" href="index.html"><svg class="mark" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#2A5BD7"/></svg><span class="word">くらしプラス</span></a>
+        <p class="tag">毎日の「もしも」に、ひとつ足す安心。<small>株式会社WSTが提供する、暮らしの会員サービス</small></p>
+      </div>
+      <a class="btn btn-terra" href="signup.html">お申し込みはこちら</a>
+    </div>
+    <div class="links">
+      <a href="services/okihai.html">置き配保険</a><a href="services/lifecost.html">ライフコストコンシェルジュ</a><a href="services/wifi.html">Wi-Fi接続機器補償</a><a href="services/kaden.html">家電保証</a><a href="services/kumamori.html">クマモリ（広告ブロック）</a><span class="sep"></span>
+      <a href="index.html#faq">よくある質問</a>
+      <a href="signup.html">お申し込みについて</a>
+      <a href="contact.html">お問い合わせ</a>
+      <a href="login.html">会員ログイン</a>
+    </div>
+    <div class="copy">
+      <span>© 株式会社WST</span>
+      <span><a href="https://wst-corp.jp/" target="_blank" rel="noopener">会社情報</a>　<a href="terms/index.html">利用規約</a>　<a href="privacy.html">プライバシーポリシー</a>　<a href="legal.html">特定商取引法に基づく表示</a></span>
+    </div>
+  </div>
+</footer>
+<script src="assets/js/main.js?v=d3b17241"></script>
+</body>
+</html>

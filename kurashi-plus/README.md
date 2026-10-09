@@ -56,3 +56,7 @@ python3 tools/build.py
 - GitHub Pages：リポジトリの Settings → Pages → Branch を公開ブランチ／root にする
 - お名前.com 等：このフォルダの中身をそのまま FTP でアップロード（`tools/` と `apps-script/` は不要）
 - 独自ドメインを当てる場合は、GitHub Pages なら `CNAME` ファイルを追加して DNS を設定
+
+## デザイン案（5パターン）
+`variants/v1`〜`v5` に、文言・下層ページを共通にしたまま配色・書体・トップ構成・写真を変えた案があります。
+一覧: `variants/index.html`。生成は `python3 tools/build_variants.py`、確認用の撮影は `node tools/render_variants.js . ../shots-variants`。
