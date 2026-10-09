@@ -592,6 +592,7 @@ td:first-child{font-family:var(--fs-body)}
 .swapbtn{
   background:none;border:0;padding:2px 0 0;font-size:10.5px;color:var(--violet);font-weight:700;text-align:left;
 }
+.swap2{width:100%;background:var(--surface);border:1.5px dashed color-mix(in srgb,var(--violet) 55%,transparent);border-radius:var(--r-s);padding:7px 4px;font-size:11px;font-weight:800;color:var(--violet)}
 .pz{font-size:10px;color:var(--ink-3);text-align:center;font-family:var(--fs-mono);min-height:13px}
 .pair{
   display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 10px;
@@ -1696,6 +1697,7 @@ const Store = {
     this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
     render();
+    try { refreshRoomsAfterSync(); } catch(e){}
   },
   paintMode(){
     const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
@@ -1851,6 +1853,28 @@ function prevPrize(k){
   return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
 }
 const addPrizeOf = rm => clean(rm.addPrize) || clean(rm.prize);
+/* 景品名が空の部屋／枠に、直前の訪問の中身を入れ直す（入力済みの数は触らない）。
+   端末のキャッシュに直前の訪問が無いまま機械を選んだとき、あとから同期で届いた中身を反映するため。戻り値＝直した数 */
+function mergeRoomNames(){
+  if (!R || !F.machine || EDIT) return 0;
+  let n=0;
+  if (R.type==="4p"){
+    R.rooms.forEach(rm=>{ if (!clean(rm.prize)){ const pp=prevPrize(rm.k); if (pp){ rm.prize=pp; rm.prizeWas=pp; if (!clean(rm.addPrize) || rm.addPrize===rm.prize) rm.addPrize=pp; n++; } } });
+  } else {
+    const lv = lastVisit();
+    if (lv && lv.slots && lv.slots.length && R.slots.every(sl=>!clean(sl.prize))){
+      R.slots.forEach(sl=>{ const ps=lv.slots.find(q=>q.i===sl.i); const nm = ps ? (clean(ps.filled)||clean(ps.prize)) : ""; if (nm){ sl.prize=nm; n++; } });
+    }
+  }
+  return n;
+}
+/* 同期でデータが届いたあと：まだ何も入力していなければ部屋を作り直し、入力済みなら景品名だけ埋める */
+function refreshRoomsAfterSync(){
+  if (!R || !F.machine || EDIT) return;
+  const memo = clean(($("#memoIn")||{}).value||"");
+  if (!rHasInput(R) && !memo && !PHOTOS.length){ builtFor=""; buildRooms(true); return; }
+  if (mergeRoomNames()>0){ buildRooms(true); toast("前回の景品名を読み込みました"); }   // 同じ機械のまま force＝R の値を保ったまま画面だけ作り直す
+}
 
 /* 売上は「今月の累計額」を入力する運用（機械の表示どおり）。記録は前回訪問との差分＝今回分。
    同じ店・同じ機械・同じ月の直前の記録の累計（cum。無い古い記録は入力値そのもの）を引く。
@@ -1972,6 +1996,7 @@ function roomCell(rm){
         <button class="addbtn take" data-act="open-take" data-k="${rm.k}">− 回収</button></div>
     </div>
     <button class="swapbtn" data-act="swap" data-k="${rm.k}" hidden>補充した景品が別景品の場合</button>
+    ${prevStock(rm.k)===null ? "" : `<button class="swap2" data-act="swap2" data-k="${rm.k}">⇄ 景品を入れ替える（別の景品にする）</button>`}
     <span class="pz" data-y="${rm.k}"></span>
   </div>`;
 }
@@ -2050,7 +2075,7 @@ function buildRooms(force){
   }
   resetRooms(!changed);
   if (changed && !EDIT && DRAFTS[key] && DRAFTS[key].R && DRAFTS[key].R.type===R.type){   // 下書きがあれば戻す
-    const d = DRAFTS[key]; R = Object.assign(R, d.R); $("#memoIn").value = d.memo||""; toast("入力途中の下書きを戻しました");
+    const d = DRAFTS[key]; R = Object.assign(R, d.R); $("#memoIn").value = d.memo||""; mergeRoomNames(); toast("入力途中の下書きを戻しました");
   } else if (changed && !EDIT) { $("#memoIn").value=""; }
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
@@ -2061,7 +2086,7 @@ function buildRooms(force){
       : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
-      ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+      ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。同じ景品を足すときは「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。別の景品にするときは「⇄ 景品を入れ替える」を押して、抜いた数 → 新しい景品名 → 入れた数 の順に入れてください。✎ は景品名の訂正だけで、個数は変わりません。初回は「いま入っている数」が、その部屋の在庫になります。"
       : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。並べ替えは「③ 並べ替え」から。")
     + `</span>`;
 
@@ -2148,6 +2173,24 @@ function openSwap(k){
   const el = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`);
   if (el){ attachCombo(el); el.focus(); }
 }
+/* 「⇄ 景品を入れ替える」：回収（いま残っている数を初期値）→ 新しい景品名 → 入れた数 を 1 つの部屋カードの中で順に入れる。
+   ガイドが「回収 → 新しい景品 → 入れた数」の順に案内し、保存前チェックで数の抜けを止める */
+function openSwapAll(k){
+  const rm = R.rooms.find(x=>x.k===k); if(!rm) return;
+  rm.swap = true;
+  const btn = document.querySelector(`#roomGrid [data-act="swap2"][data-k="${k}"]`); if (btn) btn.hidden = true;
+  openTake(k, true);
+  const b = roomBefore(rm);
+  if (b!=="" && !(num(rm.take)>0)){ rm.take = b; const ti=document.querySelector(`#roomGrid [data-k="${k}"][data-f="take"]`); if (ti) ti.value = b; }   // 古い景品は全部抜く想定を初期値に
+  const tl = document.querySelector(`#roomGrid [data-takeslot="${k}"] .mini`); if (tl) tl.textContent = "抜いた数（古い景品）";
+  openAdd(k, true);
+  const al = document.querySelector(`#roomGrid [data-addslot="${k}"] .mini`); if (al) al.textContent = "入れた数（新しい景品）";
+  openSwap(k);
+  const pl = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`); if (pl && pl.previousElementSibling) pl.previousElementSibling.textContent = "新しい景品名";
+  updateDerived();
+  const ti = document.querySelector(`#roomGrid [data-k="${k}"][data-f="take"]`); if (ti){ ti.focus(); ti.select && ti.select(); }   // 抜いた数 → 新しい景品 → 入れた数 の順
+  renderGuide();
+}
 /* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
    けいひんラボと同じ区間データ（labAgg）から作る */
 function prizeHints(storeName){
@@ -2225,6 +2268,7 @@ function onRoomClick(e){
   if (a==="open-add") return openAdd(b.dataset.k);
   if (a==="open-take") return openTake(b.dataset.k);
   if (a==="swap")     return openSwap(b.dataset.k);
+  if (a==="swap2")    return openSwapAll(b.dataset.k);
   if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
   if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
   if (a==="slots+" || a==="slots-"){
@@ -2262,13 +2306,18 @@ function onRoomClick(e){
 function onRoomInput(e){
   const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
   const f = el.dataset.f, k = el.dataset.k;
+  if (GUIDE.redirect && GUIDE.redirect.from===el){
+    const rm0 = k ? R.rooms.find(x=>x.k===k) : null;
+    const prevD = k ? (rm0 ? rm0[f] : "") : R[f];
+    if (redirectTyped(el, prevD===undefined||prevD===null ? "" : String(prevD).replace(/[^\d.]/g,""))) return;
+  }
   if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。3 桁区切りで表示して桁ミスに気づきやすく
     const raw = String(el.value).replace(/[^\d]/g,"");
     const digits = raw.slice(0,6);
     if (raw.length>6) toast("売上は 6 桁（99万円）までです");
     const shown = digits ? Number(digits).toLocaleString("ja-JP") : "";
     if (shown !== el.value){ el.value = shown; }
-    R[f] = digits; updateDerived(); saveDraft(); return;
+    R[f] = digits; updateDerived(); saveDraft(); scheduleAutoAdvance(el); return;
   } else if (f==="taken" || f==="before" || f==="add" || f==="take"){   // 個数は 3 桁まで
     const digits = String(el.value).replace(/[^\d]/g,"").slice(0,3);
     if (digits !== el.value) el.value = digits;
@@ -2279,7 +2328,7 @@ function onRoomInput(e){
   }
   if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
   else R[f] = el.value;
-  updateDerived(); saveDraft();
+  updateDerived(); saveDraft(); scheduleAutoAdvance(el);
 }
 
 /* ========== 集計 ========== */
@@ -2916,8 +2965,14 @@ function guideTarget(){
       const v = rm[f];
       if (v==="" || v===undefined || v===null){
         const el = document.querySelector(`#roomGrid [data-k="${rm.k}"][data-f="${f}"]`);
-        return {sec:2, el: el && el.parentElement, focus:el, cell:rm.k, txt: first ? `${rm.k} の「いま入っている数」` : `${rm.k} の「取られた数」（出ていなければ 0）`};
+        return {sec:2, el: el && el.parentElement, focus:el, cell:rm.k, txt: first ? `${rm.k} の「いま入っている数」（この部屋に入れた個数）` : `${rm.k} の「取られた数」（出ていなければ 0）`};
       }
+      // 開いている 回収／補充／新しい景品 の欄が空のまま先へ進ませない（入れ替えで数が抜けるミスを防ぐ）
+      const q = sel => document.querySelector(`#roomGrid [data-k="${rm.k}"]${sel}`);
+      const tk = q('[data-f="take"]'), ad = q('[data-f="add"]'), ap = q('[data-f="addPrize"]');
+      if (tk && tk.value==="") return {sec:2, el: tk.parentElement, focus:tk, cell:rm.k, txt:`${rm.k} の「抜いた数」（古い景品を抜いた個数。抜いていなければ 0）`};
+      if (ap && !clean(ap.value) && (rm.swap || num(rm.add)>0)) return {sec:2, el: ap.parentElement, focus:ap, cell:rm.k, txt:`${rm.k} に入れた「新しい景品名」を選ぶ`};
+      if (ad && !(num(ad.value)>0)) return {sec:2, el: ad.parentElement, focus:ad, cell:rm.k, txt:`${rm.k} の「入れた数」（補充した個数）`};
     }
     if (R.sAB==="") { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
     if (R.sCD==="") { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
@@ -2938,7 +2993,7 @@ let GT = null;
 function renderGuide(){
   const bar0=$("#gbar");
   const ae=document.activeElement;
-  if (bar0 && ae && ae.tagName==="INPUT" && ae.closest(".gnow")){   // 入力中の欄からは枠を動かさない（iOS で描画が崩れる・視線が飛ぶ）。文字だけ更新
+  if (bar0 && ae && ae.tagName==="INPUT" && ae.closest(".gnow") && !GUIDE.redirect){   // 入力中の欄からは枠を動かさない（iOS で描画が崩れる・視線が飛ぶ）。文字だけ更新
     GT = guideTarget();
     if (GT && GT.el){ $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`; $("#gbarSkip").hidden = !GT.skip; }
     return;
@@ -2962,6 +3017,46 @@ function guideGo(){
   if (!GT || !GT.el) return;
   GT.el.scrollIntoView({block:"center", behavior:"smooth"});
   if (GT.focus) setTimeout(()=>GT.focus.focus({preventScroll:true}), 350);
+}
+/* ガイドの次の欄が数字欄なら、タップしなくてもカーソルを入れる（テンキーが出たまま次へ進める）。
+   個数の欄（取られた数・いま入っている数・抜いた数・入れた数）は打ち終わって 1.5 秒止まったら次へ。
+   売上欄は桁が多く途中で止まることがあるので自動では進めない（「ここへ」か Enter で進む）。
+   ボタン操作（とばす・入れ替え）の直後は、その操作の中で次の欄にカーソルを入れる */
+/* iPhone の Safari はタイマーから focus() するとテンキーが閉じるので、止まった時点では「枠だけ」次の欄へ移し（GUIDE.redirect）、
+   次に打たれた数字をキー入力の中で次の欄へ入れ直す。キー入力の中の focus() はテンキーを閉じない */
+const AUTO_FIELDS = {taken:1500, before:1500, add:1500, take:1500, sAB:2500, sCD:2500, sBox:2500};
+function focusGuideInput(from){
+  const t = guideTarget(); if (!t || !t.focus || t.focus===from) return false;
+  if (from && document.activeElement!==from) return false;              // 別の所を触っていたら動かさない
+  t.focus.focus({preventScroll:true}); t.el && t.el.scrollIntoView({block:"center", behavior:"smooth"});
+  renderGuide(); return true;
+}
+function armRedirect(el){
+  GUIDE.redirect = null;
+  if (!el || document.activeElement!==el || el.value==="") return;
+  const t = guideTarget(); if (!t || !t.focus || t.focus===el) return;
+  GUIDE.redirect = {from:el, to:t.focus};
+  renderGuide();                                                         // 黄色い枠だけ次の欄へ（カーソルはまだ動かさない）
+  t.el && t.el.scrollIntoView({block:"center", behavior:"smooth"});
+}
+function scheduleAutoAdvance(el){
+  clearTimeout(GUIDE.autoT);
+  if (!el || !AUTO_FIELDS[el.dataset.f] || el.value==="") return;
+  GUIDE.autoT = setTimeout(()=>armRedirect(el), AUTO_FIELDS[el.dataset.f]);
+}
+/* 枠が次へ移ったあとに前の欄で打たれた数字を、次の欄へ入れ直す。戻り値 true＝処理済み */
+function redirectTyped(el, prevDigits){
+  const rd = GUIDE.redirect; if (!rd || rd.from!==el) return false;
+  GUIDE.redirect = null;
+  const nowDigits = String(el.value).replace(/[^\d.]/g,""), prev = String(prevDigits==null?"":prevDigits);
+  if (!(nowDigits.length > prev.length && nowDigits.startsWith(prev))){ return false; }   // 消した・貼り付けた → そのまま
+  const added = nowDigits.slice(prev.length);
+  el.value = /^s(AB|CD|Box)$/.test(el.dataset.f) ? (prev ? Number(prev).toLocaleString("ja-JP") : "") : prev;   // 前の欄は元に戻す
+  const to = rd.to; if (!to || !to.isConnected) return false;
+  to.focus({preventScroll:true});
+  to.value = String(to.value||"").replace(/[^\d.]/g,"") + added;
+  to.dispatchEvent(new Event("input", {bubbles:true}));
+  return true;
 }
 
 /* ===================== 下書き（入力途中を店舗×機械ごとに保持。別の機械やタブに移っても消えない） ===================== */
@@ -2990,7 +3085,7 @@ function draftCount(){ const cutoff=Date.now()-3*864e5; Object.keys(DRAFTS).forE
 function visitSummaryHtml(warns){
   const t = totals();
   const rowsHtml = R.type==="4p"
-    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>${addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)?` ${esc(addPrizeOf(rm))}`:""}`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
+    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
         return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
     : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
         return `<tr><td class="k">出た</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">補充</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>`; })();
@@ -3027,9 +3122,15 @@ function validateVisit(){
   // 同じ日に同じ機械の記録
   const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
   if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
+  const lv0 = lastVisit();
   if (R && R.type==="4p"){
+    // 前回の景品名があるのに今回が全部空＝前回の中身が読み込めていない（キャッシュ切れ）。このまま保存すると以後の訪問も空になる
+    if (lv0 && (lv0.rooms||[]).some(x=>clean(x.prize)||clean(x.addPrize)) && R.rooms.every(rm=>!clean(rm.prize))) block.push("前回の景品名が読み込めていません（通信待ち）。少し待って同期されてから、または開き直してから保存してください");
     R.rooms.forEach(rm=>{
       const pr = prevRoom(rm.k), st = prevStock(rm.k);
+      // 取られた数（初回は いま入っている数）は必須。空だと払出 0 のまま記録され、原価率・在庫が合わなくなる
+      if (st!==null && (rm.taken===""||rm.taken===undefined||rm.taken===null) && (clean(rm.prize)||st>0)) block.push(`部屋${rm.k} の「取られた数」が空です（出ていなければ 0 を入れる）`);
+      if (st===null && clean(rm.prize) && (rm.before===""||rm.before===undefined||rm.before===null)) block.push(`部屋${rm.k} の「いま入っている数」が空です（この部屋に入っている個数）`);
       if (rm.counter!=="" && pr && pr.counter!=="" && pr.counter!==undefined){
         const diff = num(rm.counter)-num(pr.counter);
         if (diff < 0) ask.push(`部屋${rm.k} のカウンター ${rm.counter} が前回 ${pr.counter} より小さい（カウンターは減りません）`);
@@ -3041,7 +3142,19 @@ function validateVisit(){
       if (num(rm.add) > 200) block.push(`部屋${rm.k} の補充 ${num(rm.add)} が多すぎます`);
       const b = roomBefore(rm);
       if (num(rm.take) > 0 && b!=="" && num(rm.take) > b + num(rm.add)) block.push(`部屋${rm.k} の回収 ${num(rm.take)} が、残り＋補充（${b + num(rm.add)}）を超えています`);
+      // 入れ替え・補充で数が合わなくなるパターン
+      const ap = addPrizeOf(rm), cur = clean(rm.prize), swapped = ap && cur && ap!==cur;
+      if (swapped && !(num(rm.add)>0)) block.push(`部屋${rm.k}：新しい景品「${ap}」を選びましたが、入れた数が 0 です`);
+      if (swapped && num(rm.add)>0 && b!=="" && b>0 && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：「${cur}」が ${b}こ残っているのに回収 0 のまま「${ap}」を入れています。古い景品を抜いたなら「抜いた数」を入れてください`);
+      if (num(rm.add)>0){ const stk = stockOf(ap||cur); if (stk!==null && num(rm.add) > stk) ask.push(`部屋${rm.k}：「${ap||cur}」の在庫は ${stk}こですが ${num(rm.add)}こ補充しています（景品マスタの在庫が合っていない可能性）`); }
+      if (rm.prizeWas!==undefined && st!==null && cur!==clean(rm.prizeWas) && !(num(rm.add)>0) && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：景品名を「${rm.prizeWas||"（空）"}」→「${cur}」に変えましたが、回収・補充が 0 です。中身を入れ替えたなら「⇄ 景品を入れ替える」で数を入れてください（名前の訂正だけなら OK）`);
+      if (num(rm.take)>0 && !(num(rm.add)>0) && roomAfter(rm)===0) ask.push(`部屋${rm.k}：回収後は 0 こ（空の部屋）になります。何も入れていなければ OK`);
     });
+  }
+  if (R && R.type==="box"){
+    if (lv0 && (lv0.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) && R.slots.every(sl=>!clean(sl.prize)) && !R.slots.some(sl=>clean(sl.filled))) block.push("前回の枠の中身が読み込めていません（通信待ち）。少し待って同期されてから、または開き直してから保存してください");
+    const t0 = totals();
+    if (t0.sales>0 && !R.slots.some(sl=>sl.out)) ask.push(`売上 ${yen(t0.sales)}円 がありますが「出た枠」が 1 つも選ばれていません。本当に 1 個も出ていませんか？（出た枠は「① 出た枠」で空いていた枠をタップ）`);
   }
   const t = totals();
   if (num($("#costIn").value) > t.sales && t.sales>0) ask.push(`景品原価 ${yen(num($("#costIn").value))}円 が売上 ${yen(t.sales)}円 を超えています`);
@@ -4583,8 +4696,14 @@ function wire(){
   // 訪問日時を変える／説明の「？」
   $("#whenEdit").onclick = ()=>setWhenOpen(true);
   $("#gbarGo").onclick = guideGo;
-  document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")) setTimeout(renderGuide, 80); });
-  $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); } };
+  document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")){ GUIDE.redirect=null; clearTimeout(GUIDE.autoT); setTimeout(renderGuide, 80); } });
+  document.addEventListener("pointerdown", ()=>{ GUIDE.redirect=null; clearTimeout(GUIDE.autoT); }, true);
+  $("#roomGrid").addEventListener("keydown", e=>{
+    if (e.key!=="Enter" || !e.target.matches("input")) return;
+    e.preventDefault(); clearTimeout(GUIDE.autoT);
+    if (!focusGuideInput(e.target)) e.target.blur();
+  });
+  $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); if (GT && GT.focus){ GT.focus.focus({preventScroll:true}); GT.el.scrollIntoView({block:"center", behavior:"smooth"}); } } };
   applyFolds();
   $("#zhint").addEventListener("click", e=>{ const b=e.target.closest("[data-qhelp]"); if(!b) return; const l=$("#zhint .qlong"); l.hidden=!l.hidden; });
   $("#memoIn").addEventListener("input", saveDraft);
