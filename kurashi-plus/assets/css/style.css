@@ -109,7 +109,7 @@ b,strong{font-weight:500}
 @media (max-width:860px){
   /* スマホ：写真の上に文字を重ねず、顔を隠さない。写真（4:5）→ 見出し → ボタン の順 */
   .hero{display:block;min-height:0}
-  .hero .media{position:relative;height:auto;aspect-ratio:4/5;max-height:min(66svh,620px);min-height:0}
+  .hero .media{position:relative;width:100%;aspect-ratio:auto;height:min(125vw,66svh,620px);min-height:0;max-height:none}
   .hero .media img{object-position:center 18%}
   .hero .media::after{background:linear-gradient(to top,#fff 0%,rgba(255,255,255,.6) 10%,rgba(255,255,255,0) 26%)}
   .hero .panel{position:relative;padding:4px var(--gut) 8px;gap:18px;margin:0}
