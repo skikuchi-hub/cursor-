@@ -246,7 +246,7 @@ def head(title, desc, depth, extra="", body_class=""):
 """
 
 def mark_svg(cls="mark"):
-    return f'<svg class="{cls}" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#B85C3C"/></svg>'
+    return f'<svg class="{cls}" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#2A5BD7"/></svg>'
 
 def header(depth):
     r = rel(depth)
@@ -342,7 +342,7 @@ def build_index():
       <img src="assets/img/photo/hero-pc.jpg" alt="" width="1200" height="1500" fetchpriority="high">
     </picture>
   </div>
-  <div class="stamp" aria-label="初月から{SITE['free']}"><small>初月から</small><b>最大2ヶ月</b><em>無料</em></div>
+  <div class="stamp">初月から<b>{SITE['free']}</b></div>
   <div class="panel">
     <p class="tate">暮らしに、ひとつ足す。</p>
     <div class="copy">

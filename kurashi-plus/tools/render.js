@@ -28,7 +28,7 @@ const fs = require('fs');
   await page.setContent(`<html><head>${fonts}</head><body style="margin:0;background:transparent">
     <div style="display:flex;align-items:center;gap:14px;height:120px;font-family:'Zen Kaku Gothic New',sans-serif">
       ${mark.replace('width="120" height="120"', 'width="72" height="72"')}
-      <div style="line-height:1"><div style="font-family:'Zen Old Mincho',serif;font-size:40px;font-weight:500;color:#24211E;letter-spacing:.2em">くらしプラス</div><div style="font-family:'Jost',sans-serif;font-size:11px;font-weight:400;color:#8A837B;letter-spacing:.32em;margin-top:10px">KURASHI PLUS — LIFE SUPPORT MEMBERSHIP</div></div>
+      <div style="line-height:1"><div style="font-family:'Zen Old Mincho',serif;font-size:40px;font-weight:500;color:#1B2430;letter-spacing:.2em">くらしプラス</div><div style="font-family:'Jost',sans-serif;font-size:11px;font-weight:400;color:#8A94A3;letter-spacing:.32em;margin-top:10px">KURASHI PLUS — LIFE SUPPORT MEMBERSHIP</div></div>
     </div></body></html>`);
   await page.waitForTimeout(1200);
   await page.screenshot({ path: path.join(img, 'logo.png'), omitBackground: true, clip: { x: 0, y: 0, width: 420, height: 120 }, scale: 'css' });
@@ -36,10 +36,10 @@ const fs = require('fs');
   // OG 画像 1200x630
   await page.setViewportSize({ width: 1200, height: 630 });
   await page.setContent(`<html><head>${fonts}</head><body style="margin:0">
-    <div style="width:1200px;height:630px;background:#FAF8F3;display:flex;align-items:center;font-family:'Zen Kaku Gothic New',sans-serif;position:relative;overflow:hidden">
+    <div style="width:1200px;height:630px;background:#FFFFFF;display:flex;align-items:center;font-family:'Zen Kaku Gothic New',sans-serif;position:relative;overflow:hidden">
       <img src="file://${path.join(img,'photo','hero.jpg')}" style="position:absolute;right:0;top:0;width:560px;height:630px;object-fit:cover">
       <div style="position:relative;padding-left:88px;line-height:1.2">
-        <div style="font-family:'Jost',sans-serif;font-size:13px;letter-spacing:.3em;color:#B4593A;margin-bottom:30px">LIFE SUPPORT MEMBERSHIP</div><div style="font-family:'Zen Old Mincho',serif;font-size:54px;font-weight:400;color:#24211E;letter-spacing:.12em;line-height:1.6">毎日の「もしも」に、<br>ひとつ足す安心。</div><div style="font-size:16px;font-weight:500;color:#514B45;margin-top:30px;letter-spacing:.14em">くらしプラス｜株式会社WST</div>
+        <div style="font-family:'Jost',sans-serif;font-size:13px;letter-spacing:.3em;color:#2A5BD7;margin-bottom:30px">LIFE SUPPORT MEMBERSHIP</div><div style="font-family:'Zen Old Mincho',serif;font-size:54px;font-weight:400;color:#1B2430;letter-spacing:.12em;line-height:1.6">毎日の「もしも」に、<br>ひとつ足す安心。</div><div style="font-size:16px;font-weight:500;color:#4A5563;margin-top:30px;letter-spacing:.14em">くらしプラス｜株式会社WST</div>
       </div>
     </div></body></html>`);
   await page.waitForTimeout(1200);
