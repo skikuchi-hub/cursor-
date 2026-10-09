@@ -1,5 +1,5 @@
 {
- "version": "2026-10-09.1",
+ "version": "2026-10-09.2",
  "generatedAt": "2026-10-09",
  "source": "docs/skill-rules-inventory.md（Coworkスキル群から抽出）",
  "note": "status=confirmed は突合時に自動適用。ref は条件付き・参考値で自動適用しない。",
@@ -564,6 +564,85 @@
    "status": "ref",
    "cond": "アラテク商流 1Gファミリー3年 回線新規 STN（入金62,000）",
    "note": "1Gマンション新規 51,000 / 1G転用SKS F 42,000・M 39,000 / 10G新規 F 71,000・M 68,000 / 10G転用 F 58,000・M 55,000"
+  }
+ ],
+ "questions": [
+  {
+   "id": "q_npm_c9",
+   "product": "NP Mobile",
+   "partner": "株式会社クラウドナイン",
+   "toss": "(トスなし)",
+   "text": "NP Mobile: クラウドナイン × トスなし の支払単価は？",
+   "note": "partner-payment-slip（KN明細基準）は 44,000（取次45,000−1,000）。アプリの単価マスタは 45,000（2026/8確認）。決めた値は台帳と単価マスタの両方に反映します",
+   "options": [
+    44000,
+    45000
+   ],
+   "priceIds": {
+    "npmobile": "p_c9_npm"
+   }
+  },
+  {
+   "id": "q_npm_wtwt",
+   "product": "NP Mobile",
+   "partner": "Wetopia株式会社",
+   "toss": "Wetopia株式会社",
+   "text": "NP Mobile: Wetopia × 自社トス の支払単価は 35,000（取次36,000−郵送1,000）で合っていますか？",
+   "note": "npmobile-meisai-shori は 35,000、partner-payment-slip 側には 36,000 の記載。決めた値は台帳と単価マスタの両方に反映します",
+   "options": [
+    35000,
+    36000
+   ],
+   "priceIds": {
+    "npmobile": "p_wtwt"
+   }
+  },
+  {
+   "id": "q_npm_wtother",
+   "product": "NP Mobile",
+   "partner": "Wetopia株式会社",
+   "toss": "他社トス（EX / TIME / チアーズメイト）",
+   "text": "NP Mobile: Wetopia × 他社トス の支払単価は 24,000（取次25,000−郵送1,000）で合っていますか？",
+   "note": "npmobile-meisai-shori は 24,000、partner-payment-slip 側には 25,000 の記載",
+   "options": [
+    24000,
+    25000
+   ],
+   "priceIds": {
+    "npmobile": "p_wtother"
+   },
+   "keys": [
+    [
+     "NP Mobile",
+     "Wetopia株式会社",
+     "Exploration Holdings株式会社"
+    ],
+    [
+     "NP Mobile",
+     "Wetopia株式会社",
+     "株式会社TIME"
+    ],
+    [
+     "NP Mobile",
+     "Wetopia株式会社",
+     "チアーズメイト"
+    ]
+   ]
+  },
+  {
+   "id": "q_bn_wt",
+   "product": "サブセレ",
+   "partner": "Wetopia株式会社",
+   "toss": "(トスなし)",
+   "text": "ブランニュー（サブセレ）: Wetopia の 2026/4/1〜申込 の単価は 2,500 ですか 3,000 ですか？",
+   "note": "brandnew-meisai-processing は 2,500（〜3/31 は 3,000）。partner-payment-slip の 3,000 は旧ルールの可能性",
+   "options": [
+    2500,
+    3000
+   ],
+   "priceIds": {
+    "subsele": "p_bn_new"
+   }
   }
  ]
 }

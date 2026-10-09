@@ -627,6 +627,63 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   .dz-head .btn-sm{width:auto}
   .sec-h{font-size:18px;margin-top:28px;padding-top:20px}
 }
+/* ============ まとめて処理（入れる → 見る → 出す） ============ */
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:100px;padding:2px 9px;font-size:11px;font-weight:600;white-space:nowrap;vertical-align:middle;line-height:1.6}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.warn{background:var(--warn-soft);color:var(--warn)}
+.pill.bad{background:var(--alert-soft);color:var(--alert)}
+.pill.info{background:var(--accent-soft);color:var(--accent)}
+.pill.flat{background:var(--bg-2);color:var(--txt-2)}
+.in-btns{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.in-xrm{font-size:12.5px;color:var(--txt-2);margin:0 0 12px;padding:10px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);line-height:1.8}
+.files{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:0 16px;box-shadow:var(--sh)}
+.file{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 0;border-bottom:1px solid var(--line);min-width:0;align-items:center}
+.file:last-child{border-bottom:0}
+.file .n{font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file .fr{display:flex;align-items:center;gap:6px}
+.file .fx{border:0;background:transparent;color:var(--txt-3);font-size:14px;padding:0 4px;line-height:1}
+.file .fx:hover{color:var(--alert)}
+.file .d{font-size:12px;color:var(--txt-2);grid-column:1/-1;line-height:1.6}
+.ven{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:12px;overflow:hidden}
+.ven-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.ven-h b{font-size:14px;font-weight:600}
+.ven-h .sum{margin-left:auto;font-family:var(--mono);font-size:13px;color:var(--txt-2);white-space:nowrap}
+.prow{display:grid;grid-template-columns:1fr auto;gap:2px 10px;padding:10px 16px;border-bottom:1px solid var(--line);align-items:center;cursor:pointer;transition:background .15s}
+.prow:last-child{border-bottom:0}
+.prow:hover{background:var(--surface-2)}
+.prow .p{font-size:13.5px;font-weight:500}
+.prow .p small{font-size:10.5px;color:var(--txt-3);margin-left:6px;font-weight:300}
+.prow .m{font-size:12px;color:var(--txt-2);display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:2px}
+.prow .amt{font-family:var(--mono);font-size:14px;text-align:right;white-space:nowrap}
+.todo{display:flex;flex-direction:column;gap:10px}
+.titem{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--warn);border-radius:var(--r);padding:12px 16px;box-shadow:var(--sh)}
+.titem.alert{border-left-color:var(--alert)}
+.titem .t{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;color:var(--txt-3);flex-wrap:wrap}
+.titem .q{font-size:14px;font-weight:500;margin:4px 0 10px;line-height:1.6}
+.titem .q small{display:block;font-size:11.5px;color:var(--txt-3);font-weight:300;margin-top:2px;line-height:1.6}
+.titem .ans{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.titem .ans .btn,.titem .ans .btn-ghost{width:auto;padding:8px 16px;font-size:11.5px}
+.titem .ans input.price-in{width:130px}
+.titem .ans .pat-chk{font-size:11.5px;color:var(--txt-2);display:inline-flex;align-items:center;gap:4px}
+.outs{display:flex;flex-direction:column}
+.out{display:grid;grid-template-columns:36px 1fr auto;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)}
+.out:last-child{border-bottom:0}
+.out .ic{width:36px;height:28px;border-radius:6px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-family:var(--mono);font-size:10px;font-weight:600}
+.out .n{font-size:13.5px;font-weight:500;word-break:break-all}
+.out .n a{color:var(--accent);text-decoration:none}
+.out .d{font-size:12px;color:var(--txt-2);line-height:1.6}
+.out .sz{font-family:var(--mono);font-size:11px;color:var(--txt-3);white-space:nowrap}
+.side{display:flex;gap:10px;flex-wrap:wrap}
+.side .btn-ghost{flex:1;text-align:center;justify-content:center}
+@media(max-width:400px){#seeKpi{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:640px){
+  .titem .ans .btn,.titem .ans .btn-ghost{width:auto}
+  .titem .ans select{flex:1 1 100%}
+  .titem .ans input.price-in{flex:1;width:auto;max-width:none}
+  .file .n{white-space:normal}
+  .out{grid-template-columns:32px 1fr}
+  .out .sz{display:none}
+}
 </style>
 </head>
 
@@ -646,7 +703,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 
 <header>
   <div class="logo">月末処理<em>クラウド</em></div>
-  <div class="hd-tag" id="hdProd">商材を選択</div>
+  <div class="hd-tag" id="hdProd">まとめて処理</div>
   <div class="hd-tools">
     <button class="boardbtn" id="boardBtn" onclick="openBoard()">未払いボード</button>
     <button class="boardbtn" id="ratesBtn" onclick="openRates()">ルール台帳</button>
@@ -658,16 +715,17 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 </header>
 
 <div class="stepper">
-  <div class="step" id="st1"><span class="num">1</span>準備</div>
-  <div class="step" id="st2"><span class="num">2</span>確認</div>
+  <div class="step" id="st1"><span class="num">1</span>入れる</div>
+  <div class="step" id="st2"><span class="num">2</span>見る</div>
   <div class="step" id="st3" style="display:none"><span class="num">3</span>要確認の承認</div>
-  <div class="step" id="st4"><span class="num">3</span>出力</div>
+  <div class="step" id="st4"><span class="num">3</span>出す</div>
 </div>
 
 <main>
 
 <!-- ============ SCREEN 1 ============ -->
-<section class="screen on" id="sc1">
+<section class="screen" id="sc1">
+  <p class="note" style="margin-bottom:14px"><a href="#" onclick="setSingle(false);return false">← まとめて処理に戻る</a>　この画面は商材を1つ選んで個別に処理する従来の画面です。</p>
   <div class="modebar">
     <button class="modebtn on" id="modePay" onclick="setMode('pay')">支払モード<span>上位店明細 → パートナー支払</span></button>
     <button class="modebtn" id="modeAudit" onclick="setMode('audit')">未払い監査モード<span>開通済みなのに入金なし → 上位店へ請求</span></button>
@@ -798,7 +856,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
     <div id="apprList"></div>
   </div>
   <div class="footer-nav">
-    <button class="btn-ghost" onclick="go(1)">← 戻る</button>
+    <button class="btn-ghost" id="back2" onclick="backFrom2()">← 戻る</button>
     <button class="btn" id="toOut" disabled onclick="buildOutput()">出力を作成 →</button>
   </div>
 </section>
@@ -958,6 +1016,73 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <div class="footer-nav">
     <button class="btn-ghost" onclick="closeTrend()">← 処理画面に戻る</button>
     <button class="btn" onclick="exportTrend()">推移を書き出す</button>
+  </div>
+</section>
+
+
+<!-- ============ まとめて処理: 1 入れる ============ -->
+<section class="screen on" id="scIn">
+  <h1>届いた明細と XRM を、全部まとめて入れる</h1>
+  <p class="sub">商材を選ぶ必要はありません。ファイルの中身（シート名・見出し）から、どの上位店のどの商材かをアプリが判別します。　対象月: <b id="inMonth">—</b></p>
+  <div class="privacy">🔒 ファイルはこのブラウザの中だけで処理されます。サーバーには一切送信されません。</div>
+  <div class="dropzone dz-all" id="dzIn">
+    <div class="dz-icon">📥</div>
+    <div class="dz-title">ここにまとめてドロップ</div>
+    <div class="dz-hint">上位店明細・XRM契約一覧・前月の支払明細書（複数可）。あとから追加で入れれば、その分だけ処理します。</div>
+    <div class="in-btns">
+      <button class="btn-ghost" onclick="document.getElementById('inIn').click()">ファイルを選ぶ（複数可）</button>
+      <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
+    </div>
+    <input type="file" id="inIn" accept=".xlsx,.xls,.csv,.json" multiple style="display:none">
+    <input type="file" id="inDir" webkitdirectory multiple style="display:none">
+  </div>
+  <div class="in-xrm" id="inXrm"></div>
+  <div class="files" id="inFiles"></div>
+  <p class="note" id="inJobs" style="margin-top:12px;line-height:2"></p>
+  <p class="note" id="inMissing" style="margin-top:6px"></p>
+  <div class="actions">
+    <button class="btn" id="runAll" disabled>ファイルを入れると実行できます</button>
+    <span class="note">全商材の突合と未払い監査をまとめて実行します。XRMは一度入れれば保存されます。</span>
+  </div>
+  <div class="prog" id="inProg"></div>
+  <p class="note" style="margin-top:26px"><a href="#" onclick="setSingle(true);return false">商材を1つだけ選んで処理する（従来の画面）</a></p>
+</section>
+
+<!-- ============ まとめて処理: 2 見る ============ -->
+<section class="screen" id="scSee">
+  <h1>上位店ごとに見る</h1>
+  <p class="sub">商材をタップすると、全件の表と判定根拠が開きます。お金が動く判断は下の「要確認」に集めてあります。</p>
+  <div class="strip" id="seeKpi"></div>
+  <div id="seeVendors"></div>
+  <h2 class="sec-h">要確認（全商材まとめて）</h2>
+  <p class="sub">片付くと「出す」が押せます。パターンに答えると、同じパターンの案件にはまとめて反映されます。</p>
+  <div class="todo" id="todoList"></div>
+  <div class="footer-nav">
+    <button class="btn-ghost" onclick="go(1)">← 入れる</button>
+    <button class="btn" id="seeOut" disabled onclick="go(4)">出す →</button>
+  </div>
+</section>
+
+<!-- ============ まとめて処理: 3 出す ============ -->
+<section class="screen" id="scOut">
+  <h1><span id="outMonth">今月</span>の出力</h1>
+  <p class="sub">確定した内容から必要なファイルをまとめて作り、zip 1つでダウンロードします。前月の支払明細書を入れてあれば、同じフォーマットでパートナー支払明細書も出ます。</p>
+  <div class="dl-panel">
+    <div class="outs" id="outPlan"></div>
+    <button class="dl" id="outBtn" onclick="buildAll()" style="margin-top:18px">⬇ まとめてダウンロード（zip）</button>
+    <div id="outResult" style="margin-top:14px"></div>
+  </div>
+  <div class="dl-panel">
+    <h3>いつでも見るもの</h3>
+    <div class="side">
+      <button class="btn-ghost" onclick="openBoard()">未払いボード</button>
+      <button class="btn-ghost" onclick="openRates()">ルール台帳</button>
+      <button class="btn-ghost" onclick="openTrend()">収支推移</button>
+    </div>
+  </div>
+  <div class="footer-nav">
+    <button class="btn-ghost" onclick="go(2)">← 見る</button>
+    <span></span>
   </div>
 </section>
 
@@ -3070,6 +3195,7 @@ function lastDayOfMonth(ym){if(!/^\d{6}$/.test(ym||''))return null;return new Da
 function fmtYmJa(ym){return /^\d{6}$/.test(ym||'')?`${ym.slice(0,4)}年${+ym.slice(4)}月`:''}
 /* 監査の開通月範囲（画面の入力値。空欄From=下限なし／空欄To=既定の前月末） */
 function auditRangeInput(){
+  if(S._batchRange)return S._batchRange;
   const f=document.getElementById('auditFrom'),t=document.getElementById('auditTo');
   const v=el=>el?String(el.value||'').replace(/\D/g,'').slice(0,6):undefined;
   return {openFrom:f?(v(f)||''):undefined,openTo:t?(v(t)||''):undefined};
@@ -3840,9 +3966,9 @@ function applyCaseRates(){
 }
 
 /* パートナー支払明細のアップロード（複数可・前月/当月どちらでも） */
-function loadPayFiles(files){
+function loadPayFiles(files,onDone){
   const list=Array.from(files).filter(f=>/\.xlsx?$/i.test(f.name));
-  if(!list.length)return;
+  if(!list.length){if(onDone)onDone();return}
   const el=document.getElementById('payStatus');
   el.textContent=`読み込み中… (0/${list.length})`;el.className='pm-status';
   let done=0,all=[];
@@ -3873,6 +3999,7 @@ function loadPayFiles(files){
         if(saved||lr.questions.length)
           toast(`手数料の内訳ルール ${saved}件を記憶${lr.questions.length?` / 判断できない ${lr.questions.length}件は確認をお願いします`:''}`);
         toast(`支払明細 ${list.length}ファイルを読み込みました（${all.length}行 / 案件単価 ${res.total.toLocaleString()}件を記憶）`);
+        if(onDone)onDone();
       }
     };
     rd.readAsArrayBuffer(file);
@@ -5899,6 +6026,7 @@ async function applyRulesSeed(){
   let seed=null;
   try{const r=await fetch('rules.json?t='+Date.now(),{cache:'no-store'});if(r.ok)seed=await r.json()}catch(e){}
   if(!seed||!Array.isArray(seed.rules))return 0;
+  S._rulesQuestions=Array.isArray(seed.questions)?seed.questions:[];
   const lg=ledgerOf();
   if(lg.seed===seed.version)return 0;
   let added=0,updated=0,conflicts=0;
@@ -5919,11 +6047,14 @@ async function applyRulesSeed(){
   if(added||updated||conflicts)toast(`ルール台帳を更新: スキル由来 ${added}件を追加${updated?` / ${updated}件を更新`:''}${conflicts?` / 要確認 ${conflicts}件`:''}`);
   return added+updated+conflicts;
 }
-function exportLedger(){
+function ledgerExportObj(){
   const lg=ledgerOf();
   const rules=Object.entries(lg.rules).map(([key,r])=>{const [product,partner,toss]=key.split('|');return {product,partner,toss,price:r.price,from:r.from,src:r.src,status:r.status,cond:r.cond||'',note:r.note||'',hist:r.hist||[]}});
+  return {version:stamp(),exportedAt:new Date().toISOString(),rules,changes:lg.changes,answered:lg.answered||{}};
+}
+function exportLedger(){
   const name=`月末明細処理クラウド_ルール台帳_${stamp()}.json`;
-  if(downloadJson({version:stamp(),exportedAt:new Date().toISOString(),rules,changes:lg.changes},name))toast(`${name} を書き出しました（別端末で「台帳を読み込む」、または rules.json として配置）`);
+  if(downloadJson(ledgerExportObj(),name))toast(`${name} を書き出しました（別端末で「台帳を読み込む」、または rules.json として配置）`);
 }
 function importLedger(file){
   const rd=new FileReader();
@@ -5935,6 +6066,7 @@ function importLedger(file){
       j.rules.forEach(sr=>{const key=rateKey(sr.product,sr.partner,sr.toss||'');const cur=lg.rules[key];
         if(!cur||Number(cur.price)!==Number(sr.price)||cur.status!==sr.status){lg.rules[key]={price:Number(sr.price),from:sr.from||'000000',src:sr.src||'import',status:sr.status||'confirmed',cond:sr.cond||'',note:sr.note||'',hist:sr.hist||[]};n++}});
       (j.changes||[]).forEach(c=>{if(!lg.changes.some(x=>x.id===c.id))lg.changes.push(c)});
+      if(j.answered){lg.answered=Object.assign(lg.answered||{},j.answered)}
       await saveMemory();renderRates();renderLedgerBadge();
       toast(`台帳を読み込みました（${n}件を更新）`);
     }catch(ex){toast('台帳を読み込めませんでした: '+ex.message)}
@@ -6352,14 +6484,25 @@ function go(n){
   if(vs)vs.classList.remove('on');
   if(vb){vb.classList.remove('on');vb.textContent='回収シミュ'}
   S.recovOpen=false;
+  const single=!!S.single;
+  const target=n===1?(single?'sc1':'scIn'):n===2?((single||S.detailOpen)?'sc2':'scSee'):(single?'sc4':'scOut');
+  ['sc1','sc2','sc3','sc4','scIn','scSee','scOut'].forEach(id=>{const el=document.getElementById(id);if(el)el.classList.toggle('on',id===target)});
   for(let i=1;i<=4;i++){
     const s=document.getElementById(steps[i]);
     s.classList.toggle('active',i===n);s.classList.toggle('done',i<n);
     s.classList.toggle('nav',i<=S.maxStep&&i!==n);
-    document.getElementById(screens[i]).classList.toggle('on',i===n);
   }
   S.step=n;
   placePricePanel(n);
+  /* 商材ごとの結果画面をまとめて処理から開いたときは、出力ボタンを隠してボードへ戻す */
+  const to=document.getElementById('toOut'),bk=document.getElementById('back2');
+  if(to)to.style.display=(!single&&S.detailOpen)?'none':'';
+  if(bk)bk.textContent=(!single&&S.detailOpen)?'← ボードに戻る':'← 戻る';
+  const tag=document.getElementById('hdProd');
+  if(tag&&!single&&!S.detailOpen)tag.textContent='まとめて処理';
+  if(target==='scIn'&&typeof renderIn==='function')renderIn();
+  if(target==='scSee'&&typeof renderSee==='function')renderSee();
+  if(target==='scOut'&&typeof renderOut==='function')renderOut();
   window.scrollTo({top:0,behavior:'smooth'});
 }
 /* ステッパーをクリックで移動（到達済みステップのみ）。画面下部の戻るボタンと併用可 */
@@ -6406,7 +6549,7 @@ function toast(msg){
   setTimeout(()=>t.classList.remove('show'),3400);
 }
 function progLine(txt,cls){
-  const p=document.getElementById('prog');
+  const p=S._progEl||document.getElementById('prog');
   const d=document.createElement('div');d.className='prog-line '+(cls||'');
   d.innerHTML=`<span class="tick">${cls==='err'?'✕':'✓'}</span>${esc(txt)}`;p.appendChild(d);
 }
@@ -6479,7 +6622,7 @@ renderProdGrid();
 /* 起動時: 保存済みのXRMがあれば自動で読み込む */
 (async()=>{
   const rec=await loadSavedXrm();
-  if(rec){renderXrmStatus();updateRunBtn()}
+  if(rec){renderXrmStatus();updateRunBtn();if(typeof renderIn==='function')renderIn()}
   await loadTemplateIndex();
   await loadBnData();
   renderStmtNeed();renderPayStatus();
@@ -6501,7 +6644,7 @@ function selectProd(key){
     document.getElementById('pmTitle').textContent='単価マスタ（今月の適用値を確認してください）';
     S._pmNoteBase=m.pmNote;
     document.getElementById('pmNote').textContent=m.pmNote;
-    const g=document.getElementById('pmGrid');g.innerHTML='';
+    const g=document.getElementById('pmGrid');g.innerHTML='';g.dataset.prod=key;
     m.prices.forEach(([id,label,def])=>{
       const it=document.createElement('div');it.className='pm-item';
       it.innerHTML=`<label>${label}</label><input type="number" id="${id}" value="${def}">円`;
@@ -6513,7 +6656,8 @@ function selectProd(key){
       <button class="btn-ghost btn-sm" onclick="resetPrices()">既定値に戻す</button>
       <span class="pm-status" id="pmStatus"></span>`;
     loadPrices();
-  }else pm.style.display='none';
+  }else{pm.style.display='none';const g=document.getElementById('pmGrid');if(g){g.innerHTML='';g.dataset.prod=key}}
+  if(S._priceCache)delete S._priceCache[key];
   loadPatterns();
   const dz2=document.getElementById('dz2');
   if(dz2)dz2.style.display=m.noXrm?'none':'';
@@ -6555,6 +6699,7 @@ function pick(n){
 /* ---- まとめて投入: ファイル名と中身で 上位店明細 / XRM / 支払明細 / 記憶JSON に自動振り分け ---- */
 function pickAll(){document.getElementById('inAll').click()}
 function routeFiles(files){
+  if(!S.single)return batchRoute(files);
   const list=Array.from(files||[]);if(!list.length)return;
   const json=list.filter(f=>/\.json$/i.test(f.name));
   const csv=list.filter(f=>/\.csv$/i.test(f.name));
@@ -6701,25 +6846,32 @@ function loadFile(n,file){
         S.meisaiWb=wb;S.meisaiName=file.name;
         revalidateMeisai();
       }else{
-        S.xrmWb=wb;S.xrmName=file.name;S.xrmSavedAt=new Date().toISOString();S.xrmStub=false;
-        saveXrmFile(e.target.result,file.name).then(ok=>{
-          renderXrmStatus();
-          if(!ok)toast('XRMを保持できませんでした（今回のみ有効です）');
-        });
-        try{
-          const got=ingestXrm(wb,file.name);
-          saveMemory().then(()=>renderMemStatus());
-          if(got)toast(`XRMを保存し、内容を記憶に追加しました（${got}件）。次回からアップロード不要です`);
-        }catch(ex){console.error('ingest',ex)}
+        applyXrmWb(wb,e.target.result,file.name);
         const chk=S.prod?MODULES[S.prod].xrmCheck(wb):null;
         if(chk){showErr(2,chk+'。シート一覧: '+wb.SheetNames.slice(0,12).join(' / ')+(wb.SheetNames.length>12?' …':''));}
-        document.getElementById('f2').textContent=`✓ ${file.name}`;
-        document.getElementById('dz2').classList.add('filled');
       }
       updateRunBtn();
     }catch(ex){showErr(n,'ファイルを読み込めませんでした: '+ex.message)}
   };
   reader.readAsArrayBuffer(file);
+}
+/* XRM契約一覧を取り込む（保存・記憶への蓄積・表示更新）。従来画面とまとめて処理の両方から使う */
+function applyXrmWb(wb,buf,name){
+  S.xrmWb=wb;S.xrmName=name;S.xrmSavedAt=new Date().toISOString();S.xrmStub=false;
+  saveXrmFile(buf,name).then(ok=>{
+    renderXrmStatus();
+    if(typeof renderIn==='function')renderIn();
+    if(!ok)toast('XRMを保持できませんでした（今回のみ有効です）');
+  });
+  try{
+    const got=ingestXrm(wb,name);
+    saveMemory().then(()=>renderMemStatus());
+    if(got)toast(`XRMを保存し、内容を記憶に追加しました（${got}件）。次回からアップロード不要です`);
+  }catch(ex){console.error('ingest',ex)}
+  const f2=document.getElementById('f2');if(f2)f2.textContent=`✓ ${name}`;
+  const dz2=document.getElementById('dz2');if(dz2)dz2.classList.add('filled');
+  /* まとめて処理の実行結果は XRM が変わると古くなる */
+  if(typeof B!=='undefined'&&B.jobs.length){B.jobs.forEach(j=>{j.done=false});B.ran=false}
 }
 function revalidateMeisai(){
   hideErr(1);
@@ -7009,7 +7161,8 @@ function resolveHold(i){
 }
 
 /* ---- 出力 ---- */
-function buildOutput(){
+/* 出力内容を確定する（パートナー別集計・検品・検算・収支推移への記録）。画面には触らない */
+function computeOutput(){
   const m=MODULES[S.prod];
   const meta=m.output();
   const v=(m.kind!=='audit')?verifyPayments():null;
@@ -7020,14 +7173,29 @@ function buildOutput(){
       {ok:v.dup.length===0,txt:v.dup.length?`二重払いの可能性 ${v.dup.length}件（同じ案件が支払明細に複数回）`:'二重払いなし'}
     ]);
   }else S.verify=null;
-  document.getElementById('sub4').textContent=meta.sub;
-  document.getElementById('dlNote').textContent=meta.dlNote;
   S._fname=meta.fname;
   /* 収支推移に自動記録（売上・支払） */
   const payTotal=(S.outPartners||[]).reduce((a,p)=>a+(p.amt||0),0);
   const revTotal=(S.revenue&&S.revenue.net)||null;
   if(m.kind!=='audit'&&(payTotal||revTotal))
     recordTrend(m.title,{pay:payTotal||null,rev:revTotal});
+  return meta;
+}
+function appendVerifySheet(wb){
+  if(S.verify&&(S.verify.miss.length||S.verify.dup.length)){
+    const rows=[['支払明細との検算（対象月 '+(S.verify.month||'不明')+'）'],[],
+      ['■ 支払漏れの可能性（入金あり・当月支払明細に無し）'],['氏名','電話番号','支払先','支払単価']];
+    S.verify.miss.forEach(x=>rows.push([x.name,x.tel,x.payTo,x.price]));
+    rows.push([],['■ 二重払いの可能性（同一案件が支払明細に複数回）'],['突合キー','件数','氏名','商材']);
+    S.verify.dup.forEach(x=>rows.push([x.key,x.count,x.name,x.product]));
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'支払検算');
+  }
+  return wb;
+}
+function buildOutput(){
+  const meta=computeOutput();
+  document.getElementById('sub4').textContent=meta.sub;
+  document.getElementById('dlNote').textContent=meta.dlNote;
   const og=document.getElementById('outGrid');og.innerHTML='';
   S.outPartners.forEach(p=>{
     const d=document.createElement('div');d.className='pcard';
@@ -7051,17 +7219,729 @@ function buildOutput(){
 }
 function downloadXlsx(){
   const wb=MODULES[S.prod].buildWb();
-  if(S.verify&&(S.verify.miss.length||S.verify.dup.length)){
-    const rows=[['支払明細との検算（対象月 '+(S.verify.month||'不明')+'）'],[],
-      ['■ 支払漏れの可能性（入金あり・当月支払明細に無し）'],['氏名','電話番号','支払先','支払単価']];
-    S.verify.miss.forEach(x=>rows.push([x.name,x.tel,x.payTo,x.price]));
-    rows.push([],['■ 二重払いの可能性（同一案件が支払明細に複数回）'],['突合キー','件数','氏名','商材']);
-    S.verify.dup.forEach(x=>rows.push([x.key,x.count,x.name,x.product]));
-    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),'支払検算');
-  }
+  appendVerifySheet(wb);
   deliverXlsx(wb,S._fname);
   toast('ダウンロードを開始しました。原本は上書きしません。');
 }
+
+
+/* =========================================================
+   まとめて処理（2026-10 刷新）: 入れる → 見る → 出す
+   商材を選ばずにファイルを全部入れ、1回の実行で全商材の突合と未払い監査を回し、
+   上位店ごとのボードと「要確認」1リストで片付けて、zip 1つで出す。
+   既存の商材モジュール（MODULES）はグローバル S を介して動くため、
+   ジョブごとに S を差し替えて順番に実行し、結果をジョブ側に退避する。
+========================================================= */
+const B={files:[],jobs:[],ran:false,month:'',busy:0,outs:null,results:null,todoCount:0,_todo:[]};
+S.single=false;
+const VENDOR_ORDER=['ユーネット','Liberte','SOFI','マーカスネットワーク','NUWORKS','イケメン','Crescere','LEF月額PAY','ブランニュー','ネオグリフ','ロボペイ','SBPS','Stocktech'];
+function vendorOf(m){return (String(m.title).split('/')[1]||'その他').trim()}
+function productOf(m){return String(m.title).split('/')[0].trim()}
+function vendorRank(v){const i=VENDOR_ORDER.findIndex(x=>v.includes(x));return i<0?99:i}
+function readWb(file,opts){
+  return new Promise((res,rej)=>{
+    const rd=new FileReader();
+    rd.onload=e=>{try{res({buf:e.target.result,wb:XLSX.read(new Uint8Array(e.target.result),Object.assign({type:'array',cellDates:true},opts||{}))})}catch(ex){rej(ex)}};
+    rd.onerror=()=>rej(new Error('ファイルを読み込めませんでした'));
+    rd.readAsArrayBuffer(file);
+  });
+}
+function tick(){return new Promise(r=>setTimeout(r,0))}
+function setSingle(on){
+  S.single=!!on;S.detailOpen=false;
+  const tag=document.getElementById('hdProd');
+  if(tag)tag.textContent=on?(S.mode==='audit'?'未払い監査':'商材を選択'):'まとめて処理';
+  go(1);
+}
+
+/* ---- ファイル1つが、どの商材モジュールに当てはまるかを中身（シート名・見出し）で判定 ---- */
+/* シート名の判定が緩いモジュールは、ファイル名か中身でもう一段裏取りする（別商材の明細を誤って拾わないため） */
+function sheetHas(wb,sn,heads,limit){
+  try{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});
+    for(let i=0;i<Math.min(rows.length,limit||5);i++){if(heads.every(h=>findCol(rows[i]||[],[h])>=0))return true}
+  }catch(e){}
+  return false;
+}
+function sheetMatches(wb,sn,re,limit){
+  try{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});
+    for(let i=0;i<Math.min(rows.length,limit||60);i++){if((rows[i]||[]).some(v=>re.test(String(v??''))))return true}
+  }catch(e){}
+  return false;
+}
+const DETECT_HINTS={
+  dplink:(wb,n,sh)=>/NUWORKS|DPリンク|auひかり|御支払通知書|So-?net/i.test(n)||wb.SheetNames.some(sn=>sheetMatches(wb,sn,/^K\d{5,}/)),
+  subsele:(wb,n)=>/LEF|月額PAY|ブランニュー|BrandNew|サブセレ/i.test(n)||wb.SheetNames.some(sn=>/LEF/i.test(sn)||sheetHas(wb,sn,['会員ID','コンテンツ名'])),
+  crescere:(wb,n)=>/Crescere|クレセレ|御支払通知書|アフィリエイト/i.test(n)||wb.SheetNames.some(sn=>/^JCB$/i.test(sn))||wb.SheetNames.some(sn=>sheetHas(wb,sn,['媒体'])),
+  audit_biglobe_lib:(wb,n)=>/Liberte|手数料明細|【BIGLOBE/i.test(n)||wb.SheetNames.some(sn=>/通知書/.test(sn)),
+  audit_sonet:(wb,n)=>/So-?net|Liberte|手数料明細/i.test(n)||wb.SheetNames.some(sn=>/So-?net|通知書/i.test(sn)),
+  audit_auhikari:(wb,n)=>/NUWORKS|DPリンク|auひかり|御支払通知書|So-?net/i.test(n)||wb.SheetNames.some(sn=>sheetMatches(wb,sn,/^K\d{5,}/)),
+  audit_brandnew:(wb,n)=>/LEF|月額PAY|ブランニュー|BrandNew|サブセレ/i.test(n)||wb.SheetNames.some(sn=>sheetHas(wb,sn,['会員ID'])),
+  audit_looop:(wb,n)=>/Looop|マーカス|新電力/i.test(n)||wb.SheetNames.some(sn=>/新電力|^Looop$/.test(sn))
+};
+function detectJobs(wb,name){
+  const out=[];
+  Object.entries(MODULES).forEach(([key,m])=>{
+    if(m.hidden||m.kind==='revenue')return;
+    try{
+      if(DETECT_HINTS[key]&&!DETECT_HINTS[key](wb,name))return;
+      if(m.kind==='audit'){
+        const cfg=AUDITS[key];if(!cfg)return;
+        const pk=collectPaidKeys(wb,cfg);
+        if(pk.keys.size)out.push({key,sheet:String(pk.info.sheets[0]||'').replace(/\(\d+\)$/,''),paidKeys:pk.keys.size});
+        return;
+      }
+      const sh=m.findSheet(wb);
+      if(sh)out.push({key,sheet:sh});
+    }catch(e){console.warn('detect',key,name,e)}
+  });
+  return out;
+}
+
+/* ---- まとめて投入: 中身で XRM / 支払明細書 / 上位店明細 に振り分け、商材を判定 ---- */
+async function batchRoute(files){
+  const list=Array.from(files||[]).filter(f=>f&&f.name&&!/^\./.test(f.name));
+  if(!list.length)return;
+  B.busy++;renderIn();
+  try{
+    for(const f of list){
+      const ent={name:f.name,size:f.size,kind:'',note:'',jobs:[],err:'',order:B.files.length};
+      /* 同名ファイルを入れ直したら差し替える */
+      const dupI=B.files.findIndex(x=>x.name===f.name);
+      if(dupI>=0)B.files.splice(dupI,1);
+      B.files.push(ent);renderIn();
+      try{
+        if(/\.json$/i.test(f.name)){ent.kind='json';ent.note='記憶・台帳データとして読み込みました';importMemory(f);continue}
+        if(/\.csv$/i.test(f.name)){
+          if(/SBPS|収納/i.test(f.name)){ent.kind='csv';ent.note='収納明細 → 収支推移に反映します';loadRevenueFiles([f])}
+          else{ent.kind='skip';ent.note='CSV は収納明細（SBPS）のみ対応です'}
+          continue;
+        }
+        if(!/\.xlsx?$/i.test(f.name)){ent.kind='skip';ent.note='対応していない形式です（xlsx / xls / csv / json）';continue}
+        if(/【\s*\d{4}\s*年\s*\d{1,2}\s*月度明細】/.test(f.name)&&!/Exploration|EH/i.test(f.name)){
+          ent.kind='pay';ent.note='単価の踏襲・ルール台帳の更新・支払明細書のフォーマットに使います';
+          await new Promise(r=>loadPayFiles([f],r));
+          continue;
+        }
+        const {buf,wb}=await readWb(f);
+        if(looksLikeXrm(wb,f.name)){ent.kind='xrm';ent.note=`${wb.SheetNames.length}シート。保存したので次回は不要です`;applyXrmWb(wb,buf,f.name);continue}
+        ent.kind='meisai';ent.wb=wb;
+        const jobs=detectJobs(wb,f.name);
+        if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
+        ent.jobs=jobs;
+      }catch(ex){ent.kind='error';ent.err=(ex&&ex.message)||String(ex);console.error(f.name,ex)}
+    }
+  }finally{B.busy--}
+  rebuildJobs();renderIn();
+}
+function removeInFile(i){
+  const f=B.files[i];if(!f)return;
+  B.files.splice(i,1);
+  rebuildJobs();renderIn();
+  toast(`${f.name} を外しました`);
+}
+/* ファイル一覧から、商材ごとのジョブを組み立てる（同じ商材に複数ファイルがあれば 修正版 > 後から入れた方 を採用） */
+function rebuildJobs(){
+  const byKey={};
+  B.files.filter(f=>f.kind==='meisai').forEach(f=>f.jobs.forEach(j=>{(byKey[j.key]=byKey[j.key]||[]).push({...j,file:f})}));
+  const jobs=[];
+  const fixRe=/修正|訂正|再送|差替|差し替え|rev/i;
+  Object.entries(byKey).forEach(([key,list])=>{
+    const m=MODULES[key];
+    const sorted=list.slice().sort((a,b)=>((fixRe.test(b.file.name)?1:0)-(fixRe.test(a.file.name)?1:0))||(b.file.order-a.file.order));
+    const main=sorted[0];
+    const prev=B.jobs.find(j=>j.key===key&&j.name===main.file.name&&j.rows);
+    const job={key,file:main.file,wb:main.file.wb,name:main.file.name,sheet:main.sheet,extra:[],ignored:[],status:'ready',done:false};
+    if(m.kind==='audit'){
+      /* 監査は複数月の明細をまとめて使える（支払済キーの和集合） */
+      job.extra=sorted.slice(1).map(x=>({wb:x.file.wb,name:x.file.name}));
+    }else{
+      job.ignored=sorted.slice(1).map(x=>x.file.name);
+    }
+    if(prev&&prev.extra.length===job.extra.length&&prev.extra.every((x,i)=>x.name===job.extra[i].name)){
+      Object.assign(job,{rows:prev.rows,excluded:prev.excluded,diag:prev.diag,xrmPick:prev.xrmPick,yearMonth:prev.yearMonth,
+        rangeLabel:prev.rangeLabel,rangeYm:prev.rangeYm,stats:prev.stats,status:prev.status,err:prev.err,done:prev.done,claim:prev.claim});
+    }
+    jobs.push(job);
+  });
+  jobs.sort((a,b)=>vendorRank(vendorOf(MODULES[a.key]))-vendorRank(vendorOf(MODULES[b.key]))
+    ||((MODULES[a.key].kind==='audit')-(MODULES[b.key].kind==='audit'))
+    ||productOf(MODULES[a.key]).localeCompare(productOf(MODULES[b.key]),'ja'));
+  B.jobs=jobs;
+  B.ran=jobs.length>0&&jobs.every(j=>j.done);
+  B.outs=null;B.results=null;
+  const months={};
+  B.files.filter(f=>f.kind==='meisai').forEach(f=>{
+    const ym=monthFromName(f.name)||(f.wb?(f.wb.SheetNames.map(monthFromName).find(Boolean)||''):'');
+    if(ym)months[ym]=(months[ym]||0)+1;
+  });
+  B.month=Object.entries(months).sort((a,b)=>b[1]-a[1]).map(([k])=>k)[0]||'';
+}
+
+/* ---- 入れる画面 ---- */
+function renderIn(){
+  const host=document.getElementById('inFiles');if(!host)return;
+  const pill=(cls,t)=>`<span class="pill ${cls}">${esc(t)}</span>`;
+  host.innerHTML=B.files.map((f,i)=>{
+    let tag='',d='';
+    if(f.kind==='xrm'){tag=pill('info','XRM');d=f.note}
+    else if(f.kind==='pay'){tag=pill('flat','前月の支払明細書');d=f.note}
+    else if(f.kind==='meisai'){
+      const js=f.jobs.map(j=>MODULES[j.key]);
+      const vendors=[...new Set(js.map(vendorOf))];
+      tag=pill('ok',vendors.join(' / ')||'上位店明細');
+      const prods=[...new Set(js.filter(m=>m.kind!=='audit').map(productOf))];
+      const audits=[...new Set(js.filter(m=>m.kind==='audit').map(productOf))];
+      d=(prods.length?prods.join(' / '):'')+(audits.length?`${prods.length?' ・ ':''}未払い監査: ${audits.join(' / ')}`:'');
+      const ign=B.jobs.filter(j=>j.ignored&&j.ignored.includes(f.name)).map(j=>productOf(MODULES[j.key]));
+      if(ign.length)d+=`（${ign.join(' / ')} は修正版/新しい方を採用するためこのファイルは使いません）`;
+    }
+    else if(f.kind==='unknown'){tag=pill('warn','判別できず');d=f.note}
+    else if(f.kind==='error'){tag=pill('bad','エラー');d=f.err}
+    else if(f.kind==='json'){tag=pill('flat','記憶/台帳');d=f.note}
+    else if(f.kind==='csv'){tag=pill('flat','収納明細');d=f.note}
+    else if(!f.kind){tag=pill('flat','読込中…');d=''}
+    else{tag=pill('flat','対象外');d=f.note}
+    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span></div>`;
+  }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
+  const xs=document.getElementById('inXrm');
+  if(xs){
+    if(S.xrmWb&&!S.xrmStub){
+      const d=daysSince(S.xrmSavedAt);
+      xs.innerHTML=`<span class="pill info">XRM</span> ${esc(S.xrmName)}　保存日 ${esc(fmtSaved(S.xrmSavedAt)||'—')}${d!=null&&d>=7?`　<b style="color:var(--warn)">${d}日前のものです。最新版の入れ替えをおすすめします</b>`:''}`;
+    }else xs.innerHTML='<span class="pill warn">XRM なし</span> 契約一覧（【契約一覧】…xlsx）がまだありません。無くても記憶だけで突合できますが、精度は下がります。';
+  }
+  const n=B.jobs.length,todo=B.jobs.filter(j=>!j.done);
+  const btn=document.getElementById('runAll');
+  const ym=B.month?fmtYmJa(B.month)+'度':'対象月';
+  if(btn){
+    btn.disabled=!n||B.busy>0;
+    btn.textContent=B.busy>0?'読み込み中…':!n?'ファイルを入れると実行できます'
+      :(B.ran&&!todo.length?'✓ 実行済み → 結果を見る':`▶ ${ym}をまとめて実行（${todo.length<n?`追加分 ${todo.length} / `:''}${n}商材）`);
+    btn.onclick=()=>{if(B.ran&&!todo.length)go(2);else runBatch()};
+  }
+  const sm=document.getElementById('inJobs');
+  if(sm)sm.innerHTML=n?'処理する商材: '+B.jobs.map(j=>{const m=MODULES[j.key];return `<span class="pill ${m.kind==='audit'?'flat':'info'}">${esc(productOf(m))}${m.kind==='audit'?' 監査':''}</span>`}).join(' '):'';
+  const miss=document.getElementById('inMissing');
+  if(miss){
+    const have=new Set(B.jobs.map(j=>j.key));
+    const lack=Object.entries(MODULES).filter(([k,m])=>!m.hidden&&m.kind!=='audit'&&m.kind!=='revenue'&&!have.has(k)).map(([k,m])=>productOf(m)+'（'+vendorOf(m)+'）');
+    miss.textContent=n&&lack.length?'まだ入っていない商材: '+lack.join(' / ')+'。届いたら追加で入れれば、その分だけ処理します。':'';
+  }
+  const mo=document.getElementById('inMonth');if(mo)mo.textContent=B.month?fmtYmJa(B.month)+'度':'—';
+}
+
+/* ---- 単価入力欄（モジュールごと）: 既定値＋記憶した値をキャッシュし、ジョブ切替時に同期で差し替える ---- */
+async function preparePrices(key){
+  const m=MODULES[key];
+  S._priceCache=S._priceCache||{};S._patCache=S._patCache||{};
+  if(!S._priceCache[key]){
+    const saved=(m.prices.length?await Store.get(Store.key(key)):null)||{};
+    const vals={};m.prices.forEach(([id,,def])=>{vals[id]=saved[id]!=null?saved[id]:def});
+    S._priceCache[key]=vals;
+  }
+  if(!S._patCache[key])S._patCache[key]=(await Store.get(PatKey(key)))||{};
+  applyPriceGrid(key);
+}
+function applyPriceGrid(key){
+  const m=MODULES[key];
+  const vals=(S._priceCache&&S._priceCache[key])||{};
+  S.savedPatterns=(S._patCache&&S._patCache[key])||{};
+  const g=document.getElementById('pmGrid');if(!g)return;
+  if(g.dataset.prod===key)return;
+  g.innerHTML='';
+  m.prices.forEach(([id,label,def])=>{
+    const it=document.createElement('div');it.className='pm-item';
+    it.innerHTML=`<label>${label}</label><input type="number" id="${id}" value="${vals[id]!=null?vals[id]:def}">円`;
+    g.appendChild(it);
+  });
+  g.dataset.prod=key;
+  const pm=document.getElementById('pmPanel');
+  if(pm){
+    pm.style.display=(m.prices.length&&S.detailOpen)?'block':'none';
+    const t=document.getElementById('pmTitle');if(t)t.textContent='単価マスタ（この商材の適用値）';
+    S._pmNoteBase=m.pmNote||'';const nt=document.getElementById('pmNote');if(nt)nt.textContent=m.pmNote||'';
+    const bar=document.getElementById('pmBar');
+    if(bar&&!bar.querySelector('#pmRecalc'))bar.innerHTML=`<button class="btn btn-sm" id="pmRecalc" style="display:none" onclick="recalcWithPrices()">この単価で再計算</button>
+      <button class="btn-ghost btn-sm" onclick="savePrices()">この単価を記憶する</button>
+      <button class="btn-ghost btn-sm" onclick="resetPrices()">既定値に戻す</button>
+      <span class="pm-status" id="pmStatus"></span>`;
+  }
+}
+
+/* ---- ジョブを S に展開する（既存モジュールはすべて S を見て動く） ---- */
+function activateJob(job){
+  const m=MODULES[job.key];
+  S.prod=job.key;S.meisaiWb=job.wb;S.meisaiName=job.name;S.meisaiSheet=job.sheet;
+  const mm=String(job.sheet||'').match(/(\d{4})(\d{2})/);
+  S.yearMonth=job.yearMonth||(mm?`${mm[1]}年${Number(mm[2])}月`:(B.month?fmtYmJa(B.month):''));
+  S.extraMeisai=job.extra||[];
+  S._batchRange=m.kind==='audit'?{}:null;   /* {} = 既定（対象月の前月に開通した案件） */
+  if(job.rows){S.rows=job.rows;S.excluded=job.excluded||[];S.diag=job.diag||null;S._xrmPick=job.xrmPick||{};S._mkeys=null}
+  else{S.rows=[];S.excluded=[];S.diag=null;S._xrmPick={};S._mkeys=null}
+  applyPriceGrid(job.key);
+  return job;
+}
+function withJob(job,fn){activateJob(job);return fn()}
+function snapshotJob(job){
+  job.rows=S.rows;job.excluded=S.excluded;job.diag=S.diag;job.xrmPick=S._xrmPick;job.yearMonth=S.yearMonth;
+  job.stats=computeStats(job);
+}
+function computeStats(job){
+  const m=MODULES[job.key];const rows=job.rows||[];
+  const st={n:rows.length,ok:0,warn:0,alert:0,pending:0,hold:0,unpaid:0,amount:null,count:null};
+  rows.forEach(r=>{if(r.state==='ok')st.ok++;else if(r.state==='warn')st.warn++;else if(r.state==='alert')st.alert++;if(!r.resolved)st.pending++;if(r.hold)st.hold++});
+  if(m.kind==='audit'){st.unpaid=rows.filter(r=>r.state==='alert'&&!r.skip).length;st.pending=0}
+  else{try{const t=m.total();if(m.amountIsCount)st.count=t;else st.amount=t}catch(e){console.warn('total',job.key,e)}}
+  return st;
+}
+
+/* ---- 実行: 全ジョブを順番に突合 ---- */
+async function runBatch(){
+  if(!B.jobs.length||B.busy)return;
+  const p=document.getElementById('inProg');p.innerHTML='';p.classList.add('on');S._progEl=p;
+  const btn=document.getElementById('runAll');btn.disabled=true;btn.textContent='実行中…';
+  S.detailOpen=false;
+  if(!S.xrmWb){S.xrmWb=emptyWb();S.xrmName='（XRM未読込）';S.xrmStub=true;progLine('XRM契約一覧が未読込のため、記憶している案件情報だけで突合します','err')}
+  else progLine(`XRM契約一覧を使用: ${S.xrmName}`);
+  const todo=B.jobs.filter(j=>!j.done);
+  for(const job of todo){
+    await runJob(job);
+    await tick();
+  }
+  S._progEl=null;
+  B.ran=B.jobs.every(j=>j.done);
+  S.maxStep=Math.max(S.maxStep||1,2);
+  const okN=todo.filter(j=>j.status==='ok').length;
+  progLine(`完了: ${okN}商材を処理${todo.length>okN?`（${todo.length-okN}件は対象なし/エラー）`:''}`);
+  renderIn();
+  setTimeout(()=>go(2),500);
+}
+async function runJob(job){
+  const m=MODULES[job.key];
+  activateJob(job);
+  await preparePrices(job.key);
+  S.rows=[];S.excluded=[];S.diag=null;S._xrmPick={};S._mkeys=null;S.manualCount=0;job.rows=null;
+  job.status='ok';job.err='';job.claim=null;
+  const label=productOf(m)+(m.kind==='audit'?'（未払い監査）':'');
+  progLine(`── ${label} / ${vendorOf(m)}: ${job.name}${job.extra.length?` ＋ 追加 ${job.extra.length}件`:''}`);
+  try{
+    if(!S.xrmStub&&!m.noXrm){const chk=m.xrmCheck(S.xrmWb);if(chk)throw new Error(chk)}
+    if(m.kind==='audit'){
+      const ym=monthFromName(job.name)||monthFromName(job.sheet)||'';
+      job.rangeYm=ym?prevYm(ym):'';
+      job.rangeLabel=job.rangeYm?`${fmtYmJa(job.rangeYm)}開通 `:'';
+    }
+    m.process();
+    if(m.kind!=='audit'){
+      const filled=fillFromMemory();if(filled)progLine(`記憶から ${filled}件を復元・補完`);
+      const exRule=applyExcludeRules();if(exRule)progLine(`支払対象外ルールにより ${exRule}件を除外`);
+      const cs=applyCaseRates();if(cs)progLine(`前月の支払明細から同一案件の単価を ${cs}件に踏襲`);
+      const learned=applyLearnedRates();if(learned)progLine(`台帳・学習単価を ${learned}件に自動適用`);
+      const auto=applySavedPatterns();if(auto)progLine(`記憶済みの単価を ${auto}件に自動適用`);
+    }
+    if(!S.rows.length){job.status='empty';job.err='対象行がありません（別商材のファイルの可能性）';progLine(`${label}: 対象行なし → スキップ`,'err')}
+    else if(m.kind==='audit'&&S.rows.length>=3&&!S.rows.some(r=>r.state==='ok')){
+      job.status='nomatch';job.err='入金明細のキーが XRM と1件も一致しません（別商材・別上位店の明細の可能性）。この監査は結果に含めません';
+      progLine(`${label}: 突合ゼロ → 結果に含めません`,'err');
+    }
+  }catch(ex){job.status='err';job.err=(ex&&ex.message)||String(ex);progLine(`${label}: エラー ${job.err}`,'err');console.error(job.key,ex)}
+  snapshotJob(job);
+  job.done=true;
+  if(job.status==='ok'){
+    const st=job.stats;
+    progLine(m.kind==='audit'?`${label}: 対象 ${st.n}件 = 入金確認 ${st.ok} + 未払い ${st.unpaid}${st.warn?` + 判定不可 ${st.warn}`:''}`
+      :`${label}: ${st.n}件 → OK ${st.ok} / 要確認 ${st.pending}${st.amount!=null?` / 支払見込 ${yen(st.amount)}`:''}`);
+  }
+}
+
+/* ---- 見る: 上位店ボード ---- */
+function renderSee(){
+  const okJobs=B.jobs.filter(j=>j.status==='ok');
+  okJobs.forEach(j=>{if(!j.stats)j.stats=withJob(j,()=>computeStats(j))});
+  renderTodo();
+  const todo=B.todoCount;
+  let pay=0,unpaid=0;
+  okJobs.forEach(j=>{const m=MODULES[j.key];if(m.kind==='audit')unpaid+=j.stats.unpaid;else if(j.stats.amount!=null)pay+=j.stats.amount});
+  const kpi=document.getElementById('seeKpi');
+  if(kpi)kpi.innerHTML=`
+    <div class="kpi"><div class="k-label">処理した商材</div><div class="k-num">${okJobs.length}<small>件</small></div></div>
+    <div class="kpi ok"><div class="k-label">パートナー支払（確定分）</div><div class="k-num">${yen(pay)}</div></div>
+    <div class="kpi alert"><div class="k-label">未払い（請求対象）</div><div class="k-num">${unpaid}<small>件</small></div></div>
+    <div class="kpi warn"><div class="k-label">要確認</div><div class="k-num">${todo}<small>件</small></div></div>`;
+  const groups=new Map();
+  B.jobs.forEach((j,i)=>{if(j.status==='empty')return;const v=vendorOf(MODULES[j.key]);if(!groups.has(v))groups.set(v,[]);groups.get(v).push(i)});
+  const skipped=B.jobs.filter(j=>j.status==='empty').map(j=>productOf(MODULES[j.key]));
+  const vh=document.getElementById('seeVendors');
+  if(vh)vh.innerHTML=(skipped.length?`<p class="note" style="margin-bottom:12px">対象行が無かったため飛ばした商材: ${skipped.map(esc).join(' / ')}（入れたファイルに該当シートが無いか、別商材のファイルです）</p>`:'')+[...groups.entries()].map(([v,idxs])=>{
+    const js=idxs.map(i=>B.jobs[i]).filter(j=>j.status==='ok');
+    const vUnpaid=js.filter(j=>MODULES[j.key].kind==='audit').reduce((a,j)=>a+j.stats.unpaid,0);
+    const vPend=js.reduce((a,j)=>a+j.stats.pending,0);
+    const amts=js.filter(j=>j.stats.amount!=null);
+    const vAmt=amts.reduce((a,j)=>a+j.stats.amount,0);
+    const pills=(vUnpaid?`<span class="pill bad">未払い ${vUnpaid}</span>`:'')+(vPend?`<span class="pill warn">要確認 ${vPend}</span>`:'')
+      +(js.length&&!vUnpaid&&!vPend?'<span class="pill ok">問題なし</span>':'');
+    return `<div class="ven"><div class="ven-h"><b>${esc(v)}</b>${pills}<span class="sum">${amts.length?yen(vAmt):''}</span></div>${idxs.map(i=>jobRow(i)).join('')}</div>`;
+  }).join('')||'<p class="note">まだ実行していません。「入れる」でファイルを入れて実行してください。</p>';
+  const fb=document.getElementById('seeOut');
+  if(fb){fb.disabled=!okJobs.length||todo>0;fb.textContent=todo?`要確認 ${todo}件を片付けると出力できます`:'出す →'}
+}
+function jobRow(i){
+  const j=B.jobs[i],m=MODULES[j.key],st=j.stats||{};
+  let meta='',amt='',pill='';
+  if(j.status!=='ok'){
+    meta=`<span>${esc(j.err||(j.done?'':'未実行'))}</span>`;
+    pill=`<span class="pill ${j.status==='err'?'bad':'flat'}">${j.status==='err'?'エラー':j.status==='nomatch'?'突合ゼロ':j.status==='empty'?'対象なし':'未実行'}</span>`;
+  }else if(m.kind==='audit'){
+    meta=`<span>${esc(j.rangeLabel||'')}${st.n}件</span><span>入金確認 ${st.ok}</span>${st.warn?`<span>判定不可 ${st.warn}</span>`:''}`;
+    pill=st.unpaid?`<span class="pill bad">未払い ${st.unpaid}</span>`:'<span class="pill ok">未払いなし</span>';
+  }else{
+    meta=`<span>${st.n}件</span><span>OK ${st.ok}</span>${st.hold?`<span>保留 ${st.hold}</span>`:''}`;
+    pill=st.pending?`<span class="pill warn">要確認 ${st.pending}</span>`:'<span class="pill ok">確定</span>';
+    amt=st.amount!=null?yen(st.amount):(st.count!=null?st.count+'件':'');
+  }
+  return `<div class="prow" onclick="openJobDetail(${i})"><div><div class="p">${esc(productOf(m))}${m.kind==='audit'?'<small>未払い監査</small>':''}</div><div class="m">${meta}${pill}</div></div><div class="amt">${amt}</div></div>`;
+}
+function openJobDetail(i){
+  const job=B.jobs[i];if(!job)return;
+  if(job.status!=='ok'){toast(job.err||'この商材は未実行です');return}
+  S.detailOpen=true;
+  activateJob(job);
+  const pm=document.getElementById('pmPanel');if(pm)pm.style.display=MODULES[job.key].prices.length?'block':'none';
+  renderResults();
+  const tag=document.getElementById('hdProd');if(tag)tag.textContent=MODULES[job.key].title;
+  go(2);
+}
+function closeJobDetail(){
+  const job=B.jobs.find(j=>j.key===S.prod);
+  if(job&&job.status==='ok')snapshotJob(job);
+  S.detailOpen=false;
+  const pm=document.getElementById('pmPanel');if(pm)pm.style.display='none';
+  go(2);
+}
+function backFrom2(){
+  if(!S.single&&S.detailOpen)closeJobDetail();else go(1);
+}
+
+/* ---- 要確認（全商材まとめて） ---- */
+function todoItems(){
+  const items=[];
+  B.jobs.forEach((job,ji)=>{
+    if(job.status!=='ok')return;
+    const m=MODULES[job.key];
+    withJob(job,()=>{
+      if(m.kind==='audit'){
+        const unpaid=(job.rows||[]).filter(r=>r.state==='alert'&&!r.skip).length;
+        if(unpaid&&!job.claim)items.push({type:'audit',ji,job,unpaid});
+        return;
+      }
+      const pend=(job.rows||[]).filter(r=>!r.resolved);
+      const groups=new Map();
+      pend.forEach(r=>{const p=m.pricePattern&&m.pricePattern(r);if(!p)return;if(!groups.has(p.key))groups.set(p.key,{...p,rows:[]});groups.get(p.key).rows.push(r)});
+      groups.forEach(g=>{
+        let preset='',hint='';
+        if(m.wtProduct&&g.rows[0]&&g.rows[0].x){
+          const lr=learnedRate(m.wtProduct,g.rows[0].x.partner,g.rows[0].x.toss);
+          if(lr){preset=String(lr.amount);hint=lr.fixed?`台帳の確定単価: ${lr.amount.toLocaleString()}円`:(lr.distinct===1?`過去の実績: ${lr.amount.toLocaleString()}円（${lr.count}件）`:`過去の実績がばらつき: ${lr.samples.join(' / ')}`)}
+        }
+        items.push({type:'pattern',ji,job,g,preset,hint});
+      });
+      pend.filter(r=>!(m.pricePattern&&m.pricePattern(r))).forEach(r=>items.push({type:'row',ji,job,r}));
+    });
+  });
+  const lg=ledgerOf();
+  lg.changes.filter(c=>c.status==='pending').forEach(c=>items.push({type:'ledger',c}));
+  (S._rulesQuestions||[]).forEach(q=>{if(!(lg.answered&&lg.answered[q.id])&&!(B.deferred&&B.deferred[q.id]))items.push({type:'rule',q})});
+  return items;
+}
+function renderTodo(){
+  const host=document.getElementById('todoList');if(!host)return;
+  const items=todoItems();B._todo=items;B.todoCount=items.length;
+  const head=(job,reason)=>{const m=MODULES[job.key];return `<div class="t"><span>${esc(productOf(m))} ・ ${esc(vendorOf(m))}</span><span>${esc(reason)}</span></div>`};
+  host.innerHTML=items.map((it,idx)=>{
+    if(it.type==='pattern'){
+      const g=it.g,modo=g.rows.filter(r=>r.modo).length;
+      return `<div class="titem">${head(it.job,'単価が未登録')}
+        <div class="q">${esc(g.label)} の支払単価は？<small>${g.rows.length}件${modo?`（うち戻入 ${modo}件は同額マイナス）`:''}${g.note?' ・ '+esc(g.note):''}${it.hint?' ・ '+esc(it.hint):''}</small></div>
+        <div class="ans"><input class="price-in" type="number" inputmode="numeric" id="tp_${idx}" placeholder="円" value="${esc(it.preset)}">
+          <label class="pat-chk"><input type="checkbox" id="tpm_${idx}" checked>記憶する</label>
+          <button class="btn btn-sm" onclick="todoPattern(${idx})">${g.rows.length}件に適用</button>
+          <button class="btn-ghost btn-sm" onclick="todoPatternHold(${idx})">保留</button></div></div>`;
+    }
+    if(it.type==='row'){
+      const r=it.r;const m=MODULES[it.job.key];
+      const conf=withJob(it.job,()=>m.approval(r));
+      const who=[r.name||r.user||r.acc||r.rawKey||r.key||'（対象）',r.tel||'',r.date?fmtDate(r.date):'',r.occur?fmtDT(r.occur):''].filter(Boolean).map(esc).join('　');
+      let ans='';
+      if(conf.type==='newp'){
+        ans=`<input class="price-in" type="number" inputmode="numeric" id="tn_${idx}" placeholder="単価（円）">
+          <button class="btn btn-sm" onclick="todoNew(${idx})">この単価で登録</button>
+          <button class="btn-ghost btn-sm" onclick="todoHold(${idx})">保留</button>`;
+      }else if(conf.opts.length<=4){
+        ans=conf.opts.map((o,oi)=>`<button class="${o.hold?'btn-ghost':'btn'} btn-sm" onclick="todoRow(${idx},${oi})">${esc(o.label)}</button>`).join('');
+      }else{
+        ans=`<select id="ts_${idx}">${conf.opts.map((o,oi)=>`<option value="${oi}">${esc(o.label)}</option>`).join('')}</select>
+          <button class="btn btn-sm" onclick="todoRow(${idx},Number(document.getElementById('ts_${idx}').value))">この内容で確定</button>`;
+      }
+      return `<div class="titem${r.state==='alert'?' alert':''}">${head(it.job,r.state==='alert'?'要判断':'XRMに該当なし')}
+        <div class="q">${who}<small>${esc(r.why||'')}</small></div><div class="ans">${ans}</div></div>`;
+    }
+    if(it.type==='audit'){
+      const m=MODULES[it.job.key],cfg=AUDITS[it.job.key]||{};
+      return `<div class="titem">${head(it.job,'未払いの扱い')}
+        <div class="q">${it.job.rangeYm?fmtYmJa(it.job.rangeYm)+'に開通して':'開通済みで'}入金のない ${it.unpaid}件を ${esc(cfg.jouiten||vendorOf(m))} への請求リストに載せますか？<small>タップして一覧を確認: 上の「${esc(productOf(m))}」行</small></div>
+        <div class="ans"><button class="btn btn-sm" onclick="todoAudit(${idx},'claim')">載せる（推奨）</button><button class="btn-ghost btn-sm" onclick="todoAudit(${idx},'skip')">今回は対象から外す</button></div></div>`;
+    }
+    if(it.type==='ledger'){
+      const c=it.c;const [p,pa,t]=c.key.split('|');
+      const typ=c.type==='new'?'新しい組み合わせ':c.type==='changed'?'単価の変更':'食い違い';
+      return `<div class="titem"><div class="t"><span>ルール台帳 ・ ${esc(p)}</span><span>${typ}</span></div>
+        <div class="q">${esc(pa)} / ${esc(t)}: ${c.old!=null?`${Number(c.old).toLocaleString()}円 → `:''}${Number(c.new).toLocaleString()}円 を台帳に採用しますか？<small>${c.month?fmtYmJa(c.month)+'の明細 ':''}${c.total?`（${c.count}/${c.total}件） `:''}出典: ${esc(ledgerSrcLabel(c.src))}${c.note?' ・ '+esc(c.note):''}</small></div>
+        <div class="ans"><button class="btn btn-sm" onclick="todoLedger(${idx},true)">採用</button><button class="btn-ghost btn-sm" onclick="todoLedger(${idx},false)">却下</button></div></div>`;
+    }
+    if(it.type==='rule'){
+      const q=it.q;
+      return `<div class="titem"><div class="t"><span>ルール台帳 ・ ${esc(q.product)}</span><span>スキル間で食い違い</span></div>
+        <div class="q">${esc(q.text)}<small>${esc(q.note||'')}</small></div>
+        <div class="ans">${(q.options||[]).map(v=>`<button class="btn btn-sm" onclick="todoRule(${idx},${Number(v)})">${Number(v).toLocaleString()}円</button>`).join('')}
+          <button class="btn-ghost btn-sm" onclick="todoRule(${idx},null)">今は決めない</button></div></div>`;
+    }
+    return '';
+  }).join('')||'<p class="note">要確認はありません。そのまま出力できます。</p>';
+}
+function afterAnswer(job,msg){
+  if(job)job.stats=withJob(job,()=>computeStats(job));
+  renderSee();
+  const left=B.todoCount;
+  toast((msg?msg+'　':'')+(left?`残り ${left}件`:'全件確定しました。「出す」へ進めます'));
+}
+async function todoPattern(idx){
+  const it=B._todo[idx];if(!it||it.type!=='pattern')return;
+  const el=document.getElementById('tp_'+idx);const v=Number(el&&el.value);
+  if(!el||el.value===''||isNaN(v)){toast('金額を入力してください');return}
+  const mem=document.getElementById('tpm_'+idx);
+  withJob(it.job,()=>{it.g.rows.forEach(r=>{r.price=r.modo?-Math.abs(v):v;r.resolved=true;r.state='ok';r.newPartner=true;r.why+=` → 単価${v.toLocaleString()}円を適用`})});
+  S.manualCount=(S.manualCount||0)+it.g.rows.length;
+  if(mem&&mem.checked){activateJob(it.job);await savePattern(it.g.key,v)}
+  afterAnswer(it.job,`${it.g.label}: ${it.g.rows.length}件に ${yen(v)} を適用${mem&&mem.checked?'（記憶しました）':''}`);
+}
+function todoPatternHold(idx){
+  const it=B._todo[idx];if(!it||it.type!=='pattern')return;
+  withJob(it.job,()=>{it.g.rows.forEach(r=>{r.resolved=true;r.hold=true;r.price=null;r.why+=' → 保留'})});
+  afterAnswer(it.job,`${it.g.label}: ${it.g.rows.length}件を保留（出力に載せません）`);
+}
+function todoRow(idx,oi){
+  const it=B._todo[idx];if(!it||it.type!=='row')return;
+  const r=it.r;const m=MODULES[it.job.key];
+  let label='';
+  withJob(it.job,()=>{
+    const conf=m.approval(r);const o=conf.opts[oi];if(!o)return;
+    label=o.label;
+    if(o.hold){r.resolved=true;r.hold=true;r.price=null;r.why+=' → 保留'}
+    else{if(o.apply)o.apply(r);r.resolved=true;r.state='ok'}
+  });
+  S.manualCount=(S.manualCount||0)+1;
+  if(r.tel&&r.x)rememberDecision(r);
+  afterAnswer(it.job,label?'確定: '+label:'');
+}
+function todoNew(idx){
+  const it=B._todo[idx];if(!it||it.type!=='row')return;
+  const el=document.getElementById('tn_'+idx);const p=Number(el&&el.value);
+  if(!el||el.value===''||isNaN(p)){toast('単価を入力してください');return}
+  const r=it.r;
+  withJob(it.job,()=>{r.price=p;r.resolved=true;r.state='ok';r.newPartner=true;r.why+=` → 単価${p.toLocaleString()}円で今回のみ登録`});
+  S.manualCount=(S.manualCount||0)+1;
+  afterAnswer(it.job,`${r.payTo||r.acc||''} / ${yen(p)}（新規登録）`);
+}
+function todoHold(idx){
+  const it=B._todo[idx];if(!it||it.type!=='row')return;
+  const r=it.r;
+  withJob(it.job,()=>{r.resolved=true;r.hold=true;r.price=null;r.why+=' → 保留'});
+  afterAnswer(it.job,'保留（出力に載せません）');
+}
+function todoAudit(idx,mode){
+  const it=B._todo[idx];if(!it||it.type!=='audit')return;
+  it.job.claim=mode;
+  if(mode==='skip')withJob(it.job,()=>{it.job.rows.forEach(r=>{if(r.state==='alert')r.skip=true})});
+  afterAnswer(it.job,mode==='claim'?`${it.unpaid}件を請求リストに載せます`:`${it.unpaid}件を今回の対象から外しました`);
+}
+async function todoLedger(idx,accept){
+  const it=B._todo[idx];if(!it||it.type!=='ledger')return;
+  await ledgerDecide(it.c.id,accept);
+  if(accept)reapplyLedger();
+  afterAnswer(null,'');
+}
+async function todoRule(idx,price){
+  const it=B._todo[idx];if(!it||it.type!=='rule')return;
+  const q=it.q;const lg=ledgerOf();lg.answered=lg.answered||{};
+  if(price==null){B.deferred=B.deferred||{};B.deferred[q.id]=true;afterAnswer(null,'保留にしました（次に開いたときにまた聞きます）');return}
+  const keys=q.keys||[[q.product,q.partner,q.toss]];
+  keys.forEach(k=>{
+    const key=rateKey(k[0],k[1],k[2]||'');
+    ledgerSet(key,price,'manual',thisYm(),q.note||'');
+    const slot=S.memory.rates[key]||(S.memory.rates[key]={v:{},m:''});slot.fixed=Number(price);
+  });
+  if(q.priceIds){
+    for(const [mod,pid] of Object.entries(q.priceIds)){
+      const saved=(await Store.get(Store.key(mod)))||{};saved[pid]=Number(price);await Store.set(Store.key(mod),saved);
+      if(S._priceCache&&S._priceCache[mod])S._priceCache[mod][pid]=Number(price);
+      const g=document.getElementById('pmGrid');if(g&&g.dataset.prod===mod){const el=document.getElementById(pid);if(el)el.value=price}
+    }
+  }
+  lg.answered[q.id]={price:Number(price),at:new Date().toISOString()};
+  await saveMemory();renderLedgerBadge();
+  reapplyLedger();
+  afterAnswer(null,`${q.product} / ${q.partner}: ${yen(price)} で台帳に反映しました`);
+}
+/* 台帳が更新されたら、未確定の行に確定単価を当て直す */
+function reapplyLedger(){
+  B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind!=='audit').forEach(j=>{
+    withJob(j,()=>{const n=applyLearnedRates();if(n)j.stats=computeStats(j)});
+  });
+}
+
+/* ---- 出す: 全ジョブの出力＋支払明細書＋台帳を zip 1つに ---- */
+function stmtPartners(payJobs){
+  const groups={};
+  payJobs.forEach(job=>withJob(job,()=>{
+    (job.rows||[]).filter(r=>r.resolved&&!r.hold&&!r.skip&&r.price).forEach(r=>{
+      let p=String(r.payTo||'').split('×')[0].replace(/（.*?）/g,'').replace(/\(.*?\)/g,'').trim();
+      if(!p&&r.x&&r.x.partner)p=r.x.partner;
+      if(!p||/^Exploration/.test(p))return;
+      const g=groups[p]=groups[p]||[];
+      let part=g.find(x=>x.job===job);if(!part){part={job,rows:[]};g.push(part)}
+      part.rows.push(r);
+    });
+  }));
+  return groups;
+}
+async function makeAllStatements(payJobs){
+  const groups=stmtPartners(payJobs);const outs=[],done=[],miss=[];
+  for(const [partner,parts] of Object.entries(groups)){
+    const tpl=await getTemplateWb(partner);
+    if(!tpl){miss.push(`${partner}（前月の支払明細書が未登録）`);continue}
+    try{
+      const wb=cloneWorkbook(tpl.wb);
+      const cover=wb.SheetNames.find(sn=>/^表紙$/.test(sn));
+      const tabs={};
+      parts.forEach(part=>{
+        const m=MODULES[part.job.key];
+        const tab=findProductTab(wb,m);
+        if(!tab){miss.push(`${partner} / ${productOf(m)}（テンプレートに「${m.wtTab||m.wtProduct||''}」タブがありません）`);return}
+        const t=tabs[tab]=tabs[tab]||{m,rows:[]};t.rows.push(...part.rows);
+      });
+      const info=[];let filled=0,total=0;
+      Object.entries(tabs).forEach(([tab,t])=>{const res=writeRowsToTab(wb.Sheets[tab],t.rows,t.m,partner);info.push(`${tab} ${res.written}件`);filled+=res.filled;total+=res.written});
+      const keep=[cover].concat(Object.keys(tabs)).filter(Boolean);
+      if(!Object.keys(tabs).length)continue;
+      keepOnlySheets(wb,keep);
+      const fn=`AI作成中_【${B.month?fmtYmJa(B.month):'当月'}明細】${partner} 御中.xlsx`;
+      const buf=XLSX.write(wb,{type:'array',cellStyles:true,bookType:'xlsx'});
+      outs.push({name:fn,data:new Uint8Array(buf),desc:`支払明細書（${info.join(' / ')}）`});
+      done.push({partner,info,filled,total});
+    }catch(ex){console.error('stmt',partner,ex);miss.push(`${partner}（作成中にエラー: ${(ex&&ex.message)||ex}）`)}
+  }
+  return {outs,done,miss,partners:Object.keys(groups)};
+}
+function uniqueName(name,used){
+  let n=name,i=2;
+  while(used.has(n)){n=name.replace(/(\.[a-z0-9]+)$/i,`(${i})$1`);i++}
+  used.add(n);return n;
+}
+async function buildAll(){
+  const jobs=B.jobs.filter(j=>j.status==='ok');
+  if(!jobs.length){toast('出力できる結果がありません');return}
+  const btn=document.getElementById('outBtn');btn.disabled=true;btn.textContent='作成中…';
+  const outs=[],results=[],used=new Set();
+  try{
+    for(const job of jobs){
+      const m=MODULES[job.key];
+      activateJob(job);
+      try{
+        const meta=computeOutput();
+        const wb=m.buildWb();appendVerifySheet(wb);
+        const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
+        outs.push({name:uniqueName(S._fname||`${productOf(m)}.xlsx`,used),data:new Uint8Array(buf),desc:`${m.title}: ${meta.sub||''}`});
+        results.push({job,meta,partners:(S.outPartners||[]).slice(),checks:(S.checks||[]).slice()});
+      }catch(ex){console.error('output',job.key,ex);results.push({job,err:(ex&&ex.message)||String(ex)})}
+      await tick();
+    }
+    const payJobs=jobs.filter(j=>MODULES[j.key].kind!=='audit');
+    const st=await makeAllStatements(payJobs);
+    st.outs.forEach(o=>outs.push({name:uniqueName(o.name,used),data:o.data,desc:o.desc}));
+    B.stmt=st;
+    const lgj=JSON.stringify(ledgerExportObj());
+    outs.push({name:uniqueName(`ルール台帳_${B.month||stamp()}.json`,used),data:new TextEncoder().encode(lgj),desc:'ルール台帳（別端末では「ルール台帳 → 台帳を読み込む」）'});
+    B.outs=outs;B.results=results;
+    S.maxStep=4;
+    if(outs.length===1)deliverFile(outs[0].name,new Blob([outs[0].data],{type:/\.json$/i.test(outs[0].name)?'application/json':XLSX_MIME}));
+    else deliverFile(`AI作成中_月末処理一式_${B.month||stamp()}.zip`,new Blob([buildZip(outs.map(o=>({name:o.name,data:o.data})))],{type:'application/zip'}));
+    toast(`${outs.length}ファイルを zip にまとめてダウンロードしました`);
+    if(st.miss.length)setTimeout(()=>toast('未作成の支払明細書: '+st.miss.join(' / ')),3600);
+  }finally{btn.disabled=false}
+  renderOut();
+}
+function reDownloadOut(i){
+  const o=B.outs&&B.outs[i];if(!o)return;
+  deliverFile(o.name,new Blob([o.data],{type:/\.json$/i.test(o.name)?'application/json':XLSX_MIME}));
+}
+function reDownloadZip(){
+  if(!B.outs||!B.outs.length)return;
+  deliverFile(`AI作成中_月末処理一式_${B.month||stamp()}.zip`,new Blob([buildZip(B.outs.map(o=>({name:o.name,data:o.data})))],{type:'application/zip'}));
+}
+function renderOut(){
+  const ym=B.month?fmtYmJa(B.month)+'度':'';
+  const mo=document.getElementById('outMonth');if(mo)mo.textContent=ym||'今月';
+  const jobs=B.jobs.filter(j=>j.status==='ok');
+  const list=document.getElementById('outPlan'),btn=document.getElementById('outBtn'),res=document.getElementById('outResult');
+  if(!list)return;
+  const payJobs=jobs.filter(j=>MODULES[j.key].kind!=='audit'),auditJobs=jobs.filter(j=>MODULES[j.key].kind==='audit');
+  if(!B.outs){
+    const partners=Object.keys(stmtPartners(payJobs));
+    const need=partners.filter(p=>!findTemplateMeta(p)&&!findTemplate(p));
+    list.innerHTML=`
+      <div class="out"><div class="ic">XLSX</div><div><div class="n">商材ごとの処理結果（${payJobs.length}ファイル）</div><div class="d">${payJobs.map(j=>esc(productOf(MODULES[j.key]))).join(' / ')||'—'}</div></div></div>
+      <div class="out"><div class="ic">XLSX</div><div><div class="n">未払い一覧・上位店への請求用（${auditJobs.length}ファイル）</div><div class="d">${auditJobs.map(j=>`${esc(productOf(MODULES[j.key]))} ${j.stats.unpaid}件`).join(' / ')||'—'}</div></div></div>
+      <div class="out"><div class="ic">XLSX</div><div><div class="n">パートナー支払明細書（${partners.length}社）</div><div class="d">${partners.map(esc).join(' / ')||'支払対象なし'}${need.length?`<br><b style="color:var(--warn)">前月の明細書が未登録: ${need.map(esc).join(' / ')}</b>　「入れる」に前月の【YYYY年M月度明細】◯◯ 御中.xlsx を入れると、同じフォーマットで作れます`:''}</div></div></div>
+      <div class="out"><div class="ic">JSON</div><div><div class="n">ルール台帳</div><div class="d">確定ルール ${Object.values(ledgerOf().rules).filter(r=>r.status==='confirmed').length}件（別端末に持っていくとき用）</div></div></div>`;
+    if(btn){btn.textContent=`⬇ ${ym||'今月'}の出力をまとめてダウンロード（zip）`;btn.disabled=!jobs.length}
+    if(res)res.innerHTML='';
+    return;
+  }
+  list.innerHTML=B.outs.map((o,i)=>`<div class="out"><div class="ic">${/\.json$/i.test(o.name)?'JSON':'XLSX'}</div><div><div class="n"><a href="#" onclick="reDownloadOut(${i});return false">${esc(o.name)}</a></div><div class="d">${esc(o.desc||'')}</div></div><div class="sz">${Math.max(1,Math.round(o.data.length/1024))} KB</div></div>`).join('');
+  if(btn)btn.textContent='⬇ もう一度まとめてダウンロード（zip）';
+  btn.onclick=reDownloadZip;
+  const st=B.stmt||{done:[],miss:[]};
+  if(res)res.innerHTML=
+    (st.done.length?`<div class="ck"><span class="tick">✓</span>支払明細書 ${st.done.length}社: ${st.done.map(d=>`${esc(d.partner)}（${d.info.join(' / ')}）`).join('、')}</div>`:'')
+    +(st.miss.length?`<div class="ck ng"><span class="tick">⚠</span>未作成の支払明細書: ${st.miss.map(esc).join(' / ')}</div>`:'')
+    +B.results.map(r=>{
+      const m=MODULES[r.job.key];
+      if(r.err)return `<div class="ck ng"><span class="tick">⚠</span>${esc(m.title)}: ${esc(r.err)}</div>`;
+      const ng=r.checks.filter(c=>!c.ok).length;
+      return `<details class="adv" style="margin:10px 0 0"><summary><span>${esc(m.title)}</span><span class="adv-sub">${r.partners.map(p=>`${esc(p.name)} ${p.amt!=null?yen(p.amt):p.count+'件'}`).join(' / ')||'—'}${ng?`　<b style="color:var(--warn)">要注意 ${ng}</b>`:''}</span></summary>
+        <div style="padding:4px 18px 14px">${r.checks.map(c=>`<div class="ck${c.ok?'':' ng'}"><span class="tick">${c.ok?'✓':'⚠'}</span>${esc(c.txt)}</div>`).join('')}</div></details>`;
+    }).join('');
+}
+
+/* ---- 入れる画面のドロップ／選択 ---- */
+(function(){
+  const dz=document.getElementById('dzIn'),inp=document.getElementById('inIn'),dir=document.getElementById('inDir');
+  if(inp)inp.addEventListener('change',e=>{batchRoute(e.target.files);inp.value=''});
+  if(dir)dir.addEventListener('change',e=>{
+    const fs=Array.from(e.target.files||[]).filter(f=>/\.(xlsx?|csv|json)$/i.test(f.name)&&!/^~\$/.test(f.name));
+    if(!fs.length)toast('フォルダに xlsx / csv / json がありません');
+    batchRoute(fs);dir.value='';
+  });
+  if(dz){
+    dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('drag')});
+    dz.addEventListener('dragleave',()=>dz.classList.remove('drag'));
+    dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag');if(e.dataTransfer)batchRoute(e.dataTransfer.files)});
+  }
+})();
+/* 起動時はまとめて処理の「入れる」から */
+go(1);
 
 </script>
 </body>
