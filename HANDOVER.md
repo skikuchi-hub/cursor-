@@ -164,17 +164,32 @@ HANDOVER.md                  この文書
 - 画面・計算：`index.html` を直して **push するだけ**。GitHub Pages が1〜2分で反映、アプリ側は自動更新。
   - 作業ブランチ＝公開ブランチ `claude/examuse-prize-handover-8s2xx8`。push すると即公開される。
   - 確認手段：`node --check` で構文、scratchpad の模擬API（Python）＋Playwright で動作。クラウド環境からは github.io / script.google.com に接続できない（ネットワークポリシー）ので、実機確認は菊地さん。
-- Apps Script（Code.gs）：リポジトリの `apps-script/Code.gs` を直す → 菊地さんに下の定型手順を案内する。**案内するときは、必ず「どのスプシの Apps Script か」を URL 付きで書く**（Apps Script は複数のスプシにあるため）。
+- Apps Script（Code.gs）：リポジトリの `apps-script/Code.gs` を直して push するだけ。**自動更新（2026-10-09〜、菊地さん承認）**：Apps Script 側の `selfUpdate` が 15 分ごとに GitHub の raw Code.gs を取り込み、
+  構文チェックのうえ新バージョンを作って既存のウェブアプリのデプロイに付け替える（URL は変わらない。内容が同じなら何もしない）。急ぐときは菊地さんがエディタで `selfUpdate` を ▶ 実行。
+  push した内容がそのまま本番に流れるので、Code.gs は `new Function` で構文確認し、`doPost` を壊していないか見てから push する。
+  保守関数（repairChain など）を実行してもらうときの案内は、**必ず「どのスプシの Apps Script か」を URL 付きで書く**（Apps Script は複数のスプシにあるため）。
   ```
-  【クレーンログの Apps Script 更新手順】
+  【クレーンログの Apps Script：保守関数の実行手順】
   対象：スプレッドシート「クレーンゲーム日報」
         https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs
         → 拡張機能 → Apps Script（プロジェクト名「無題のプロジェクト」）
-  1. https://github.com/skikuchi-hub/cursor-/blob/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs を「Copy raw file」
-     → 上のスプシの Apps Script エディタで コード.gs を全部置き換えて保存（⌘S）
-  2.（必要なときだけ）指定した関数を選んで ▶ 実行
-  3. デプロイ → デプロイを管理 → 鉛筆 → バージョン「新バージョン」→ デプロイ（URL は変わらない）
+  1. push から 15 分以上たっていればコードは自動で最新。急ぐなら 関数 selfUpdate を選んで ▶ 実行（実行ログに「更新しました」か「変更なし」）
+  2. 指定した関数を選んで ▶ 実行
   ```
+  自動更新の一回きりの準備（済んでいなければ）：(a) https://script.google.com/home/usersettings で「Google Apps Script API」をオン、
+  (b) エディタ ⚙ プロジェクトの設定 → 「appsscript.json」マニフェストファイルをエディタで表示 → appsscript.json に下の `oauthScopes` を追加して保存、
+  (c) 最後に 1 回だけ手動で Copy raw file → コード.gs を置き換え → `setup`（トリガー登録）→ `selfUpdate` を ▶ 実行して権限を許可。
+  ```
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/script.scriptapp",
+    "https://www.googleapis.com/auth/script.projects",
+    "https://www.googleapis.com/auth/script.deployments"
+  ]
+  ```
+  手動で更新する場合（自動更新が止まっているとき）：Copy raw file → コード.gs を全部置き換えて保存 → デプロイ → デプロイを管理 → 鉛筆 → 「新バージョン」→ デプロイ。
   チャット本文からのコピーは引用符が変わって構文エラーになるので、必ず GitHub の Copy raw file。「新しいデプロイ」を作ると URL が変わるので、その場合は config.js も更新して push。
   ※ EXAmuse 発注システムの Apps Script（仕入れ想定商品スプシ 1c2dDei3-… に紐づく）は別物。コードは Mac 上（gen_gs.py が生成）にあり、このリポジトリでは扱わない。
 - スプシのセル内容はクラウド環境から直接書けない。直す必要があるときは Code.gs に関数を足して菊地さんに実行してもらう（下記 5 の方式）。
@@ -198,6 +213,7 @@ HANDOVER.md                  この文書
 | `recomputeSalesDeltas` | 全記録を累計→差分で再計算し、巡回ログ E・J、部屋別ログ F・G を更新 | 済 |
 | `renameDateHeaders` | A1 見出しの改名（setup から呼ばれる） | 済 |
 | `repairChain` | 景品名が全部空のまま保存された記録（BOX の枠・4人機の部屋）に、同じ店舗・機械の直前の記録の景品名を入れ直し、景品実績を作り直す。数は触らない。再実行可 | 2026-10-09 案内 |
+| `selfUpdate` | GitHub の Code.gs を取り込み、構文チェックのうえ新バージョンを作ってウェブアプリのデプロイに付け替える（15 分ごとのトリガーでも動く。内容が同じなら「変更なし」）。初回は権限の許可が出る | 2026-10-09 導入 |
 | `deleteOrderNo` | 実際には出していない発注番号（先頭の `DELETE_ORDER_NO`、初期値 EH-20261005-1＝テスト発注）を EXAmuse 発注システムのスプシから消す：発注履歴の行、発注要求の行、商品一覧の発注状況（番号を含むときだけ）。景品マスタは触らない | 2026-10-08 案内 |
 | `resetBulkCost` → `allocateBulkCost` | まとめ買い（エスプラン一括 ¥110,000 税抜）の単価。ロット＝メモに「一括¥110,000」がある行＋仕入先一致で単価 0 の行。D 列に手で入れた単価（メモに「数量按分」が無い行）はそのまま、残額を残りの行に数量按分（カリーノ用の重み `BULK_WEIGHT_BIG`）。reset は按分分だけ 0 に戻す。按分行は再実行で按分し直し | 2026-10-08 一律按分（1個 ¥478）実施 → 既知単価を入れてやり直し中 |
 | `rebuildPrizeStats` | 「景品実績」タブを全記録から作り直す | 済（2026-10-07、4行） |

@@ -1142,12 +1142,67 @@ function repairChain() {
   var msg = "景品名を復元した記録 " + fixed.length + " 件" + (fixed.length ? "：\n" + fixed.join("\n") : "") + "\n" + st;
   Logger.log(msg); SpreadsheetApp.getActive().toast("景品名を復元：" + fixed.length + " 件"); return msg;
 }
-/* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
+/* ===================== 自動更新（GitHub の Code.gs を取り込み、新バージョンをデプロイ） =====================
+   菊地さんの「Copy raw file → 貼り付け → デプロイ」を無くす仕組み（2026-10-09、菊地さん承認：push した内容がそのまま本番に反映されるリスクを了承済み）。
+   15 分ごとのトリガー（installTriggers で登録）と、エディタから selfUpdate を実行したときに動く。内容が変わっていなければ何もしない。
+   1. GitHub の raw Code.gs を取得 → 構文チェック（new Function）→ 前回取り込んだ内容と同じなら終了
+   2. Apps Script API でこのプロジェクトのコードを置き換え（マニフェスト appsscript.json は触らない）
+   3. 新しいバージョンを作り、既存のウェブアプリのデプロイをそのバージョンに付け替える（URL は変わらない）
+   一回きりの準備：(a) https://script.google.com/home/usersettings で「Google Apps Script API」をオン
+   (b) appsscript.json の oauthScopes に script.projects / script.deployments / script.external_request を追加（HANDOVER 参照）
+   (c) エディタから selfUpdate を 1 回実行して権限を許可 */
+var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
+function selfUpdate() {
+  var props = PropertiesService.getScriptProperties();
+  var res = UrlFetchApp.fetch(SELF_UPDATE_URL + "?t=" + Date.now(), { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) return "GitHub から取得できません（HTTP " + res.getResponseCode() + "）";
+  var code = res.getContentText("UTF-8");
+  if (!/function doPost\(/.test(code) || code.length < 20000) return "取得した内容がおかしいので更新しません（長さ " + code.length + "）";
+  try { new Function(code); } catch (e) { return "構文エラーのため更新しません：" + e.message; }
+  var hash = Utilities.base64Encode(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, code, Utilities.Charset.UTF_8));
+  if (props.getProperty("deployedHash") === hash) return "変更なし（デプロイ済みの内容と同じ）";
+  var id = ScriptApp.getScriptId(), base = "https://script.googleapis.com/v1/projects/" + id;
+  var call = function (method, url, payload) {
+    var o = { method: method, muteHttpExceptions: true, headers: { Authorization: "Bearer " + ScriptApp.getOAuthToken() } };
+    if (payload) { o.contentType = "application/json"; o.payload = JSON.stringify(payload); }
+    var r = UrlFetchApp.fetch(url, o), c = r.getResponseCode(), t = r.getContentText();
+    if (c >= 300) {
+      if (c === 403 && /not been used|is disabled|accessNotConfigured/i.test(t)) throw new Error("Apps Script API がオフです。https://script.google.com/home/usersettings でオンにしてください");
+      if (c === 403 && /insufficient|scope/i.test(t)) throw new Error("権限が足りません。appsscript.json の oauthScopes に script.projects / script.deployments を足して、selfUpdate をエディタから 1 回実行してください");
+      throw new Error("API エラー " + c + "：" + t.slice(0, 300));
+    }
+    return t ? JSON.parse(t) : {};
+  };
+  // 1) いまのファイル一覧（マニフェストを保つため）。置き換えるのは「コード」（無ければ唯一の .gs）
+  var cur = call("get", base + "/content");
+  var js = (cur.files || []).filter(function (f) { return f.type === "SERVER_JS"; });
+  var target = js.filter(function (f) { return f.name === "コード" || f.name === "Code"; })[0] || (js.length === 1 ? js[0] : null);
+  if (!target) throw new Error("置き換えるスクリプトファイルが特定できません（SERVER_JS が " + js.length + " 個）");
+  var files = cur.files.map(function (f) { return { name: f.name, type: f.type, source: (f.name === target.name && f.type === "SERVER_JS") ? code : f.source }; });
+  call("put", base + "/content", { files: files });
+  // 2) 新バージョン
+  var ver = call("post", base + "/versions", { description: "auto " + nowIso() });
+  var vn = ver.versionNumber;
+  // 3) ウェブアプリのデプロイ（HEAD 以外で WEB_APP の入口を持つもの。複数なら最近更新したもの）を新バージョンへ
+  var deps = (call("get", base + "/deployments").deployments || []).filter(function (d) {
+    return d.deploymentConfig && d.deploymentConfig.versionNumber && (d.entryPoints || []).some(function (e) { return e.entryPointType === "WEB_APP"; });
+  });
+  if (!deps.length) throw new Error("ウェブアプリのデプロイが見つかりません。先に 1 回だけ手動で「デプロイ」してください");
+  deps.sort(function (a, b) { return String(b.updateTime || "").localeCompare(String(a.updateTime || "")); });
+  var dep = deps[0];
+  call("put", base + "/deployments/" + dep.deploymentId, { deploymentConfig: { scriptId: id, versionNumber: vn, manifestFileName: "appsscript", description: "auto " + nowIso() } });
+  props.setProperties({ deployedHash: hash, deployedAt: nowIso(), deployedVersion: String(vn) });
+  var msg = "更新しました：バージョン " + vn + " を反映（" + nowIso() + "）";
+  Logger.log(msg); try { SpreadsheetApp.getActive().toast(msg); } catch (e) {}
+  return msg;
+}
+/* 取り込み（importPhotoChecks 10 分ごと）と自動更新（selfUpdate 15 分ごと）のトリガー。再実行しても各 1 本だけ */
 function installTriggers() {
-  ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "importPhotoChecks") ScriptApp.deleteTrigger(t); });
+  ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === "importPhotoChecks" || h === "selfUpdate") ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger("importPhotoChecks").timeBased().everyMinutes(10).create();
+  ScriptApp.newTrigger("selfUpdate").timeBased().everyMinutes(15).create();
   PropertiesService.getScriptProperties().setProperty("photoTrigger", "1");
-  return "importPhotoChecks を 10 分ごとに実行するトリガーを入れました";
+  return "importPhotoChecks を 10 分ごと、selfUpdate を 15 分ごとに実行するトリガーを入れました";
 }
 function setup() {            // 初回：スタッフタブと _app_db を作る（再実行しても安全）
   ensureStaffSheet(); dbSheet(); renameDateHeaders(); photoSheet(); photoCheckDir();
