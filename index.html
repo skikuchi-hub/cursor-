@@ -2283,13 +2283,18 @@ function onRoomClick(e){
 function onRoomInput(e){
   const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
   const f = el.dataset.f, k = el.dataset.k;
+  if (GUIDE.redirect && GUIDE.redirect.from===el){
+    const rm0 = k ? R.rooms.find(x=>x.k===k) : null;
+    const prevD = k ? (rm0 ? rm0[f] : "") : R[f];
+    if (redirectTyped(el, prevD===undefined||prevD===null ? "" : String(prevD).replace(/[^\d.]/g,""))) return;
+  }
   if (f==="sAB" || f==="sCD" || f==="sBox"){                     // 累計売上は数字 6 桁まで（99 万円）。3 桁区切りで表示して桁ミスに気づきやすく
     const raw = String(el.value).replace(/[^\d]/g,"");
     const digits = raw.slice(0,6);
     if (raw.length>6) toast("売上は 6 桁（99万円）までです");
     const shown = digits ? Number(digits).toLocaleString("ja-JP") : "";
     if (shown !== el.value){ el.value = shown; }
-    R[f] = digits; updateDerived(); saveDraft(); return;
+    R[f] = digits; updateDerived(); saveDraft(); scheduleAutoAdvance(el); return;
   } else if (f==="taken" || f==="before" || f==="add" || f==="take"){   // 個数は 3 桁まで
     const digits = String(el.value).replace(/[^\d]/g,"").slice(0,3);
     if (digits !== el.value) el.value = digits;
@@ -2965,7 +2970,7 @@ let GT = null;
 function renderGuide(){
   const bar0=$("#gbar");
   const ae=document.activeElement;
-  if (bar0 && ae && ae.tagName==="INPUT" && ae.closest(".gnow")){   // 入力中の欄からは枠を動かさない（iOS で描画が崩れる・視線が飛ぶ）。文字だけ更新
+  if (bar0 && ae && ae.tagName==="INPUT" && ae.closest(".gnow") && !GUIDE.redirect){   // 入力中の欄からは枠を動かさない（iOS で描画が崩れる・視線が飛ぶ）。文字だけ更新
     GT = guideTarget();
     if (GT && GT.el){ $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`; $("#gbarSkip").hidden = !GT.skip; }
     return;
@@ -2994,17 +2999,41 @@ function guideGo(){
    個数の欄（取られた数・いま入っている数・抜いた数・入れた数）は打ち終わって 1.5 秒止まったら次へ。
    売上欄は桁が多く途中で止まることがあるので自動では進めない（「ここへ」か Enter で進む）。
    ボタン操作（とばす・入れ替え）の直後は、その操作の中で次の欄にカーソルを入れる */
-const AUTO_FIELDS = {taken:1, before:1, add:1, take:1};
+/* iPhone の Safari はタイマーから focus() するとテンキーが閉じるので、止まった時点では「枠だけ」次の欄へ移し（GUIDE.redirect）、
+   次に打たれた数字をキー入力の中で次の欄へ入れ直す。キー入力の中の focus() はテンキーを閉じない */
+const AUTO_FIELDS = {taken:1500, before:1500, add:1500, take:1500, sAB:2500, sCD:2500, sBox:2500};
 function focusGuideInput(from){
   const t = guideTarget(); if (!t || !t.focus || t.focus===from) return false;
   if (from && document.activeElement!==from) return false;              // 別の所を触っていたら動かさない
   t.focus.focus({preventScroll:true}); t.el && t.el.scrollIntoView({block:"center", behavior:"smooth"});
   renderGuide(); return true;
 }
+function armRedirect(el){
+  GUIDE.redirect = null;
+  if (!el || document.activeElement!==el || el.value==="") return;
+  const t = guideTarget(); if (!t || !t.focus || t.focus===el) return;
+  GUIDE.redirect = {from:el, to:t.focus};
+  renderGuide();                                                         // 黄色い枠だけ次の欄へ（カーソルはまだ動かさない）
+  t.el && t.el.scrollIntoView({block:"center", behavior:"smooth"});
+}
 function scheduleAutoAdvance(el){
   clearTimeout(GUIDE.autoT);
   if (!el || !AUTO_FIELDS[el.dataset.f] || el.value==="") return;
-  GUIDE.autoT = setTimeout(()=>focusGuideInput(el), 1500);
+  GUIDE.autoT = setTimeout(()=>armRedirect(el), AUTO_FIELDS[el.dataset.f]);
+}
+/* 枠が次へ移ったあとに前の欄で打たれた数字を、次の欄へ入れ直す。戻り値 true＝処理済み */
+function redirectTyped(el, prevDigits){
+  const rd = GUIDE.redirect; if (!rd || rd.from!==el) return false;
+  GUIDE.redirect = null;
+  const nowDigits = String(el.value).replace(/[^\d.]/g,""), prev = String(prevDigits==null?"":prevDigits);
+  if (!(nowDigits.length > prev.length && nowDigits.startsWith(prev))){ return false; }   // 消した・貼り付けた → そのまま
+  const added = nowDigits.slice(prev.length);
+  el.value = /^s(AB|CD|Box)$/.test(el.dataset.f) ? (prev ? Number(prev).toLocaleString("ja-JP") : "") : prev;   // 前の欄は元に戻す
+  const to = rd.to; if (!to || !to.isConnected) return false;
+  to.focus({preventScroll:true});
+  to.value = String(to.value||"").replace(/[^\d.]/g,"") + added;
+  to.dispatchEvent(new Event("input", {bubbles:true}));
+  return true;
 }
 
 /* ===================== 下書き（入力途中を店舗×機械ごとに保持。別の機械やタブに移っても消えない） ===================== */
@@ -4634,7 +4663,8 @@ function wire(){
   // 訪問日時を変える／説明の「？」
   $("#whenEdit").onclick = ()=>setWhenOpen(true);
   $("#gbarGo").onclick = guideGo;
-  document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")) setTimeout(renderGuide, 80); });
+  document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")){ GUIDE.redirect=null; clearTimeout(GUIDE.autoT); setTimeout(renderGuide, 80); } });
+  document.addEventListener("pointerdown", ()=>{ GUIDE.redirect=null; clearTimeout(GUIDE.autoT); }, true);
   $("#roomGrid").addEventListener("keydown", e=>{
     if (e.key!=="Enter" || !e.target.matches("input")) return;
     e.preventDefault(); clearTimeout(GUIDE.autoT);
