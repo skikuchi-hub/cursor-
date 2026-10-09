@@ -592,6 +592,7 @@ td:first-child{font-family:var(--fs-body)}
 .swapbtn{
   background:none;border:0;padding:2px 0 0;font-size:10.5px;color:var(--violet);font-weight:700;text-align:left;
 }
+.swap2{width:100%;background:var(--surface);border:1.5px dashed color-mix(in srgb,var(--violet) 55%,transparent);border-radius:var(--r-s);padding:7px 4px;font-size:11px;font-weight:800;color:var(--violet)}
 .pz{font-size:10px;color:var(--ink-3);text-align:center;font-family:var(--fs-mono);min-height:13px}
 .pair{
   display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 10px;
@@ -1972,6 +1973,7 @@ function roomCell(rm){
         <button class="addbtn take" data-act="open-take" data-k="${rm.k}">− 回収</button></div>
     </div>
     <button class="swapbtn" data-act="swap" data-k="${rm.k}" hidden>補充した景品が別景品の場合</button>
+    ${prevStock(rm.k)===null ? "" : `<button class="swap2" data-act="swap2" data-k="${rm.k}">⇄ 景品を入れ替える（別の景品にする）</button>`}
     <span class="pz" data-y="${rm.k}"></span>
   </div>`;
 }
@@ -2061,7 +2063,7 @@ function buildRooms(force){
       : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
-      ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。補充は「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。景品は前回から引き継ぐので、変わったときだけ ✎ を押してください。"
+      ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。同じ景品を足すときは「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。別の景品にするときは「⇄ 景品を入れ替える」を押して、抜いた数 → 新しい景品名 → 入れた数 の順に入れてください。✎ は景品名の訂正だけで、個数は変わりません。初回は「いま入っている数」が、その部屋の在庫になります。"
       : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。並べ替えは「③ 並べ替え」から。")
     + `</span>`;
 
@@ -2148,6 +2150,22 @@ function openSwap(k){
   const el = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`);
   if (el){ attachCombo(el); el.focus(); }
 }
+/* 「⇄ 景品を入れ替える」：回収（いま残っている数を初期値）→ 新しい景品名 → 入れた数 を 1 つの部屋カードの中で順に入れる。
+   ガイドが「回収 → 新しい景品 → 入れた数」の順に案内し、保存前チェックで数の抜けを止める */
+function openSwapAll(k){
+  const rm = R.rooms.find(x=>x.k===k); if(!rm) return;
+  rm.swap = true;
+  const btn = document.querySelector(`#roomGrid [data-act="swap2"][data-k="${k}"]`); if (btn) btn.hidden = true;
+  openTake(k, true);
+  const b = roomBefore(rm);
+  if (b!=="" && !(num(rm.take)>0)){ rm.take = b; const ti=document.querySelector(`#roomGrid [data-k="${k}"][data-f="take"]`); if (ti) ti.value = b; }   // 古い景品は全部抜く想定を初期値に
+  const tl = document.querySelector(`#roomGrid [data-takeslot="${k}"] .mini`); if (tl) tl.textContent = "抜いた数（古い景品）";
+  openAdd(k, true);
+  const al = document.querySelector(`#roomGrid [data-addslot="${k}"] .mini`); if (al) al.textContent = "入れた数（新しい景品）";
+  openSwap(k);
+  const pl = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`); if (pl && pl.previousElementSibling) pl.previousElementSibling.textContent = "新しい景品名";
+  updateDerived();
+}
 /* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
    けいひんラボと同じ区間データ（labAgg）から作る */
 function prizeHints(storeName){
@@ -2225,6 +2243,7 @@ function onRoomClick(e){
   if (a==="open-add") return openAdd(b.dataset.k);
   if (a==="open-take") return openTake(b.dataset.k);
   if (a==="swap")     return openSwap(b.dataset.k);
+  if (a==="swap2")    return openSwapAll(b.dataset.k);
   if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
   if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
   if (a==="slots+" || a==="slots-"){
@@ -2916,8 +2935,14 @@ function guideTarget(){
       const v = rm[f];
       if (v==="" || v===undefined || v===null){
         const el = document.querySelector(`#roomGrid [data-k="${rm.k}"][data-f="${f}"]`);
-        return {sec:2, el: el && el.parentElement, focus:el, cell:rm.k, txt: first ? `${rm.k} の「いま入っている数」` : `${rm.k} の「取られた数」（出ていなければ 0）`};
+        return {sec:2, el: el && el.parentElement, focus:el, cell:rm.k, txt: first ? `${rm.k} の「いま入っている数」（この部屋に入れた個数）` : `${rm.k} の「取られた数」（出ていなければ 0）`};
       }
+      // 開いている 回収／補充／新しい景品 の欄が空のまま先へ進ませない（入れ替えで数が抜けるミスを防ぐ）
+      const q = sel => document.querySelector(`#roomGrid [data-k="${rm.k}"]${sel}`);
+      const tk = q('[data-f="take"]'), ad = q('[data-f="add"]'), ap = q('[data-f="addPrize"]');
+      if (tk && tk.value==="") return {sec:2, el: tk.parentElement, focus:tk, cell:rm.k, txt:`${rm.k} の「抜いた数」（古い景品を抜いた個数。抜いていなければ 0）`};
+      if (ap && !clean(ap.value) && (rm.swap || num(rm.add)>0)) return {sec:2, el: ap.parentElement, focus:ap, cell:rm.k, txt:`${rm.k} に入れた「新しい景品名」を選ぶ`};
+      if (ad && !(num(ad.value)>0)) return {sec:2, el: ad.parentElement, focus:ad, cell:rm.k, txt:`${rm.k} の「入れた数」（補充した個数）`};
     }
     if (R.sAB==="") { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
     if (R.sCD==="") { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
@@ -2990,7 +3015,7 @@ function draftCount(){ const cutoff=Date.now()-3*864e5; Object.keys(DRAFTS).forE
 function visitSummaryHtml(warns){
   const t = totals();
   const rowsHtml = R.type==="4p"
-    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>${addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)?` ${esc(addPrizeOf(rm))}`:""}`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
+    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
         return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
     : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
         return `<tr><td class="k">出た</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">補充</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>`; })();
@@ -3041,6 +3066,14 @@ function validateVisit(){
       if (num(rm.add) > 200) block.push(`部屋${rm.k} の補充 ${num(rm.add)} が多すぎます`);
       const b = roomBefore(rm);
       if (num(rm.take) > 0 && b!=="" && num(rm.take) > b + num(rm.add)) block.push(`部屋${rm.k} の回収 ${num(rm.take)} が、残り＋補充（${b + num(rm.add)}）を超えています`);
+      // 入れ替え・補充で数が合わなくなるパターン
+      const ap = addPrizeOf(rm), cur = clean(rm.prize), swapped = ap && cur && ap!==cur;
+      if (swapped && !(num(rm.add)>0)) block.push(`部屋${rm.k}：新しい景品「${ap}」を選びましたが、入れた数が 0 です`);
+      if (swapped && num(rm.add)>0 && b!=="" && b>0 && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：「${cur}」が ${b}こ残っているのに回収 0 のまま「${ap}」を入れています。古い景品を抜いたなら「抜いた数」を入れてください`);
+      if (num(rm.add)>0){ const stk = stockOf(ap||cur); if (stk!==null && num(rm.add) > stk) ask.push(`部屋${rm.k}：「${ap||cur}」の在庫は ${stk}こですが ${num(rm.add)}こ補充しています（景品マスタの在庫が合っていない可能性）`); }
+      if (rm.prizeWas!==undefined && st!==null && cur!==clean(rm.prizeWas) && !(num(rm.add)>0) && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：景品名を「${rm.prizeWas||"（空）"}」→「${cur}」に変えましたが、回収・補充が 0 です。中身を入れ替えたなら「⇄ 景品を入れ替える」で数を入れてください（名前の訂正だけなら OK）`);
+      if (num(rm.take)>0 && !(num(rm.add)>0) && roomAfter(rm)===0) ask.push(`部屋${rm.k}：回収後は 0 こ（空の部屋）になります。何も入れていなければ OK`);
+      if (st===null && cur && (rm.before===""||rm.before===undefined)) ask.push(`部屋${rm.k}：景品「${cur}」はありますが「いま入っている数」が空です（在庫 0 として記録されます）`);
     });
   }
   const t = totals();
