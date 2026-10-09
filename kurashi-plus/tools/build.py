@@ -212,6 +212,15 @@ FONTS = "https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;500&fa
 def rel(depth):
     return "../" * depth
 
+import hashlib
+def ver(relpath):
+    """assets のキャッシュ対策：内容のハッシュを ?v= に付ける"""
+    try:
+        with open(os.path.join(ROOT, relpath), "rb") as f:
+            return hashlib.md5(f.read()).hexdigest()[:8]
+    except OSError:
+        return "0"
+
 def esc(s):
     return html.escape(s)
 
@@ -238,8 +247,8 @@ def head(title, desc, depth, extra="", body_class=""):
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="{FONTS}" rel="stylesheet">
-<link rel="stylesheet" href="{r}assets/css/style.css">
-<script src="{r}config.js"></script>
+<link rel="stylesheet" href="{r}assets/css/style.css?v={ver("assets/css/style.css")}">
+<script src="{r}config.js?v={ver("config.js")}"></script>
 {extra}
 </head>
 <body class="{body_class}">
@@ -290,7 +299,7 @@ def footer(depth):
     </div>
   </div>
 </footer>
-<script src="{r}assets/js/main.js"></script>
+<script src="{r}assets/js/main.js?v={ver("assets/js/main.js")}"></script>
 </body>
 </html>
 """
