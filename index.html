@@ -1697,6 +1697,7 @@ const Store = {
     this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
     render();
+    try { refreshRoomsAfterSync(); } catch(e){}
   },
   paintMode(){
     const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
@@ -1852,6 +1853,28 @@ function prevPrize(k){
   return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
 }
 const addPrizeOf = rm => clean(rm.addPrize) || clean(rm.prize);
+/* 景品名が空の部屋／枠に、直前の訪問の中身を入れ直す（入力済みの数は触らない）。
+   端末のキャッシュに直前の訪問が無いまま機械を選んだとき、あとから同期で届いた中身を反映するため。戻り値＝直した数 */
+function mergeRoomNames(){
+  if (!R || !F.machine || EDIT) return 0;
+  let n=0;
+  if (R.type==="4p"){
+    R.rooms.forEach(rm=>{ if (!clean(rm.prize)){ const pp=prevPrize(rm.k); if (pp){ rm.prize=pp; rm.prizeWas=pp; if (!clean(rm.addPrize) || rm.addPrize===rm.prize) rm.addPrize=pp; n++; } } });
+  } else {
+    const lv = lastVisit();
+    if (lv && lv.slots && lv.slots.length && R.slots.every(sl=>!clean(sl.prize))){
+      R.slots.forEach(sl=>{ const ps=lv.slots.find(q=>q.i===sl.i); const nm = ps ? (clean(ps.filled)||clean(ps.prize)) : ""; if (nm){ sl.prize=nm; n++; } });
+    }
+  }
+  return n;
+}
+/* 同期でデータが届いたあと：まだ何も入力していなければ部屋を作り直し、入力済みなら景品名だけ埋める */
+function refreshRoomsAfterSync(){
+  if (!R || !F.machine || EDIT) return;
+  const memo = clean(($("#memoIn")||{}).value||"");
+  if (!rHasInput(R) && !memo && !PHOTOS.length){ builtFor=""; buildRooms(true); return; }
+  if (mergeRoomNames()>0){ buildRooms(true); toast("前回の景品名を読み込みました"); }   // 同じ機械のまま force＝R の値を保ったまま画面だけ作り直す
+}
 
 /* 売上は「今月の累計額」を入力する運用（機械の表示どおり）。記録は前回訪問との差分＝今回分。
    同じ店・同じ機械・同じ月の直前の記録の累計（cum。無い古い記録は入力値そのもの）を引く。
@@ -2052,7 +2075,7 @@ function buildRooms(force){
   }
   resetRooms(!changed);
   if (changed && !EDIT && DRAFTS[key] && DRAFTS[key].R && DRAFTS[key].R.type===R.type){   // 下書きがあれば戻す
-    const d = DRAFTS[key]; R = Object.assign(R, d.R); $("#memoIn").value = d.memo||""; toast("入力途中の下書きを戻しました");
+    const d = DRAFTS[key]; R = Object.assign(R, d.R); $("#memoIn").value = d.memo||""; mergeRoomNames(); toast("入力途中の下書きを戻しました");
   } else if (changed && !EDIT) { $("#memoIn").value=""; }
   const t=R.type;
   $("#mType").textContent = t==="4p" ? "4人機（A〜Dの4部屋）" : `BOX・鍵式（${R.slots.length}枠）`;
@@ -3099,9 +3122,15 @@ function validateVisit(){
   // 同じ日に同じ機械の記録
   const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
   if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
+  const lv0 = lastVisit();
   if (R && R.type==="4p"){
+    // 前回の景品名があるのに今回が全部空＝前回の中身が読み込めていない（キャッシュ切れ）。このまま保存すると以後の訪問も空になる
+    if (lv0 && (lv0.rooms||[]).some(x=>clean(x.prize)||clean(x.addPrize)) && R.rooms.every(rm=>!clean(rm.prize))) block.push("前回の景品名が読み込めていません（通信待ち）。少し待って同期されてから、または開き直してから保存してください");
     R.rooms.forEach(rm=>{
       const pr = prevRoom(rm.k), st = prevStock(rm.k);
+      // 取られた数（初回は いま入っている数）は必須。空だと払出 0 のまま記録され、原価率・在庫が合わなくなる
+      if (st!==null && (rm.taken===""||rm.taken===undefined||rm.taken===null) && (clean(rm.prize)||st>0)) block.push(`部屋${rm.k} の「取られた数」が空です（出ていなければ 0 を入れる）`);
+      if (st===null && clean(rm.prize) && (rm.before===""||rm.before===undefined||rm.before===null)) block.push(`部屋${rm.k} の「いま入っている数」が空です（この部屋に入っている個数）`);
       if (rm.counter!=="" && pr && pr.counter!=="" && pr.counter!==undefined){
         const diff = num(rm.counter)-num(pr.counter);
         if (diff < 0) ask.push(`部屋${rm.k} のカウンター ${rm.counter} が前回 ${pr.counter} より小さい（カウンターは減りません）`);
@@ -3120,8 +3149,12 @@ function validateVisit(){
       if (num(rm.add)>0){ const stk = stockOf(ap||cur); if (stk!==null && num(rm.add) > stk) ask.push(`部屋${rm.k}：「${ap||cur}」の在庫は ${stk}こですが ${num(rm.add)}こ補充しています（景品マスタの在庫が合っていない可能性）`); }
       if (rm.prizeWas!==undefined && st!==null && cur!==clean(rm.prizeWas) && !(num(rm.add)>0) && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：景品名を「${rm.prizeWas||"（空）"}」→「${cur}」に変えましたが、回収・補充が 0 です。中身を入れ替えたなら「⇄ 景品を入れ替える」で数を入れてください（名前の訂正だけなら OK）`);
       if (num(rm.take)>0 && !(num(rm.add)>0) && roomAfter(rm)===0) ask.push(`部屋${rm.k}：回収後は 0 こ（空の部屋）になります。何も入れていなければ OK`);
-      if (st===null && cur && (rm.before===""||rm.before===undefined)) ask.push(`部屋${rm.k}：景品「${cur}」はありますが「いま入っている数」が空です（在庫 0 として記録されます）`);
     });
+  }
+  if (R && R.type==="box"){
+    if (lv0 && (lv0.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) && R.slots.every(sl=>!clean(sl.prize)) && !R.slots.some(sl=>clean(sl.filled))) block.push("前回の枠の中身が読み込めていません（通信待ち）。少し待って同期されてから、または開き直してから保存してください");
+    const t0 = totals();
+    if (t0.sales>0 && !R.slots.some(sl=>sl.out)) ask.push(`売上 ${yen(t0.sales)}円 がありますが「出た枠」が 1 つも選ばれていません。本当に 1 個も出ていませんか？（出た枠は「① 出た枠」で空いていた枠をタップ）`);
   }
   const t = totals();
   if (num($("#costIn").value) > t.sales && t.sales>0) ask.push(`景品原価 ${yen(num($("#costIn").value))}円 が売上 ${yen(t.sales)}円 を超えています`);

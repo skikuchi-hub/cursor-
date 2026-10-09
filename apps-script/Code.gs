@@ -1103,6 +1103,45 @@ function deleteOrderNo() {
   var out = no + " を消しました → " + msg.join("、");
   Logger.log(out); SpreadsheetApp.getActive().toast(out); return out;
 }
+/* 景品名が全部空のまま保存された記録を、同じ店舗・機械の直前の記録から復元する（2026-10-09）。
+   起きたこと：端末のキャッシュに直前の訪問が無い状態で店舗・機械を選ぶと、部屋／枠の景品名が空のフォームになり、
+   そのまま保存されると以後の訪問も空のまま引き継がれる（BOX は全枠「空き」、4人機は景品名なし）。
+   直し方：BOX は 枠 i の景品名＝直前の記録の filled||prize、4人機は 部屋 k の景品名＝直前の addPrize(補充あり)||prize。
+   出た枠・補充・払出の数は触らない。直したあと 景品実績 を作り直す。再実行しても安全 */
+function repairChain() {
+  var sh = dbSheet(), last = sh.getLastRow(); if (last < 2) return "記録なし";
+  var v = sh.getRange(2, 1, last - 1, 6).getValues(), rows = [];
+  v.forEach(function (r, i) { if (String(r[0]) !== "weekly") return; var rec; try { rec = JSON.parse(r[5]); } catch (e) { return; } rec.id = String(r[1]); rows.push({ row: i + 2, rec: rec }); });
+  rows.sort(function (a, b) { return String(a.rec.createdAt || "").localeCompare(String(b.rec.createdAt || "")); });
+  var lastNamed = {}, fixed = [], docs = readAllDocs();
+  function slotName(s) { return clean(s.filled) || clean(s.prize); }
+  function roomName(x) { return (x.addPrize && num(x.add) > 0) ? clean(x.addPrize) : clean(x.prize); }
+  rows.forEach(function (x) {
+    var rec = x.rec, key = rec.store + "|" + rec.machine, prev = lastNamed[key], changed = false;
+    if (rec.slots && rec.slots.length) {
+      var named = rec.slots.filter(function (s) { return slotName(s); }).length;
+      if (!named && prev && prev.slots && prev.slots.length) {
+        rec.slots.forEach(function (s) { var ps = prev.slots.filter(function (q) { return q.i === s.i; })[0]; if (ps && slotName(ps)) { s.prize = slotName(ps); changed = true; } });
+      }
+      if (rec.slots.filter(function (s) { return slotName(s); }).length) lastNamed[key] = rec;
+    } else if (rec.rooms && rec.rooms.length) {
+      var namedR = rec.rooms.filter(function (r) { return clean(r.prize); }).length;
+      if (!namedR && prev && prev.rooms && prev.rooms.length) {
+        rec.rooms.forEach(function (r) { var pr = prev.rooms.filter(function (q) { return q.k === r.k; })[0]; var nm = pr ? roomName(pr) : ""; if (nm) { r.prize = nm; if (!clean(r.addPrize)) r.addPrize = nm; changed = true; } });
+      }
+      if (rec.rooms.filter(function (r) { return clean(r.prize); }).length) lastNamed[key] = rec;
+    }
+    if (changed) {
+      sh.getRange(x.row, 4, 1, 3).setValues([[nowIso(), "repair", JSON.stringify(stripId(rec))]]);
+      docs.weekly = docs.weekly.map(function (r) { return r.id === rec.id ? rec : r; });
+      rematerialize(rec, docs);
+      fixed.push(rec.week + " " + rec.store + " " + rec.machine);
+    }
+  });
+  var st = fixed.length ? rebuildPrizeStats() : "（景品実績はそのまま）";
+  var msg = "景品名を復元した記録 " + fixed.length + " 件" + (fixed.length ? "：\n" + fixed.join("\n") : "") + "\n" + st;
+  Logger.log(msg); SpreadsheetApp.getActive().toast("景品名を復元：" + fixed.length + " 件"); return msg;
+}
 /* 写真チェック結果の取り込みを 10 分ごとのトリガーにする（アプリ起動時の取り込みをやめて起動を速くする）。再実行しても 1 本だけ */
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { if (t.getHandlerFunction() === "importPhotoChecks") ScriptApp.deleteTrigger(t); });
