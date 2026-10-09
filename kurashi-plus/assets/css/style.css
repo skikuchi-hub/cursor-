@@ -107,19 +107,20 @@ b,strong{font-weight:500}
 .hero-below{display:none}
 @media (max-width:1100px){.hero h1{font-size:clamp(32px,4.4vw,52px)}}
 @media (max-width:860px){
+  /* スマホ：写真の上に文字を重ねず、顔を隠さない。写真（4:5）→ 見出し → ボタン の順 */
   .hero{display:block;min-height:0}
-  .hero .media{position:relative;height:100svh;min-height:600px;max-height:900px}
-  .hero .media img{object-position:center top}
-  .hero .media::after{background:linear-gradient(to top,#fff 0%,rgba(255,255,255,.9) 16%,rgba(255,255,255,.35) 30%,rgba(255,255,255,0) 44%)}
-  .hero .panel{position:absolute;left:0;right:0;bottom:0;padding:0 var(--gut) calc(22px + env(safe-area-inset-bottom));gap:20px;color:var(--ink);justify-content:flex-end;margin:0}
+  .hero .media{position:relative;height:auto;aspect-ratio:4/5;max-height:min(66svh,620px);min-height:0}
+  .hero .media img{object-position:center 18%}
+  .hero .media::after{background:linear-gradient(to top,#fff 0%,rgba(255,255,255,.6) 10%,rgba(255,255,255,0) 26%)}
+  .hero .panel{position:relative;padding:4px var(--gut) 8px;gap:18px;margin:0}
+  .hero .stamp{background:var(--tint);box-shadow:none;margin-top:-28px;position:relative;z-index:2}
   .hero h1{font-size:clamp(30px,8.6vw,38px);letter-spacing:.02em;line-height:1.35}
   .hero h1 .l{white-space:normal}
   .hero .lead.pc{display:none}
-  .hero .card{flex-direction:column;align-items:center;gap:16px}
-  .hero .stamp{background:#fff;box-shadow:0 1px 0 var(--line)}
+  .hero .card{flex-direction:column;align-items:center;gap:14px}
   .hero .card .btn{width:100%;padding:19px 24px;font-size:15px}
   .hero .card .tlink{font-size:12.5px}
-  .hero-below{display:block;padding:30px 0 8px;border-bottom:1px solid var(--line);margin:0 var(--gut)}
+  .hero-below{display:block;padding:26px 0 8px;border-bottom:1px solid var(--line);margin:0 var(--gut)}
   .hero-below .lead{margin:0;color:var(--ink-2);font-size:13.5px;line-height:2}
   .hero-below .note{font-size:11.5px;color:var(--mute);line-height:1.9;margin:16px 0 24px}
   .hero-below .note a{color:var(--ink-2)}
