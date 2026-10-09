@@ -89,12 +89,12 @@ b,strong{font-weight:500}
 .stamp b{font-weight:700}
 
 /* ---------- Hero（PC：全幅写真に白のグラデーション / SP：全画面写真） ---------- */
-@keyframes kb{from{transform:scale(1.08)}to{transform:scale(1)}}
+@keyframes kb{from{transform:scale(1.05)}to{transform:scale(1)}}
 @keyframes rise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
 .hero{position:relative;min-height:min(90vh,860px);display:flex;align-items:center;overflow:hidden}
 .hero .media{position:absolute;inset:0;background:var(--sand)}
-.hero .media img{width:100%;height:100%;object-fit:cover;object-position:68% 30%;animation:kb 14s var(--ease) both}
-.hero .media::after{content:"";position:absolute;inset:0;background:linear-gradient(to right,rgba(255,255,255,.96) 0%,rgba(255,255,255,.92) 34%,rgba(255,255,255,.55) 50%,rgba(255,255,255,0) 68%)}
+.hero .media img{width:100%;height:100%;object-fit:cover;object-position:72% 50%;animation:kb 14s var(--ease) both}
+.hero .media::after{content:"";position:absolute;inset:0;background:linear-gradient(to right,rgba(255,255,255,.97) 0%,rgba(255,255,255,.93) 30%,rgba(255,255,255,.6) 43%,rgba(255,255,255,0) 56%)}
 .hero .stamp{align-self:flex-start;animation:rise 1s var(--ease) .1s both}
 .hero .panel{position:relative;width:100%;max-width:var(--max);margin:0 auto;padding:clamp(64px,8vw,110px) var(--gut);display:flex;flex-direction:column;gap:28px}
 .hero h1{font-size:clamp(38px,4.6vw,68px);line-height:1.4;letter-spacing:.03em;font-weight:700}
@@ -110,7 +110,7 @@ b,strong{font-weight:500}
   .hero{display:block;min-height:0}
   .hero .media{position:relative;height:100svh;min-height:600px;max-height:900px}
   .hero .media img{object-position:center top}
-  .hero .media::after{background:linear-gradient(to top,#fff 0%,rgba(255,255,255,.9) 24%,rgba(255,255,255,.4) 44%,rgba(255,255,255,0) 62%)}
+  .hero .media::after{background:linear-gradient(to top,#fff 0%,rgba(255,255,255,.9) 16%,rgba(255,255,255,.35) 30%,rgba(255,255,255,0) 44%)}
   .hero .panel{position:absolute;left:0;right:0;bottom:0;padding:0 var(--gut) calc(22px + env(safe-area-inset-bottom));gap:20px;color:var(--ink);justify-content:flex-end;margin:0}
   .hero h1{font-size:clamp(30px,8.6vw,38px);letter-spacing:.02em;line-height:1.35}
   .hero h1 .l{white-space:normal}
