@@ -2165,6 +2165,8 @@ function openSwapAll(k){
   openSwap(k);
   const pl = document.querySelector(`#roomGrid [data-k="${k}"][data-f="addPrize"]`); if (pl && pl.previousElementSibling) pl.previousElementSibling.textContent = "新しい景品名";
   updateDerived();
+  const ti = document.querySelector(`#roomGrid [data-k="${k}"][data-f="take"]`); if (ti){ ti.focus(); ti.select && ti.select(); }   // 抜いた数 → 新しい景品 → 入れた数 の順
+  renderGuide();
 }
 /* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
    けいひんラボと同じ区間データ（labAgg）から作る */
@@ -2298,7 +2300,7 @@ function onRoomInput(e){
   }
   if (k){ const rm = R.rooms.find(x=>x.k===k); if(rm) rm[f] = el.value; }
   else R[f] = el.value;
-  updateDerived(); saveDraft();
+  updateDerived(); saveDraft(); scheduleAutoAdvance(el);
 }
 
 /* ========== 集計 ========== */
@@ -2987,6 +2989,22 @@ function guideGo(){
   if (!GT || !GT.el) return;
   GT.el.scrollIntoView({block:"center", behavior:"smooth"});
   if (GT.focus) setTimeout(()=>GT.focus.focus({preventScroll:true}), 350);
+}
+/* ガイドの次の欄が数字欄なら、タップしなくてもカーソルを入れる（テンキーが出たまま次へ進める）。
+   個数の欄（取られた数・いま入っている数・抜いた数・入れた数）は打ち終わって 1.5 秒止まったら次へ。
+   売上欄は桁が多く途中で止まることがあるので自動では進めない（「ここへ」か Enter で進む）。
+   ボタン操作（とばす・入れ替え）の直後は、その操作の中で次の欄にカーソルを入れる */
+const AUTO_FIELDS = {taken:1, before:1, add:1, take:1};
+function focusGuideInput(from){
+  const t = guideTarget(); if (!t || !t.focus || t.focus===from) return false;
+  if (from && document.activeElement!==from) return false;              // 別の所を触っていたら動かさない
+  t.focus.focus({preventScroll:true}); t.el && t.el.scrollIntoView({block:"center", behavior:"smooth"});
+  renderGuide(); return true;
+}
+function scheduleAutoAdvance(el){
+  clearTimeout(GUIDE.autoT);
+  if (!el || !AUTO_FIELDS[el.dataset.f] || el.value==="") return;
+  GUIDE.autoT = setTimeout(()=>focusGuideInput(el), 1500);
 }
 
 /* ===================== 下書き（入力途中を店舗×機械ごとに保持。別の機械やタブに移っても消えない） ===================== */
@@ -4617,7 +4635,12 @@ function wire(){
   $("#whenEdit").onclick = ()=>setWhenOpen(true);
   $("#gbarGo").onclick = guideGo;
   document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")) setTimeout(renderGuide, 80); });
-  $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); } };
+  $("#roomGrid").addEventListener("keydown", e=>{
+    if (e.key!=="Enter" || !e.target.matches("input")) return;
+    e.preventDefault(); clearTimeout(GUIDE.autoT);
+    if (!focusGuideInput(e.target)) e.target.blur();
+  });
+  $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); if (GT && GT.focus){ GT.focus.focus({preventScroll:true}); GT.el.scrollIntoView({block:"center", behavior:"smooth"}); } } };
   applyFolds();
   $("#zhint").addEventListener("click", e=>{ const b=e.target.closest("[data-qhelp]"); if(!b) return; const l=$("#zhint .qlong"); l.hidden=!l.hidden; });
   $("#memoIn").addEventListener("input", saveDraft);
