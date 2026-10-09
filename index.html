@@ -358,7 +358,6 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 body.gbar-on #p-log{padding-bottom:64px}
 /* 入力欄を含む要素に animation / transform を付けると iOS Safari が入力中の文字を描き直さないことがあるので、枠は静的な影だけにする */
 .gnow{position:relative;border-radius:10px;background:var(--gold-wash);box-shadow:0 0 0 3px var(--gold),0 10px 20px -10px rgba(181,127,0,.7);z-index:1}
-.rm .gnow,.pair.gnow{padding:4px 5px;margin:-4px -5px}
 .gnow::before{content:"つぎはここ";position:absolute;top:-12px;left:6px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;padding:1px 7px;border-radius:999px;z-index:2;letter-spacing:.04em;white-space:nowrap}
 .gnow.nob::before{content:none}
 .save.gnow,.photo-field.gnow,#slotGrid.gnow,#machineRow.gnow{animation:gpulse 1.4s ease-in-out infinite}   /* 入力欄を含まない所だけ脈動 */
@@ -595,7 +594,7 @@ td:first-child{font-family:var(--fs-body)}
 }
 .pz{font-size:10px;color:var(--ink-3);text-align:center;font-family:var(--fs-mono);min-height:13px}
 .pair{
-  display:flex;align-items:center;gap:8px;margin:8px 0 10px;
+  display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin:8px 0 10px;
   background:var(--rose-wash);border:1.5px solid color-mix(in srgb,var(--rose) 28%,transparent);
   border-radius:var(--r-m);padding:8px 11px;
 }
@@ -605,7 +604,7 @@ td:first-child{font-family:var(--fs-body)}
   padding:8px 10px;text-align:right;font-family:var(--fs-mono);font-size:21px;font-weight:700;font-variant-numeric:tabular-nums;
 }
 .pair .u{font-size:12px;color:var(--ink-2);flex:none}
-.pair .pp{font-size:10.5px;color:var(--ink-3);font-family:var(--fs-mono);flex:none;min-width:46px;text-align:right}
+.pair .pp{font-size:10.5px;color:var(--ink-3);font-family:var(--fs-mono);flex-basis:100%;min-height:14px;text-align:right}   /* 読み取り文は 2 行目へ。入力欄の幅を押しつぶさない（iPhone で 1 桁しか見えない不具合の原因） */
 /* ---- BOX（鍵式）の枠グリッド ---- */
 .modes{display:flex;gap:6px;margin-bottom:9px}
 .modes .chip{flex:1;text-align:center;padding:9px 6px;font-size:12px}
@@ -2937,6 +2936,13 @@ function guideTarget(){
 }
 let GT = null;
 function renderGuide(){
+  const bar0=$("#gbar");
+  const ae=document.activeElement;
+  if (bar0 && ae && ae.tagName==="INPUT" && ae.closest(".gnow")){   // 入力中の欄からは枠を動かさない（iOS で描画が崩れる・視線が飛ぶ）。文字だけ更新
+    GT = guideTarget();
+    if (GT && GT.el){ $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`; $("#gbarSkip").hidden = !GT.skip; }
+    return;
+  }
   document.querySelectorAll(".gnow,.gcell,.gcur").forEach(el=>el.classList.remove("gnow","nob","gcell","gcur"));
   document.querySelectorAll("#p-log .step em").forEach(em=>em.classList.remove("done","cur"));
   const bar=$("#gbar"); if (!bar) return;
@@ -4577,6 +4583,7 @@ function wire(){
   // 訪問日時を変える／説明の「？」
   $("#whenEdit").onclick = ()=>setWhenOpen(true);
   $("#gbarGo").onclick = guideGo;
+  document.addEventListener("focusout", e=>{ if (e.target && e.target.closest && e.target.closest("#roomGrid")) setTimeout(renderGuide, 80); });
   $("#gbarSkip").onclick = ()=>{ if (GT && GT.skip){ GUIDE.skip[GT.skip]=true; renderGuide(); } };
   applyFolds();
   $("#zhint").addEventListener("click", e=>{ const b=e.target.closest("[data-qhelp]"); if(!b) return; const l=$("#zhint .qlong"); l.hidden=!l.hidden; });
