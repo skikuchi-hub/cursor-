@@ -205,8 +205,8 @@ CONTACT_KINDS = [
 # ============================================================
 # 共通パーツ
 # ============================================================
-ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>'
-ARROW_BTN = ARROW.replace('<svg ', '<svg class="arrow" ')
+ARROW = '<i>→</i>'
+ARROW_BTN = ''
 FONTS = "https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;500&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Jost:wght@300;400&display=swap"
 
 def rel(depth):
@@ -258,8 +258,8 @@ def header(depth):
       <a href="{r}index.html#services">サービス</a>
       <a href="{r}index.html#faq">よくある質問</a>
       <a href="{r}contact.html">お問い合わせ</a>
-      <a class="btn btn-outline btn-sm" href="{r}login.html">会員ログイン</a>
-      <a class="btn btn-primary btn-sm" href="{r}signup.html">お申し込み</a>
+      <a href="{r}login.html">会員ログイン</a>
+      <a class="cta" href="{r}signup.html">お申し込み</a>
     </nav>
   </div>
 </header>
@@ -267,44 +267,27 @@ def header(depth):
 
 def footer(depth):
     r = rel(depth)
-    svc_links = "".join(f'<li><a href="{r}services/{s["code"]}.html">{s["name"]}</a></li>' for s in SERVICES)
+    svc_links = "".join(f'<a href="{r}services/{x["code"]}.html">{x["name"]}</a>' for x in SERVICES)
     return f"""<footer class="site-footer">
   <div class="wrap">
     <div class="top">
       <div>
         <a class="brand" href="{r}index.html">{mark_svg()}<span class="word">{SITE['name']}</span></a>
-        <p class="tag">{SITE['tagline']}</p>
+        <p class="tag">{SITE['tagline']}<small>{SITE['company']}が提供する、暮らしの会員サービス</small></p>
       </div>
-      <div class="cta">
-        <a class="btn btn-primary" href="{r}signup.html">お申し込みはこちら {ARROW_BTN}</a>
-        <a class="btn btn-outline" href="{r}contact.html">お問い合わせはこちら {ARROW_BTN}</a>
-      </div>
+      <a class="btn btn-terra" href="{r}signup.html">お申し込みはこちら</a>
     </div>
-    <div class="cols">
-      <div>
-        <h4>Services</h4>
-        <ul>{svc_links}</ul>
-      </div>
-      <div>
-        <h4>Support</h4>
-        <ul>
-          <li><a href="{r}index.html#faq">よくある質問</a></li>
-          <li><a href="{r}signup.html">お申し込みについて</a></li>
-          <li><a href="{r}contact.html">お問い合わせ</a></li>
-          <li><a href="{r}login.html">会員ログイン</a></li>
-        </ul>
-      </div>
-      <div>
-        <h4>Company</h4>
-        <ul>
-          <li><a href="{SITE['company_url']}" target="_blank" rel="noopener">会社情報（{SITE['company']}）</a></li>
-          <li><a href="{r}terms/index.html">利用規約</a></li>
-          <li><a href="{r}privacy.html">プライバシーポリシー</a></li>
-          <li><a href="{r}legal.html">特定商取引法に基づく表示</a></li>
-        </ul>
-      </div>
+    <div class="links">
+      {svc_links}<span class="sep"></span>
+      <a href="{r}index.html#faq">よくある質問</a>
+      <a href="{r}signup.html">お申し込みについて</a>
+      <a href="{r}contact.html">お問い合わせ</a>
+      <a href="{r}login.html">会員ログイン</a>
     </div>
-    <div class="copy"><span>© {SITE['company']}</span><span>{SITE['name']}は{SITE['company']}が提供するサービスです。</span></div>
+    <div class="copy">
+      <span>© {SITE['company']}</span>
+      <span><a href="{SITE['company_url']}" target="_blank" rel="noopener">会社情報</a>　<a href="{r}terms/index.html">利用規約</a>　<a href="{r}privacy.html">プライバシーポリシー</a>　<a href="{r}legal.html">特定商取引法に基づく表示</a></span>
+    </div>
   </div>
 </footer>
 <script src="{r}assets/js/main.js"></script>
@@ -320,10 +303,10 @@ def page(path, title, desc, body, depth=0, extra="", body_class=""):
         f.write(out)
     print("wrote", path)
 
-def sh(title, en="", desc="", center=False):
-    enh = f'<span class="en">{en}</span>' if en else ''
+def sh(title, lbl="", desc="", center=False):
+    enh = f'<span class="lbl">{lbl}</span>' if lbl else ''
     d = f'<p>{desc}</p>' if desc else ''
-    return f'<div class="sh rv{" center" if center else ""}">{enh}<h2>{title}</h2>{d}</div>'
+    return f'<div class="sh rv">{enh}<h2>{title}</h2>{d}</div>'
 
 def price_note():
     if SITE["show_price"]:
@@ -335,22 +318,22 @@ def price_note():
 # ============================================================
 def svc_block(s, i):
     paras = "".join(f"<p>{esc(p)}</p>" for p in s["paras"])
-    return f"""<article class="svc{' flip' if i % 2 else ''}" id="svc-{s['code']}">
+    return f"""<article class="svc" id="svc-{s['code']}">
   <div class="photo rv"><img src="assets/img/photo/{s['photo']}" alt="" loading="lazy" width="1200" height="900"></div>
-  <div class="text">
-    <div class="meta rv"><span class="no">{s['no']}</span><span class="name">{esc(s['name'])}</span></div>
-    <h3 class="rv">{s.get("copy_br", esc(s["copy"]))}</h3>
-    <div class="body rv">{paras}</div>
-    <p class="fine rv">{nl(s['fine'])}</p>
-    <a class="tlink rv" href="services/{s['code']}.html">詳しく見る {ARROW}</a>
+  <div class="text rv">
+    <div class="head"><span class="no">{s['no']}</span><span class="name">{esc(s['name'])}</span></div>
+    <h3>{s.get("copy_br", esc(s["copy"]))}</h3>
+    <div class="body">{paras}</div>
+    <p class="fine">{nl(s['fine'])}</p>
+    <a class="tlink" href="services/{s['code']}.html">詳しく見る {ARROW}</a>
   </div>
 </article>"""
 
 def build_index():
-    index = "".join(f'<li class="rv"><a href="#svc-{s["code"]}"><span class="no">{s["no"]}</span><span class="name">{s.get("name_br", esc(s["name"]))}</span>{ARROW}</a></li>' for s in SERVICES)
+    index = "".join(f'<li><a href="#svc-{s["code"]}"><span class="no">{s["no"]}</span><span class="name">{s.get("name_br", esc(s["name"]))}</span>{ARROW}</a></li>' for s in SERVICES)
     blocks = "\n".join(svc_block(s, i) for i, s in enumerate(SERVICES))
-    worries = "".join(f'<li class="rv">{esc(w)}</li>' for w in WORRIES)
-    faq = "\n".join(f'<details class="rv"><summary>{esc(q)}</summary><div class="a">{esc(a)}</div></details>' for q, a in FAQ)
+    worries = "".join(f'<li>{esc(w)}</li>' for w in WORRIES)
+    faq = "\n".join(f'<details><summary>{esc(q)}</summary><div class="a">{esc(a)}</div></details>' for q, a in FAQ)
     body = f"""
 <section class="hero">
   <div class="media">
@@ -359,19 +342,16 @@ def build_index():
       <img src="assets/img/photo/hero-pc.jpg" alt="" width="1200" height="1500" fetchpriority="high">
     </picture>
   </div>
+  <div class="stamp" aria-label="初月から{SITE['free']}"><small>初月から</small><b>最大2ヶ月</b><em>無料</em></div>
   <div class="panel">
+    <p class="tate">暮らしに、ひとつ足す。</p>
     <div class="copy">
-      <span class="en">Life support membership</span>
       <h1><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
       <p class="lead pc">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     </div>
     <div class="card">
-      <div class="free"><span class="en">Campaign</span><b>初月から{SITE['free']}</b></div>
-      <div class="btns">
-        <a class="btn btn-terra" href="signup.html">お申し込みはこちら {ARROW_BTN}</a>
-        <a class="btn btn-outline pc" href="contact.html">お問い合わせはこちら {ARROW_BTN}</a>
-        <a class="tlink sp" href="contact.html">お問い合わせ {ARROW}</a>
-      </div>
+      <a class="btn btn-terra" href="signup.html">お申し込みはこちら</a>
+      <a class="tlink" href="contact.html">まずは相談する {ARROW}</a>
     </div>
   </div>
 </section>
@@ -379,25 +359,29 @@ def build_index():
     <p class="lead">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     <p class="note">お申し込みには販売パートナーの紹介コードが必要です。お持ちでない方は<a href="contact.html?kind=1">お問い合わせ</a>ください。</p>
 </div>
-<div class="sticky-cta"><span>初月から{SITE['free']}</span><a class="btn btn-terra btn-sm" href="signup.html">お申し込み {ARROW_BTN}</a></div>
+<div class="sticky-cta"><span>初月から{SITE['free']}</span><a class="btn btn-terra btn-sm" href="signup.html">お申し込み</a></div>
 
 <section class="section intro" id="intro">
   <div class="wrap">
     <div class="grid">
       <div>
-        {sh("こんな不安、<br>ありませんか？", "Everyday worries", "大きな保険は重い。でも、何もしないのも不安。暮らしの「よくある困りごと」に、ちょうどいい安心をご用意しました。")}
+        {sh("こんな不安、<br>ありませんか？", "暮らしの困りごと", "大きな保険は重い。でも、何もしないのも不安。暮らしの「よくある困りごと」に、ちょうどいい安心をご用意しました。")}
         <ul class="worries">{worries}</ul>
       </div>
-      <div class="photo rv"><img src="assets/img/photo/worry.jpg" alt="" loading="lazy" width="1200" height="1200"></div>
+      <div class="photo rv"><img src="assets/img/photo/worry.jpg" alt="" loading="lazy" width="1200" height="1200"><span class="tate">ちいさな不安は、だれにでも。</span></div>
     </div>
   </div>
 </section>
 
 <section class="section sand" id="services">
   <div class="wrap">
-    {sh("暮らしを支える、<br class=\"sp\">5つのサービス", "Services", "家族の毎日に起こりやすい“困りごと”を、広く・やさしくカバーします。", center=True)}
-    <ul class="svc-index">{index}</ul>
-    <p class="summary rv">置き配盗難や家電の突然の故障、Wi-Fi接続機器のトラブル、スマホの広告表示など。<br class="pc">暮らしの中で起こる“ちょっとした不安や困りごと”を、まとめてサポートする会員サービスです。</p>
+    <div class="svc-list">
+      <div class="head rv">
+        {sh("暮らしを支える、<br>5つのサービス", "サービス")}
+        <p>家族の毎日に起こりやすい“困りごと”を、広く・やさしくカバーします。置き配盗難や家電の突然の故障、Wi-Fi接続機器のトラブル、スマホの広告表示など。暮らしの中で起こる“ちょっとした不安や困りごと”を、まとめてサポートする会員サービスです。</p>
+      </div>
+      <ul class="svc-index rv">{index}</ul>
+    </div>
   </div>
 </section>
 
@@ -408,30 +392,37 @@ def build_index():
 <section class="trust">
   <div class="media"><picture><source media="(max-width:760px)" srcset="assets/img/photo/trust-sp.jpg"><img src="assets/img/photo/trust.jpg" alt="" loading="lazy" width="1600" height="1000"></picture></div>
   <div class="wrap">
-    <span class="en rv">Our promise</span>
-    <h2 class="rv">守られている安心は、<br>想像以上に心地いい。</h2>
-    <p class="rv">保険会社との正式提携と、実績あるグループ会社による運営体制のもと、安心してご利用いただけるサービスを提供しています。</p>
-    <div class="cta rv"><a class="btn btn-terra" href="signup.html">お申し込みはこちら {ARROW_BTN}</a></div>
+    <div class="box rv">
+      <span class="lbl">わたしたちの約束</span>
+      <h2>守られている安心は、<br>想像以上に心地いい。</h2>
+      <p>保険会社との正式提携と、実績あるグループ会社による運営体制のもと、安心してご利用いただけるサービスを提供しています。</p>
+      <div class="cta"><a class="btn btn-terra" href="signup.html">お申し込みはこちら</a><a class="tlink" href="contact.html">相談する {ARROW}</a></div>
+    </div>
   </div>
 </section>
 
 <section class="section" id="faq">
   <div class="wrap">
-    {sh("よくあるご質問", "FAQ", center=True)}
-    <div class="faq">{faq}</div>
+    <div class="faq-wrap">
+      <div class="head rv">
+        {sh("よくあるご質問", "Q&amp;A")}
+        <span class="cnt">全 {len(FAQ)} 問</span>
+      </div>
+      <div class="faq rv">{faq}</div>
+    </div>
   </div>
 </section>
 
-<section class="section cta-section">
+<section class="closing">
   <div class="wrap">
-    <div class="cta-band rv">
+    <div class="inner rv">
       <div>
         <h2>不安を残さず、安心して<br>お申し込みいただけるように。</h2>
         <p>不明点など遠慮なくご質問ください。ヘルプデスク（{SITE['hours_short']}）がお答えします。</p>
       </div>
       <div class="btns">
-        <a class="btn btn-terra" href="signup.html">お申し込みはこちら {ARROW_BTN}</a>
-        <a class="btn btn-outline" href="contact.html">お問い合わせはこちら {ARROW_BTN}</a>
+        <a class="btn btn-terra" href="signup.html">お申し込みはこちら</a>
+        <a class="btn btn-outline" href="contact.html">お問い合わせはこちら</a>
       </div>
     </div>
   </div>
@@ -458,7 +449,7 @@ def build_services():
       <h1>{s.get("copy_br", esc(s["copy"]))}</h1>
       <div class="body">{paras}</div>
       <p class="fine">{nl(s['fine'])}</p>
-      <div class="cta"><a class="btn btn-terra" href="../signup.html">お申し込みはこちら {ARROW_BTN}</a><a class="tlink" href="../contact.html">相談する {ARROW}</a></div>
+      <div class="cta"><a class="btn btn-terra" href="../signup.html">お申し込みはこちら</a><a class="tlink" href="../contact.html">相談する {ARROW}</a></div>
     </div>
     <div class="photo"><img src="../assets/img/photo/{s['photo']}" alt="" width="1200" height="900"></div>
   </div>
@@ -479,7 +470,7 @@ def build_services():
 </div>
 <section class="section sand">
   <div class="wrap">
-    {sh("ほかのサービス", "Other services", center=True)}
+    {sh("ほかのサービス", "サービス")}
     <ul class="svc-index">{others}</ul>
   </div>
 </section>
@@ -530,7 +521,6 @@ def build_terms():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="../index.html">トップ</a> › <a href="index.html">利用規約</a> › {esc(s['name'])}</div>
-    <span class="en">Terms</span>
     <h1>{esc(s['terms_name'])} 利用規約{status}</h1>
     <p>{alias}施行日：{SITE['effective']}　提供：{SITE['company']}</p>
   </div>
@@ -543,7 +533,6 @@ def build_terms():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="../index.html">トップ</a> › 利用規約</div>
-    <span class="en">Terms</span>
     <h1>利用規約</h1>
     <p>サービスごとに利用規約を定めています。お申し込みの前に必ずお読みください。</p>
   </div>
@@ -562,7 +551,6 @@ def build_privacy():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › プライバシーポリシー</div>
-    <span class="en">Privacy policy</span>
     <h1>個人情報保護方針<br class="sp">（プライバシーポリシー）</h1>
     <p>{c['company']}（以下「当社」といいます。）は、個人情報の保護に万全を期し、社会・顧客・取引先・従業員の信頼に応えるため、次のとおり方針を定めます。</p>
   </div>
@@ -643,7 +631,6 @@ def build_legal():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › 特定商取引法に基づく表示</div>
-    <span class="en">Legal notice</span>
     <h1>特定商取引法に基づく表示</h1>
   </div>
   <div class="content"><div class="kv">{kv}</div></div>
@@ -659,7 +646,6 @@ def build_signup():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › お申し込み</div>
-    <span class="en">Sign up</span>
     <h1>お申し込みについて</h1>
     <p>{SITE['name']}は、サービス説明不足や認識相違によるトラブルを防ぐため、販売パートナーの「紹介コード」をお持ちの方限定でお申し込みいただけます。初月から{SITE['free']}。</p>
   </div>
@@ -671,8 +657,8 @@ def build_signup():
       <li><b>ご利用開始</b><span>完了後、各サービスのご案内と利用規約の控えをお送りします。</span></li>
     </ol>
     <div class="signup-cta">
-      <a class="btn btn-terra" id="signupBtn" href="contact.html?kind=5">お申し込み手続きへ進む {ARROW_BTN}</a>
-      <a class="btn btn-outline" href="contact.html?kind=1">紹介コードをお持ちでない方 {ARROW_BTN}</a>
+      <a class="btn btn-terra" id="signupBtn" href="contact.html?kind=5">お申し込み手続きへ進む</a>
+      <a class="btn btn-outline" href="contact.html?kind=1">紹介コードをお持ちでない方</a>
     </div>
     <p class="fine">お申し込み前に<a href="terms/index.html">利用規約</a>・<a href="privacy.html">プライバシーポリシー</a>・<a href="legal.html">特定商取引法に基づく表示</a>をご確認ください。</p>
   </div>
@@ -687,7 +673,6 @@ def build_contact():
 <div class="wrap">
   <div class="page-head">
     <div class="breadcrumb"><a href="index.html">トップ</a> › お問い合わせ</div>
-    <span class="en">Contact</span>
     <h1>お問い合わせ</h1>
     <p>サービス内容やお申し込み、解約についてのご相談はこちらから。ご入力いただいた日より3営業日以内に、ご登録のメールアドレスへご返信します（ヘルプデスク：{c['hours_short']}）。</p>
   </div>
@@ -711,7 +696,6 @@ def build_contact():
     body = f"""
 <div class="wrap">
   <div class="page-head center">
-    <span class="en">Thank you</span>
     <h1>お問い合わせを受け付けました</h1>
     <p>ご入力いただいた日より3営業日以内に、ご登録のメールアドレスへご返信いたします。今しばらくお待ちください。</p>
     <p style="margin-top:32px"><a class="btn btn-outline" href="index.html">トップページへ戻る</a></p>
@@ -727,7 +711,6 @@ def build_auth():
     body = f"""
 <div class="wrap">
   <div class="auth">
-    <span class="en">Member login</span>
     <h1>会員ログイン</h1>
     <p class="sub">ご登録のメールアドレスとパスワードを入力してください。</p>
     <form id="loginForm" class="form" novalidate>
@@ -750,7 +733,6 @@ def build_auth():
     body = f"""
 <div class="wrap" id="mypage">
   <div class="page-head">
-    <span class="en">My page</span>
     <h1>マイページ</h1>
   </div>
   <div class="my-grid">
@@ -780,7 +762,6 @@ def build_404():
     body = """
 <div class="wrap">
   <div class="page-head center">
-    <span class="en">404</span>
     <h1>ページが見つかりません</h1>
     <p>URLが変更されたか、削除された可能性があります。</p>
     <p style="margin-top:32px"><a class="btn btn-outline" href="index.html">トップページへ戻る</a></p>
