@@ -363,8 +363,8 @@ def build_index():
     <div class="copy">
       <span class="en rv">Life support membership</span>
       <h1 class="rv"><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
-      <p class="rv">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     </div>
+    <p class="lead rv">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     <div class="card rv">
       <div class="free"><span class="en">Campaign</span><b>初月から{SITE['free']}</b></div>
       <a class="btn btn-terra btn-block" href="signup.html">お申し込みはこちら {ARROW_BTN}</a>
@@ -388,7 +388,7 @@ def build_index():
 
 <section class="section sand" id="services">
   <div class="wrap">
-    {sh("暮らしを支える、5つのサービス", "Services", "家族の毎日に起こりやすい“困りごと”を、広く・やさしくカバーします。", center=True)}
+    {sh("暮らしを支える、<br class=\"sp\">5つのサービス", "Services", "家族の毎日に起こりやすい“困りごと”を、広く・やさしくカバーします。", center=True)}
     <ul class="svc-index">{index}</ul>
     <p class="summary rv">置き配盗難や家電の突然の故障、Wi-Fi接続機器のトラブル、スマホの広告表示など。<br class="pc">暮らしの中で起こる“ちょっとした不安や困りごと”を、まとめてサポートする会員サービスです。</p>
   </div>
