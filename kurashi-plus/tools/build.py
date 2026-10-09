@@ -218,7 +218,7 @@ def esc(s):
 def nl(s):
     return "<br>".join(esc(x) for x in s.split("\n"))
 
-def head(title, desc, depth, extra=""):
+def head(title, desc, depth, extra="", body_class=""):
     r = rel(depth)
     full = f"{title}｜{SITE['name']}" if title else f"{SITE['name']}｜{SITE['tagline']}"
     return f"""<!DOCTYPE html>
@@ -242,7 +242,7 @@ def head(title, desc, depth, extra=""):
 <script src="{r}config.js"></script>
 {extra}
 </head>
-<body>
+<body class="{body_class}">
 """
 
 def mark_svg(cls="mark"):
@@ -312,8 +312,8 @@ def footer(depth):
 </html>
 """
 
-def page(path, title, desc, body, depth=0, extra=""):
-    out = head(title, desc, depth, extra) + header(depth) + body + footer(depth)
+def page(path, title, desc, body, depth=0, extra="", body_class=""):
+    out = head(title, desc, depth, extra, body_class) + header(depth) + body + footer(depth)
     full = os.path.join(ROOT, path)
     os.makedirs(os.path.dirname(full), exist_ok=True)
     with open(full, "w", encoding="utf-8") as f:
@@ -355,24 +355,31 @@ def build_index():
 <section class="hero">
   <div class="media">
     <picture>
-      <source media="(max-width:760px)" srcset="assets/img/photo/hero-sq.jpg">
-      <img src="assets/img/photo/hero.jpg" alt="" width="1600" height="1100" fetchpriority="high">
+      <source media="(max-width:860px)" srcset="assets/img/photo/hero-sp.jpg">
+      <img src="assets/img/photo/hero-pc.jpg" alt="" width="1200" height="1500" fetchpriority="high">
     </picture>
   </div>
-  <div class="wrap">
+  <div class="panel">
     <div class="copy">
-      <span class="en rv">Life support membership</span>
-      <h1 class="rv"><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
+      <span class="en">Life support membership</span>
+      <h1><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
+      <p class="lead pc">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     </div>
-    <p class="lead rv">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
-    <div class="card rv">
+    <div class="card">
       <div class="free"><span class="en">Campaign</span><b>初月から{SITE['free']}</b></div>
-      <a class="btn btn-terra btn-block" href="signup.html">お申し込みはこちら {ARROW_BTN}</a>
-      <a class="btn btn-outline btn-block" href="contact.html">お問い合わせはこちら {ARROW_BTN}</a>
-      <p class="note">お申し込みには販売パートナーの紹介コードが必要です。お持ちでない方は<a href="contact.html?kind=1">お問い合わせ</a>ください。</p>
+      <div class="btns">
+        <a class="btn btn-terra" href="signup.html">お申し込みはこちら {ARROW_BTN}</a>
+        <a class="btn btn-outline pc" href="contact.html">お問い合わせはこちら {ARROW_BTN}</a>
+        <a class="tlink sp" href="contact.html">お問い合わせ {ARROW}</a>
+      </div>
     </div>
   </div>
 </section>
+<div class="hero-below sp">
+    <p class="lead">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
+    <p class="note">お申し込みには販売パートナーの紹介コードが必要です。お持ちでない方は<a href="contact.html?kind=1">お問い合わせ</a>ください。</p>
+</div>
+<div class="sticky-cta"><span>初月から{SITE['free']}</span><a class="btn btn-terra btn-sm" href="signup.html">お申し込み {ARROW_BTN}</a></div>
 
 <section class="section intro" id="intro">
   <div class="wrap">
@@ -399,7 +406,7 @@ def build_index():
 </section>
 
 <section class="trust">
-  <div class="media"><img src="assets/img/photo/trust.jpg" alt="" loading="lazy" width="1600" height="800"></div>
+  <div class="media"><picture><source media="(max-width:760px)" srcset="assets/img/photo/trust-sp.jpg"><img src="assets/img/photo/trust.jpg" alt="" loading="lazy" width="1600" height="1000"></picture></div>
   <div class="wrap">
     <span class="en rv">Our promise</span>
     <h2 class="rv">守られている安心は、<br>想像以上に心地いい。</h2>
@@ -430,7 +437,7 @@ def build_index():
   </div>
 </section>
 """
-    page("index.html", "", SITE["desc"], body, 0)
+    page("index.html", "", SITE["desc"], body, 0, body_class="home")
 
 # ============================================================
 # サービス詳細

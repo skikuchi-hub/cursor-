@@ -67,6 +67,17 @@ const fs = require('fs');
     }
     await p.close();
   }
+  // ファーストビューのみ（iPhone 14 相当 390x844 / PC 1280x800）
+  for (const vp of [{ w: 390, h: 844, name: 'sp-fv' }, { w: 1280, h: 800, name: 'pc-fv' }]) {
+    const p = await ctx.newPage();
+    await p.setViewportSize({ width: vp.w, height: vp.h });
+    await p.goto('file://' + path.join(root, 'index.html'));
+    await p.waitForTimeout(1500);
+    await p.evaluate(() => document.querySelectorAll('.rv').forEach(e => { e.style.transition = 'none'; e.classList.add('in'); }));
+    await p.screenshot({ path: path.join(out, vp.name + '.png') });
+    if (vp.name === 'sp-fv') { await p.evaluate(() => window.scrollTo(0, 1400)); await p.waitForTimeout(800); await p.screenshot({ path: path.join(out, 'sp-scrolled.png') }); }
+    await p.close();
+  }
   await browser.close();
   console.log('rendered');
 })().catch(e => { console.error(e); process.exit(1); });

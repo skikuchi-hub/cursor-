@@ -19,7 +19,7 @@
 <script src="config.js"></script>
 
 </head>
-<body>
+<body class="home">
 <header class="site-header">
   <div class="wrap">
     <a class="brand" href="index.html" aria-label="くらしプラス トップへ"><svg class="mark" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="6" fill="#B85C3C"/></svg><span class="word">くらしプラス</span></a>
@@ -37,24 +37,31 @@
 <section class="hero">
   <div class="media">
     <picture>
-      <source media="(max-width:760px)" srcset="assets/img/photo/hero-sq.jpg">
-      <img src="assets/img/photo/hero.jpg" alt="" width="1600" height="1100" fetchpriority="high">
+      <source media="(max-width:860px)" srcset="assets/img/photo/hero-sp.jpg">
+      <img src="assets/img/photo/hero-pc.jpg" alt="" width="1200" height="1500" fetchpriority="high">
     </picture>
   </div>
-  <div class="wrap">
+  <div class="panel">
     <div class="copy">
-      <span class="en rv">Life support membership</span>
-      <h1 class="rv"><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
+      <span class="en">Life support membership</span>
+      <h1><span class="l">毎日の「もしも」に、</span><span class="l">ひとつ足す安心。</span></h1>
+      <p class="lead pc">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
     </div>
-    <p class="lead rv">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
-    <div class="card rv">
+    <div class="card">
       <div class="free"><span class="en">Campaign</span><b>初月から最大2ヶ月無料</b></div>
-      <a class="btn btn-terra btn-block" href="signup.html">お申し込みはこちら <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
-      <a class="btn btn-outline btn-block" href="contact.html">お問い合わせはこちら <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
-      <p class="note">お申し込みには販売パートナーの紹介コードが必要です。お持ちでない方は<a href="contact.html?kind=1">お問い合わせ</a>ください。</p>
+      <div class="btns">
+        <a class="btn btn-terra" href="signup.html">お申し込みはこちら <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+        <a class="btn btn-outline pc" href="contact.html">お問い合わせはこちら <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+        <a class="tlink sp" href="contact.html">お問い合わせ <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a>
+      </div>
     </div>
   </div>
 </section>
+<div class="hero-below sp">
+    <p class="lead">置き配の盗難、固定費の見直し、スマホや家電の故障、わずらわしい広告。暮らしのちいさな不安や困りごとを、まとめて支える会員サービスです。</p>
+    <p class="note">お申し込みには販売パートナーの紹介コードが必要です。お持ちでない方は<a href="contact.html?kind=1">お問い合わせ</a>ください。</p>
+</div>
+<div class="sticky-cta"><span>初月から最大2ヶ月無料</span><a class="btn btn-terra btn-sm" href="signup.html">お申し込み <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg></a></div>
 
 <section class="section intro" id="intro">
   <div class="wrap">
@@ -130,7 +137,7 @@
 </section>
 
 <section class="trust">
-  <div class="media"><img src="assets/img/photo/trust.jpg" alt="" loading="lazy" width="1600" height="800"></div>
+  <div class="media"><picture><source media="(max-width:760px)" srcset="assets/img/photo/trust-sp.jpg"><img src="assets/img/photo/trust.jpg" alt="" loading="lazy" width="1600" height="1000"></picture></div>
   <div class="wrap">
     <span class="en rv">Our promise</span>
     <h2 class="rv">守られている安心は、<br>想像以上に心地いい。</h2>

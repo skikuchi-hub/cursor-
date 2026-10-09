@@ -80,39 +80,62 @@ b,strong{font-weight:500}
 .tlink:hover{color:var(--terra);border-color:var(--terra)}
 .tlink:hover svg{transform:translateX(4px)}
 
-/* ---------- Hero ---------- */
-.hero{position:relative;color:#fff;min-height:min(82vh,780px);display:flex;align-items:flex-end;padding:clamp(56px,8vw,96px) 0 clamp(40px,5vw,64px)}
-.hero .media{position:absolute;inset:0;overflow:hidden;background:var(--sand)}
-.hero .media img{width:100%;height:100%;object-fit:cover;object-position:center 60%}
-.hero .media::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(20,16,12,.7) 0%,rgba(20,16,12,.3) 45%,rgba(20,16,12,.06) 100%)}
-.hero .wrap{position:relative;width:100%;display:grid;grid-template-columns:1fr 360px;grid-template-rows:auto auto;gap:0 clamp(28px,5vw,64px);align-items:end}
-.hero .copy{grid-column:1}
-.hero .lead{grid-column:1;grid-row:2}
-.hero .card{grid-column:2;grid-row:1/3}
-.hero .en{display:block;color:rgba(255,255,255,.82);margin-bottom:26px}
-.hero h1{font-size:clamp(34px,4.6vw,60px);line-height:1.5;letter-spacing:.12em;font-weight:400;text-shadow:0 1px 24px rgba(0,0,0,.18)}
+/* ---------- Hero（PC：左文字・右縦写真 / SP：全画面写真） ---------- */
+.hero{position:relative;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);min-height:min(88vh,840px)}
+.hero .media{position:relative;overflow:hidden;background:var(--sand);grid-column:2;grid-row:1}
+.hero .media img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%}
+.hero .panel{grid-column:1;grid-row:1;display:flex;flex-direction:column;justify-content:center;gap:40px;padding:clamp(48px,6vw,96px) clamp(32px,5vw,80px) clamp(48px,6vw,96px) max(var(--gut),calc((100vw - var(--max)) / 2 + var(--gut)))}
+.hero .en{display:block;margin-bottom:26px}
+.hero h1{font-size:clamp(32px,3.3vw,54px);line-height:1.5;letter-spacing:.12em;font-weight:400}
 .hero h1 .l{display:block;white-space:nowrap}
-.hero .lead{margin-top:28px;font-size:14.5px;color:rgba(255,255,255,.88);line-height:2.2;letter-spacing:.06em;max-width:40em}
-.hero .card{background:rgba(250,248,243,.96);color:var(--ink);border-radius:18px;padding:30px 28px 24px;display:grid;gap:10px}
-.hero .card .free{text-align:center;margin-bottom:10px}
-.hero .card .free .en{display:block;color:var(--terra);margin-bottom:8px}
-.hero .card .free b{display:block;font-family:var(--serif);font-size:24px;letter-spacing:.1em;font-weight:500;line-height:1.4}
-.hero .card .note{font-size:11.5px;color:var(--mute);line-height:1.9;margin-top:6px;letter-spacing:.04em}
-.hero .card .note a{color:var(--ink-2)}
+.hero .lead{margin-top:28px;font-size:14.5px;color:var(--ink-2);line-height:2.2;letter-spacing:.06em;max-width:32em}
+.hero .card{border-top:1px solid var(--line-2);padding-top:28px;display:flex;flex-direction:column;align-items:flex-start;gap:20px}
+.hero .card .btn{padding:15px 22px;font-size:13px}
+.hero .card .free .en{display:block;margin-bottom:6px}
+.hero .card .free b{display:block;font-family:var(--serif);font-size:22px;letter-spacing:.1em;font-weight:500;line-height:1.4;white-space:nowrap}
+.hero .card .btns{display:flex;gap:10px;flex-wrap:wrap}
+.hero-below{display:none}
+.hero .card .tlink.sp{display:none}
+@media (max-width:1100px){.hero h1{font-size:clamp(30px,3.3vw,44px)}}
 @media (max-width:860px){
-  .hero{min-height:0;padding:0;display:block;color:var(--ink)}
-  .hero .media{position:relative;aspect-ratio:4/5;max-height:72vh}
-  .hero .media::after{background:linear-gradient(to top,rgba(20,16,12,.74),rgba(20,16,12,.2) 50%,rgba(20,16,12,0) 75%)}
-  .hero .wrap{grid-template-columns:1fr;grid-template-rows:none;gap:0}
-  .hero .copy,.hero .lead,.hero .card{grid-column:1;grid-row:auto}
-  .hero .copy{margin-top:-176px;position:relative;z-index:1;color:#fff;padding-bottom:26px}
-  .hero .en{color:rgba(255,255,255,.85)}
-  .hero h1{font-size:clamp(28px,8vw,36px);letter-spacing:.08em}
+  .hero{display:block;min-height:0}
+  .hero .media{height:100svh;min-height:600px;max-height:900px}
+  .hero .media img{object-position:center 22%}
+  .hero .media::after{content:"";position:absolute;inset:0;background:linear-gradient(to top,rgba(22,18,14,.78) 0%,rgba(22,18,14,.42) 32%,rgba(22,18,14,0) 62%)}
+  .hero .panel{position:absolute;left:0;right:0;bottom:0;padding:0 var(--gut) calc(28px + env(safe-area-inset-bottom));gap:22px;color:#fff;justify-content:flex-end}
+  .hero .en{color:rgba(255,255,255,.82);margin-bottom:18px}
+  .hero h1{font-size:clamp(25px,7.4vw,34px);letter-spacing:.1em;text-shadow:0 2px 24px rgba(0,0,0,.25)}
   .hero h1 .l{white-space:normal}
-  .hero .lead{color:var(--ink-2);font-size:13.5px;margin:22px 0 0;line-height:2}
-  .hero .card{margin:0;background:transparent;padding:26px 0 36px;border-bottom:1px solid var(--line)}
+  .hero .card{border-top-color:rgba(255,255,255,.28);padding-top:20px;flex-direction:column;align-items:stretch;gap:16px}
+  .hero .card .free{display:flex;align-items:baseline;gap:14px}
+  .hero .card .free .en{color:rgba(255,255,255,.78);margin:0}
+  .hero .card .free b{font-size:19px;color:#fff}
+  .hero .card .btns{display:grid;grid-template-columns:1fr;gap:14px;justify-items:center}
+  .hero .card .btn{width:100%;padding:18px 24px;font-size:14px}
+  .hero .card .tlink{color:#fff;border-color:rgba(255,255,255,.6);font-size:12.5px}
+  .hero .card .btn.pc{display:none}
+  .hero .card .tlink.sp{display:inline-flex}
+  .hero-below{display:block;padding:30px 0 8px;border-bottom:1px solid var(--line);margin:0 var(--gut)}
+  .hero-below .lead{margin:0;color:var(--ink-2);font-size:13.5px;line-height:2}
+  .hero-below .note{font-size:11.5px;color:var(--mute);line-height:1.9;margin:16px 0 24px;letter-spacing:.04em}
+  .hero-below .note a{color:var(--ink-2)}
+  /* トップのみ：ヘッダーを写真に重ねる */
+  body.home .site-header{position:fixed;left:0;right:0;background:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;transition:background .35s,box-shadow .3s}
+  body.home .site-header:not(.scrolled) .brand .word{color:#fff}
+  body.home .site-header:not(.scrolled) .menu-btn span{background:#fff}
+  body.home .site-header.scrolled,body.home.menu-open .site-header{background:rgba(250,248,243,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  body.home.menu-open .site-header .brand .word{color:var(--ink)}
+  body.home.menu-open .site-header .menu-btn span{background:var(--ink)}
 }
-@media (max-width:860px) and (min-width:481px){.hero .copy{margin-top:-210px}}
+/* スマホ固定CTA（ヒーローを過ぎたら表示） */
+.sticky-cta{display:none}
+@media (max-width:860px){
+  .sticky-cta{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:55;align-items:center;justify-content:space-between;gap:12px;padding:10px var(--gut) calc(10px + env(safe-area-inset-bottom));background:rgba(250,248,243,.94);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-top:1px solid var(--line);transform:translateY(110%);transition:transform .45s var(--ease)}
+  .sticky-cta span{font-family:var(--serif);font-size:14px;letter-spacing:.08em;white-space:nowrap}
+  .sticky-cta .btn{padding:12px 18px;font-size:12.5px;flex:none}
+  body.past-hero .sticky-cta{transform:none}
+  body.past-hero .site-footer{padding-bottom:calc(30px + 64px + env(safe-area-inset-bottom))}
+}
 
 /* ---------- Sections ---------- */
 .section{padding:clamp(72px,9vw,128px) 0}
@@ -176,8 +199,8 @@ b,strong{font-weight:500}
 /* ---------- Trust ---------- */
 .trust{position:relative;color:#fff;padding:clamp(96px,14vw,200px) 0;text-align:center}
 .trust .media{position:absolute;inset:0;overflow:hidden;background:var(--ink)}
-.trust .media img{width:100%;height:100%;object-fit:cover;object-position:center 40%;opacity:.78}
-.trust .media::after{content:"";position:absolute;inset:0;background:rgba(24,20,16,.46)}
+.trust .media img{width:100%;height:100%;object-fit:cover;object-position:center 35%;opacity:.85}
+.trust .media::after{content:"";position:absolute;inset:0;background:rgba(24,20,16,.5)}
 .trust .wrap{position:relative;max-width:800px}
 .trust .en{display:block;color:rgba(255,255,255,.8);margin-bottom:26px}
 .trust h2{font-size:clamp(26px,3.6vw,44px);line-height:1.6;letter-spacing:.14em;font-weight:400}

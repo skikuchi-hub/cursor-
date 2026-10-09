@@ -5,7 +5,11 @@
 
   // ヘッダー：スクロールで背景
   var hdr = document.querySelector('.site-header');
-  function onScroll(){ if (hdr) hdr.classList.toggle('scrolled', window.scrollY > 12); }
+  var hero = document.querySelector('.hero');
+  function onScroll(){
+    if (hdr) hdr.classList.toggle('scrolled', window.scrollY > 12);
+    if (hero) document.body.classList.toggle('past-hero', window.scrollY > hero.offsetHeight - 80);
+  }
   window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
 
   // モバイルメニュー
