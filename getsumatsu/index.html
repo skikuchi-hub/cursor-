@@ -5980,7 +5980,7 @@ function mkChange(key,type,oldP,newP,month,src,note,count,total){
 function ledgerSeen(k,price,m){
   return ledgerOf().changes.some(c=>c.key===k&&Number(c.new)===Number(price)&&(c.status==='pending'||c.status==='rejected'||c.month===m));
 }
-/* 過去1年分の単価の推移（Mac が history.json にまとめたもの）から学習する。
+/* 過去の単価の推移（Mac が history.json にまとめた2年分）から学習する。
    月ごとの代表単価を「同じ単価が続く期間」にまとめ、いまの単価だけを適用開始月つきで提案する */
 /* 明細書由来の確認待ちは、商材×パートナー×トス会社ごとに一番新しい1件だけ残す
    （端末間の合流や月ごとの学習で、古い月の提案が並ぶのを防ぐ） */
@@ -6013,7 +6013,11 @@ function learnFromHistory(rates){
     /* 月ごとの明細書から出した確認待ちは、推移に置き換える */
     lg.changes=lg.changes.filter(c=>!(c.key===k&&c.status==='pending'&&/^statement:/.test(c.src||'')&&c.type!=='conflict'));
     const cur=seg[seg.length-1],prev=seg.length>1?seg[seg.length-2]:null;
-    const note=prev?`${fmtYmJa(prev.from)}〜${fmtYmJa(prev.to)} は ${prev.price.toLocaleString()}円`:'';
+    /* 一度離れた単価にまた戻る＝月によって入れ替わる。プランや区分ごとに単価が違う組み合わせの可能性が高い */
+    const prices=seg.map(x=>x.price);
+    const flip=prices.some((v,i)=>prices.indexOf(v)<i&&prices[i-1]!==v);
+    const note=(flip?'⚠ 月によって単価が入れ替わっています（プランや区分ごとに単価が違う可能性。採用前に明細で確認） ':'')
+      +(prev?`${fmtYmJa(prev.from)}〜${fmtYmJa(prev.to)} は ${prev.price.toLocaleString()}円`:'');
     const rule=lg.rules[k];
     if(!rule){
       const [p0,pa0]=k.split('|');const alt=lg.rules[rateKey(p0,pa0,'')];
@@ -6040,7 +6044,7 @@ function applyHistory(h){
     if(!cur||String(val.m)>=String(cur.m||'')){mem.cases[k]=val;nc++}
   });
   (h.months||[]).forEach(m=>{if(!mem.months.includes(m))mem.months.push(m)});mem.months.sort();
-  /* 請求書のリスト単価（1年分） */
+  /* 請求書のリスト単価（history.json の期間分） */
   if(Array.isArray(h.invoices)&&h.invoices.length){
     const months=new Set(h.invoices.map(x=>x.month));
     mem.invoiceLists=(mem.invoiceLists||[]).filter(x=>!months.has(x.month)).concat(h.invoices);
@@ -6345,7 +6349,7 @@ async function syncNow(opts){
       }
       syncLog(`支払明細書 ${sum.stmt}件を読み込みました（変更点は「ルール台帳」に出ます）`);
     }else syncLog('支払明細書: 新しいものはありません');
-    /* 2b) 過去1年分の単価の推移（Mac が集計した history.json）: 単価の変わり目と案件ごとの単価を学習 */
+    /* 2b) 過去2年分の単価の推移（Mac が集計した history.json）: 単価の変わり目と案件ごとの単価を学習 */
     if(man.history&&man.history.path&&man.history.mtime!==c.historyMtime){
       const hm=man.history.months||[];
       syncLog(`過去${hm.length}ヶ月分（${fmtYmJa(hm[0])||'?'}〜${fmtYmJa(hm[hm.length-1])||'?'}）の単価の推移を取得しています`);
@@ -6353,7 +6357,7 @@ async function syncNow(opts){
       const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const r=applyHistory(h);await saveMemory();
       c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
-      syncLog(`過去1年分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
+      syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
     }
     /* 3) 請求書: 「リスト」シートのアライアンス先×単価を参考として保存 */
     const iv=(man.invoices||[]).filter(x=>c.seen[x.path]!==x.mtime);
@@ -6371,7 +6375,7 @@ async function syncNow(opts){
         }catch(e){sum.errors++;syncLog(`${x.name}: ${e.message}`,'err')}
       }
       /* 直近6ヶ月分だけ残す */
-      const months=[...new Set(mem.invoiceLists.map(r=>r.month))].sort().slice(-13);
+      const months=[...new Set(mem.invoiceLists.map(r=>r.month))].sort().slice(-25);
       mem.invoiceLists=mem.invoiceLists.filter(r=>months.includes(r.month));
       await saveMemory();
       syncLog(`請求書 ${sum.inv}件のリスト単価を取り込みました`);
@@ -6396,7 +6400,7 @@ async function syncNow(opts){
       syncLog(sum.ledger?`台帳: 他の端末の変更 ${sum.ledger}件を反映しました`:'台帳: 他の端末と同じです');
     }catch(e){sum.errors++;syncLog('台帳の共有に失敗: '+e.message,'err')}
     c.lastAt=new Date().toISOString();c.lastError='';
-    c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.hist?'1年分の推移':'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
+    c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.hist?'過去分の推移':'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
     saveSyncCfg(c);
     renderLedgerBadge();if(typeof renderIn==='function')renderIn();
     if(!opts.silent||sum.xrm||sum.stmt)toast('同期しました: '+c.lastSummary+(sum.errors?`（失敗 ${sum.errors}件）`:''));
@@ -6485,11 +6489,13 @@ function renderLedgerRefs(){
       </tbody></table></div></details>`:''}`;
 }
 
-/* 単価の推移（過去1年）を1行の文字に: 「2025年10月〜2026年3月 26,000円 → 2026年4月〜 19,000円」 */
+/* 単価の推移（過去2年）を1行の文字に: 「2025年10月〜2026年3月 26,000円 → 2026年4月〜 19,000円」 */
 function ledgerTimeline(key){
   const seg=((S.memory&&S.memory.ledger&&S.memory.ledger.history)||{})[key];
   if(!seg||seg.length<2)return '';
-  return '推移: '+seg.map((x,i)=>`${fmtYmJa(x.from)}${i===seg.length-1?'〜':'〜'+fmtYmJa(x.to)} ${x.price.toLocaleString()}円`).join(' → ');
+  /* 長くなりすぎないよう直近4区間だけ */
+  const show=seg.slice(-4);
+  return '推移: '+(seg.length>4?'… → ':'')+show.map((x,i)=>{const last=i===show.length-1;const rng=x.from===x.to&&!last?fmtYmJa(x.from):`${fmtYmJa(x.from)}〜${last?'':fmtYmJa(x.to)}`;return `${rng} ${x.price.toLocaleString()}円`}).join(' → ');
 }
 function rateRows(){
   const mem=S.memory||{};
