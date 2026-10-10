@@ -684,6 +684,23 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   .out{grid-template-columns:32px 1fr}
   .out .sz{display:none}
 }
+/* ============ Drive 同期 ============ */
+.boardbtn.busy{border-color:var(--accent);color:var(--accent)}
+.boardbtn.warn{border-color:var(--warn);color:var(--warn)}
+.sync-ov{position:fixed;inset:0;z-index:120;background:rgba(10,20,35,.45);display:flex;align-items:flex-start;justify-content:center;
+  padding:calc(24px + env(safe-area-inset-top,0px)) 16px 24px;overflow-y:auto}
+.sync-ov[hidden]{display:none}
+.sync-box{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-3);width:100%;max-width:520px;padding:22px 22px 18px}
+.sync-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px}
+.sync-head h2{font-size:17px;font-weight:500;margin:0}
+.sync-lbl{display:block;font-size:11px;letter-spacing:.08em;color:var(--txt-3);margin:12px 0 6px}
+.sync-box .rate-new{width:100%;min-width:0}
+.sync-acts{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0 14px}
+.sync-status{margin-bottom:12px}
+.sync-log{max-height:220px;overflow-y:auto;margin-top:0;padding:12px 14px}
+.sync-log:empty{display:none}
+/* 台帳・ボードなどボタンが多い画面のフッターはスマホで固定しない（本文を隠すため） */
+@media(max-width:640px){#scRates .footer-nav,#scBoard .footer-nav,#scTrend .footer-nav,#scRecov .footer-nav{position:static;background:transparent;backdrop-filter:none}}
 </style>
 </head>
 
@@ -705,6 +722,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <div class="logo">月末処理<em>クラウド</em></div>
   <div class="hd-tag" id="hdProd">まとめて処理</div>
   <div class="hd-tools">
+    <button class="boardbtn" id="syncBtn" onclick="openSync()" title="Drive と同期">同期</button>
     <button class="boardbtn" id="boardBtn" onclick="openBoard()">未払いボード</button>
     <button class="boardbtn" id="ratesBtn" onclick="openRates()">ルール台帳</button>
     <button class="boardbtn" id="trendBtn" onclick="openTrend()">収支推移</button>
@@ -957,6 +975,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <tbody></tbody>
     </table>
   </div>
+  <div id="ledgerRefs"></div>
   <div class="footer-nav">
     <button class="btn-ghost" onclick="closeRates()">← 処理画面に戻る</button>
     <span style="display:flex;gap:12px;flex-wrap:wrap">
@@ -1087,6 +1106,23 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 </section>
 
 </main>
+<div class="sync-ov" id="syncOverlay" hidden>
+  <div class="sync-box" role="dialog" aria-modal="true" aria-labelledby="syncTitle">
+    <div class="sync-head"><h2 id="syncTitle">Drive と同期</h2><button class="btn-ghost btn-sm" onclick="closeSync()">閉じる</button></div>
+    <p class="pm-note">Mac がデスクトップの「会計」「単価表」から Google Drive へ拾い上げた XRM・支払明細書・請求書・条件表を取り込み、ルール台帳を端末間で共有します。接続先はこの端末にだけ保存されます。</p>
+    <label class="sync-lbl" for="syncUrl">ウェブアプリの URL</label>
+    <input class="rate-new" id="syncUrl" type="url" inputmode="url" autocomplete="off" placeholder="https://script.google.com/macros/s/…/exec">
+    <label class="sync-lbl" for="syncToken">合言葉</label>
+    <input class="rate-new" id="syncToken" type="password" autocomplete="off" placeholder="Mac の sync/.token の中身">
+    <div class="sync-acts">
+      <button class="btn" id="syncRun" onclick="saveSyncForm(true)">保存して今すぐ同期</button>
+      <button class="btn-ghost btn-sm" onclick="testSync()">接続テスト</button>
+      <button class="btn-ghost btn-sm" onclick="forgetSync()">この端末の設定を消す</button>
+    </div>
+    <div class="diag sync-status" id="syncStatus" style="display:block"></div>
+    <div class="prog on sync-log" id="syncLog"></div>
+  </div>
+</div>
 <div class="toast" id="toast"></div>
 
 <script>
@@ -2332,8 +2368,10 @@ const MODULES = {
 const XRM_KEY='getsumatsu_xrm';
 async function saveXrmFile(buf,name){
   try{
+    /* IndexedDB ならバイト列のまま保存（数値の配列にすると 33MB の XRM が数百MBに膨らむ） */
+    const bytes=new Uint8Array(buf);
     const ok=await Store.set(XRM_KEY,{name,savedAt:new Date().toISOString(),
-      data:Array.from(new Uint8Array(buf))});
+      data:IDB.ok()?bytes:Array.from(bytes)});
     return ok;
   }catch(e){console.error('xrm save',e);return false}
 }
@@ -5925,7 +5963,8 @@ function ledgerSet(key,price,src,from,note){
   const lg=ledgerOf();
   const cur=lg.rules[key];
   const hist=cur?(cur.hist||[]).concat([{price:cur.price,from:cur.from,src:cur.src,until:from}]).slice(-12):[];
-  lg.rules[key]={price:Number(price),from:from||'000000',src,status:'confirmed',note:note||(cur&&cur.note)||'',cond:(cur&&cur.cond)||'',hist};
+  lg.rules[key]={price:Number(price),from:from||'000000',src,status:'confirmed',note:note||(cur&&cur.note)||'',cond:(cur&&cur.cond)||'',hist,at:Date.now()};
+  if(typeof syncLedgerSoon==='function')syncLedgerSoon();
   return lg.rules[key];
 }
 function partnerFromFileName(name){
@@ -5982,14 +6021,14 @@ async function ledgerDecide(id,accept){
     c.status='accepted';
   }else c.status='rejected';
   c.decidedAt=new Date().toISOString();
-  await saveMemory();renderRates();renderLedgerBadge();
+  await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
   const [p,pa,t]=c.key.split('|');
   toast(accept?`${p} / ${pa} / ${t} を ${yen(Number(c.new))} で台帳に反映しました`:'却下しました（同じ内容は次回以降も出しません）');
 }
 async function ledgerDecideAll(accept){
   const lg=ledgerOf();const ids=lg.changes.filter(c=>c.status==='pending').map(c=>c.id);
   for(const id of ids){const c=lg.changes.find(x=>x.id===id);if(accept){ledgerSet(c.key,c.new,c.src,c.month||thisYm(),c.note);const slot=S.memory.rates[c.key]||(S.memory.rates[c.key]={v:{},m:''});slot.fixed=Number(c.new);c.status='accepted'}else c.status='rejected';c.decidedAt=new Date().toISOString()}
-  await saveMemory();renderRates();renderLedgerBadge();
+  await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
   toast(`${ids.length}件を${accept?'採用':'却下'}しました`);
 }
 function renderLedgerChanges(){
@@ -6074,6 +6113,286 @@ function importLedger(file){
   rd.readAsText(file);
 }
 
+/* =========================================================
+   Drive 同期（Apps Script ウェブアプリ経由）
+   Mac の同期スクリプトがデスクトップの会計・単価表フォルダから Google Drive へ拾い上げたものを、
+   アプリを開いたときに取り込む。XRM・支払明細書・請求書のリスト単価・条件表・ルール台帳。
+   接続先 URL と合言葉は端末ごとに入力して localStorage に置く（公開リポジトリには置かない）。
+========================================================= */
+const SYNC_KEY='getsumatsu_sync';
+const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
+let SYNC_BUSY=false,_syncPushTimer=null;
+function syncCfg(){try{return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}')||{}}catch(e){return {}}}
+function saveSyncCfg(c){try{localStorage.setItem(SYNC_KEY,JSON.stringify(c))}catch(e){}}
+function syncReady(c){c=c||syncCfg();return !!(c.url&&c.token)}
+function b64ToBytes(b64){const s=atob(b64);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+async function syncGet(params){
+  const c=syncCfg();
+  const u=new URL(c.url);
+  u.searchParams.set('token',c.token);
+  Object.entries(params||{}).forEach(([k,v])=>u.searchParams.set(k,String(v)));
+  const r=await fetch(u.toString(),{redirect:'follow',cache:'no-store'});
+  if(!r.ok)throw new Error('通信エラー（HTTP '+r.status+'）');
+  let j;try{j=await r.json()}catch(e){throw new Error('応答を読めませんでした。URL が「ウェブアプリ」のものか確認してください')}
+  if(j&&j.error)throw new Error(j.error==='unauthorized'?'合言葉が違います':j.error);
+  return j;
+}
+async function syncPost(body){
+  const c=syncCfg();
+  /* text/plain にすると事前確認（CORS プリフライト）が起きず、Apps Script でも受けられる */
+  const r=await fetch(c.url,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify(Object.assign({token:c.token},body)),redirect:'follow'});
+  const j=await r.json().catch(()=>({error:'応答を読めませんでした'}));
+  if(j&&j.error)throw new Error(j.error==='unauthorized'?'合言葉が違います':j.error);
+  return j;
+}
+/* 大きいファイルは 6MB ずつ分割で届くのでつなぎ直す */
+async function syncFile(path,onPart){
+  let part=0,parts=1,size=0,name='';const chunks=[];
+  do{
+    const j=await syncGet({action:'file',path,part});
+    parts=j.parts||1;size=j.size||0;name=j.name||path.split('/').pop();
+    chunks.push(b64ToBytes(j.data||''));
+    part++;if(onPart)onPart(part,parts);
+  }while(part<parts);
+  const total=chunks.reduce((a,c)=>a+c.length,0);
+  if(size&&total!==size)throw new Error(`${name} のサイズが合いません（${total}/${size}）`);
+  const buf=new Uint8Array(total);let off=0;chunks.forEach(c=>{buf.set(c,off);off+=c.length});
+  return {name,buf:buf.buffer};
+}
+function syncLog(msg,cls){
+  const el=document.getElementById('syncLog');
+  if(el){const d=document.createElement('div');d.className='prog-line '+(cls||'');
+    d.innerHTML=`<span class="tick">${cls==='err'?'✕':'✓'}</span>${esc(msg)}`;el.appendChild(d);el.scrollTop=el.scrollHeight}
+}
+function syncSetBusy(on,label){
+  SYNC_BUSY=on;
+  const b=document.getElementById('syncBtn');
+  if(b){b.classList.toggle('busy',on);b.textContent=on?(label||'同期中…'):'同期'}
+  const run=document.getElementById('syncRun');if(run)run.disabled=on;
+}
+/* 請求書の「リスト」シート（リスト取引日・アライアンス先・件数・単価・金額）を読む */
+function invoicePartner(name){const m=String(name||'').match(/【\s*(.+?)\s*御中\s*】/);return m?m[1].trim():''}
+function readInvoiceLists(wb,fileName){
+  const out=[];const partner=invoicePartner(fileName);const month=monthFromName(fileName);
+  if(!partner)return out;
+  const sn=wb.SheetNames.find(s=>/リスト/.test(s));if(!sn)return out;
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});
+  let hi=-1;for(let i=0;i<Math.min(rows.length,6);i++){if(findCol(rows[i]||[],['アライアンス先'])>=0&&findCol(rows[i]||[],['単価'])>=0){hi=i;break}}
+  if(hi<0)return out;
+  const h=rows[hi],cL=findCol(h,['アライアンス先']),cN=findCol(h,['件数']),cP=findCol(h,['単価']),cA=findCol(h,['金額']),cD=findCol(h,['取引日','日付']);
+  for(let i=hi+1;i<rows.length;i++){
+    const r=rows[i];if(!r)continue;
+    const label=clean(r[cL]);const price=Number(r[cP]);
+    if(!label||!(price>0))continue;
+    const d=cD>=0?parseDate(r[cD]):null;
+    out.push({partner,month,label,count:cN>=0?Number(r[cN])||0:0,price,amount:cA>=0?Number(r[cA])||0:0,date:d?fmtDate(d):''});
+  }
+  return out;
+}
+/* 台帳を端末間で共有: ルールは新しい方、確認待ちは同じ内容なら1つにまとめ、判断済みを優先 */
+function mergeLedger(remote){
+  if(!remote||!remote.rules)return 0;
+  const lg=ledgerOf();let n=0;
+  Object.entries(remote.rules).forEach(([k,r])=>{
+    const cur=lg.rules[k];
+    if(!cur){lg.rules[k]=r;n++;return}
+    if((r.at||0)>(cur.at||0)&&JSON.stringify(cur)!==JSON.stringify(r)){lg.rules[k]=r;n++}
+  });
+  const same=(a,b)=>a.id===b.id||(a.key===b.key&&Number(a.new)===Number(b.new)&&(a.month||'')===(b.month||''));
+  (remote.changes||[]).forEach(c=>{
+    const cur=lg.changes.find(x=>same(x,c));
+    if(!cur){lg.changes.push(c);n++;return}
+    if(cur.status==='pending'&&c.status!=='pending'){Object.assign(cur,{status:c.status,decidedAt:c.decidedAt});n++}
+  });
+  if(remote.seed&&!lg.seed)lg.seed=remote.seed;
+  return n;
+}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes}}
+/* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
+function syncLedgerSoon(){
+  if(!syncReady())return;
+  clearTimeout(_syncPushTimer);
+  _syncPushTimer=setTimeout(async()=>{
+    try{await syncPost({action:'ledger',ledger:ledgerPayload()});
+      const c=syncCfg();c.ledgerPushedAt=new Date().toISOString();saveSyncCfg(c);renderSyncPanel()}
+    catch(e){console.warn('ledger push',e)}
+  },2500);
+}
+async function syncNow(opts){
+  opts=opts||{};
+  if(SYNC_BUSY)return;
+  const c=syncCfg();
+  if(!syncReady(c)){if(!opts.silent)openSync();return}
+  syncSetBusy(true);
+  const lg=document.getElementById('syncLog');if(lg)lg.innerHTML='';
+  const sum={xrm:'',stmt:0,inv:0,cond:'',ledger:0,errors:0};
+  try{
+    syncLog('Drive の一覧を確認しています');
+    const man=await syncGet({action:'manifest'});
+    c.manifestAt=man.generatedAt||'';
+    /* 1) XRM: 新しい版があれば取り込む */
+    if(man.xrm&&man.xrm.path&&(man.xrm.stamp!==c.xrmStamp||!S.xrmWb||S.xrmStub)){
+      syncLog(`XRM を取得しています（${man.xrm.name}・${Math.round((man.xrm.size||0)/1048576)}MB）`);
+      const f=await syncFile(man.xrm.path,(p,n)=>syncSetBusy(true,`XRM ${p}/${n}`));
+      syncSetBusy(true,'XRM 読み込み中');
+      await new Promise(r=>setTimeout(r,30));
+      const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});
+      applyXrmWb(wb,f.buf,f.name);
+      c.xrmStamp=man.xrm.stamp;sum.xrm=man.xrm.name;
+      syncLog(`XRM を更新しました（${f.name}）`);
+    }else if(man.xrm){syncLog(`XRM は最新です（${man.xrm.name}）`)}
+    c.seen=c.seen||{};
+    /* 2) 支払明細書: まだ読んでいないものを古い月から順に読み、単価とルールを学習 */
+    const st=(man.statements||[]).filter(x=>c.seen[x.path]!==x.mtime).sort((a,b)=>String(a.month).localeCompare(String(b.month)));
+    if(st.length){
+      syncLog(`支払明細書 ${st.length}件を取得しています`);
+      const files=[];let i=0;
+      for(const x of st){
+        i++;syncSetBusy(true,`明細書 ${i}/${st.length}`);
+        try{const f=await syncFile(x.path);files.push({file:new File([f.buf],f.name),x})}
+        catch(e){sum.errors++;syncLog(`${x.name}: ${e.message}`,'err')}
+      }
+      /* 月ごとにまとめて読む（loadPayFiles は1回分を学習して終わる） */
+      const byMonth={};files.forEach(o=>{(byMonth[o.x.month]=byMonth[o.x.month]||[]).push(o)});
+      for(const m of Object.keys(byMonth).sort()){
+        syncSetBusy(true,`学習 ${fmtYmJa(m)||m}`);
+        await new Promise(res=>loadPayFiles(byMonth[m].map(o=>o.file),res));
+        byMonth[m].forEach(o=>{c.seen[o.x.path]=o.x.mtime});
+        sum.stmt+=byMonth[m].length;saveSyncCfg(c);
+      }
+      syncLog(`支払明細書 ${sum.stmt}件を読み込みました（変更点は「ルール台帳」に出ます）`);
+    }else syncLog('支払明細書: 新しいものはありません');
+    /* 3) 請求書: 「リスト」シートのアライアンス先×単価を参考として保存 */
+    const iv=(man.invoices||[]).filter(x=>c.seen[x.path]!==x.mtime);
+    if(iv.length){
+      const mem=S.memory||(S.memory=emptyMem());mem.invoiceLists=mem.invoiceLists||[];
+      for(const x of iv){
+        try{
+          const f=await syncFile(x.path);
+          const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});
+          const rows=readInvoiceLists(wb,f.name);
+          if(rows.length){
+            mem.invoiceLists=mem.invoiceLists.filter(r=>!(r.partner===rows[0].partner&&r.month===rows[0].month)).concat(rows);
+          }
+          c.seen[x.path]=x.mtime;sum.inv++;
+        }catch(e){sum.errors++;syncLog(`${x.name}: ${e.message}`,'err')}
+      }
+      /* 直近6ヶ月分だけ残す */
+      const months=[...new Set(mem.invoiceLists.map(r=>r.month))].sort().slice(-6);
+      mem.invoiceLists=mem.invoiceLists.filter(r=>months.includes(r.month));
+      await saveMemory();
+      syncLog(`請求書 ${sum.inv}件のリスト単価を取り込みました`);
+    }
+    /* 4) 条件表: 単価表フォルダから抜き出した単価を参考表示用に保存 */
+    if(man.conditions&&man.conditions.path&&man.conditions.mtime!==c.condMtime){
+      const f=await syncFile(man.conditions.path);
+      const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+      const mem=S.memory||(S.memory=emptyMem());
+      mem.conditions={at:j.generatedAt||'',items:(j.items||[]).map(x=>({partner:x.partner,product:x.product,month:x.month,title:x.title,issued:x.issued||'',items:x.items||[],file:x.file||''}))};
+      await saveMemory();
+      c.condMtime=man.conditions.mtime;sum.cond=`${(j.items||[]).length}件`;
+      syncLog(`条件表 ${(j.items||[]).length}件を取り込みました（単価が読めたもの ${(j.items||[]).filter(x=>x.items&&x.items.length).length}件）`);
+    }
+    /* 5) ルール台帳: Drive の台帳とまとめて、結果を送り返す */
+    try{
+      const remote=await syncGet({action:'ledger'});
+      sum.ledger=mergeLedger(remote);
+      if(sum.ledger)await saveMemory();
+      await syncPost({action:'ledger',ledger:ledgerPayload()});
+      c.ledgerPushedAt=new Date().toISOString();
+      syncLog(sum.ledger?`台帳: 他の端末の変更 ${sum.ledger}件を反映しました`:'台帳: 他の端末と同じです');
+    }catch(e){sum.errors++;syncLog('台帳の共有に失敗: '+e.message,'err')}
+    c.lastAt=new Date().toISOString();c.lastError='';
+    c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
+    saveSyncCfg(c);
+    renderLedgerBadge();if(typeof renderIn==='function')renderIn();
+    if(!opts.silent||sum.xrm||sum.stmt)toast('同期しました: '+c.lastSummary+(sum.errors?`（失敗 ${sum.errors}件）`:''));
+  }catch(e){
+    c.lastError=e.message;saveSyncCfg(c);
+    syncLog(e.message,'err');
+    if(!opts.silent)toast('同期できませんでした: '+e.message);
+  }finally{
+    syncSetBusy(false);renderSyncPanel();
+  }
+}
+/* ---- 設定パネル ---- */
+function openSync(){
+  const ov=document.getElementById('syncOverlay');if(!ov)return;
+  const c=syncCfg();
+  document.getElementById('syncUrl').value=c.url||'';
+  document.getElementById('syncToken').value=c.token||'';
+  ov.hidden=false;renderSyncPanel();
+}
+function closeSync(){const ov=document.getElementById('syncOverlay');if(ov)ov.hidden=true}
+function saveSyncForm(run){
+  const c=syncCfg();
+  let url=(document.getElementById('syncUrl').value||'').trim();
+  const token=(document.getElementById('syncToken').value||'').trim();
+  if(url&&!/^https:\/\/script\.google(usercontent)?\.com\//.test(url)){toast('URL は https://script.google.com/macros/s/…/exec の形です');return}
+  c.url=url;c.token=token;saveSyncCfg(c);renderSyncPanel();
+  if(run&&syncReady(c))syncNow();
+  else toast(syncReady(c)?'接続先を保存しました':'URL と合言葉の両方を入れてください');
+}
+function forgetSync(){
+  try{localStorage.removeItem(SYNC_KEY)}catch(e){}
+  document.getElementById('syncUrl').value='';document.getElementById('syncToken').value='';
+  renderSyncPanel();toast('この端末の同期設定を消しました（Drive のデータはそのままです）');
+}
+async function testSync(){
+  if(!syncReady()){saveSyncForm(false);if(!syncReady())return}
+  try{const j=await syncGet({action:'ping'});toast(j&&j.ok?'つながりました（'+(j.folder||'data')+'）':'応答が想定と違います')}
+  catch(e){toast('つながりません: '+e.message)}
+}
+function fmtWhen(iso){if(!iso)return '—';const d=new Date(iso);if(isNaN(d))return iso;const p=n=>String(n).padStart(2,'0');return `${d.getMonth()+1}/${d.getDate()} ${p(d.getHours())}:${p(d.getMinutes())}`}
+function renderSyncPanel(){
+  const el=document.getElementById('syncStatus');if(!el)return;
+  const c=syncCfg();const mem=S.memory||{};
+  const seen=Object.keys(c.seen||{}).length;
+  const rows=[
+    ['接続', syncReady(c)?'<span class="badge b-ok">設定済み</span>':'<span class="badge b-warn">未設定</span>'],
+    ['最終同期', esc(fmtWhen(c.lastAt))+(c.lastSummary?`　${esc(c.lastSummary)}`:'')],
+    ['XRM', esc(S.xrmName||'—')+(c.xrmStamp?`（Drive ${esc(c.xrmStamp.slice(0,8))}）`:'')],
+    ['取り込み済み', `${seen}ファイル`],
+    ['条件表', mem.conditions?`${(mem.conditions.items||[]).length}件`:'—'],
+    ['台帳の共有', esc(fmtWhen(c.ledgerPushedAt))],
+  ];
+  if(c.lastError)rows.push(['前回のエラー',`<span style="color:var(--alert)">${esc(c.lastError)}</span>`]);
+  el.innerHTML=rows.map(([k,v])=>`<div class="diag-r"><span>${k}</span><b>${v}</b></div>`).join('');
+  const b=document.getElementById('syncBtn');
+  if(b&&!SYNC_BUSY){b.classList.toggle('warn',!!c.lastError);b.title=c.lastAt?'最終同期 '+fmtWhen(c.lastAt):'Drive と同期'}
+}
+/* 起動時: 設定済みで、前回から時間がたっていれば裏で同期 */
+function syncAuto(){
+  const c=syncCfg();if(!syncReady(c))return;
+  renderSyncPanel();
+  const last=c.lastAt?new Date(c.lastAt).getTime():0;
+  if(Date.now()-last>SYNC_STALE_MS||!S.xrmWb)syncNow({silent:true});
+}
+/* ---- ルール台帳画面の参考表示（条件表・請求書のリスト単価） ---- */
+function renderLedgerRefs(){
+  const host=document.getElementById('ledgerRefs');if(!host)return;
+  const mem=S.memory||{};const q=(S.rateFilter||'').trim();
+  const conds=((mem.conditions&&mem.conditions.items)||[]).filter(x=>x.items&&x.items.length);
+  /* 同じパートナー×商材は最新月だけ */
+  const latest={};conds.forEach(x=>{const k=x.partner+'|'+x.product;if(!latest[k]||String(x.month)>String(latest[k].month))latest[k]=x});
+  let cl=Object.values(latest).sort((a,b)=>a.partner.localeCompare(b.partner)||a.product.localeCompare(b.product));
+  if(q)cl=cl.filter(x=>[x.partner,x.product,x.title].join(' ').includes(q)||x.items.some(i=>i.label.includes(q)));
+  const inv=(mem.invoiceLists||[]).filter(r=>!q||[r.partner,r.label].join(' ').includes(q));
+  const invMonth=[...new Set(inv.map(r=>r.month))].sort().pop();
+  const invRows=inv.filter(r=>r.month===invMonth).sort((a,b)=>a.partner.localeCompare(b.partner)||b.amount-a.amount);
+  if(!cl.length&&!invRows.length){host.innerHTML='';return}
+  host.innerHTML=`
+    ${cl.length?`<details class="adv" style="margin-top:18px"><summary><span>条件表の単価（参考）</span><span class="adv-sub">単価表フォルダの条件表 ${cl.length}件・パートナー×商材ごとに最新月</span></summary>
+      <div class="tbl-wrap" style="margin:0 14px 14px"><table><thead><tr><th>パートナー</th><th>商材</th><th>月</th><th>項目</th><th class="amt">単価</th></tr></thead><tbody>
+      ${cl.slice(0,300).map(x=>x.items.map((it,i)=>`<tr>${i===0?`<td data-label="パートナー" rowspan="${x.items.length}">${esc(x.partner)}</td><td data-label="商材" rowspan="${x.items.length}">${esc(x.product)}</td><td data-label="月" rowspan="${x.items.length}">${esc(fmtYmJa(x.month)||x.month)}</td>`:''}<td data-label="項目">${esc(it.label)}</td><td data-label="単価" class="amt">${Number(it.amount).toLocaleString()}円</td></tr>`).join('')).join('')}
+      </tbody></table></div></details>`:''}
+    ${invRows.length?`<details class="adv"><summary><span>請求書のリスト単価（参考）</span><span class="adv-sub">${esc(fmtYmJa(invMonth)||invMonth)}・${invRows.length}行</span></summary>
+      <div class="tbl-wrap" style="margin:0 14px 14px"><table><thead><tr><th>請求先</th><th>アライアンス先</th><th class="amt">件数</th><th class="amt">単価</th><th class="amt">金額</th></tr></thead><tbody>
+      ${invRows.map(r=>`<tr><td data-label="請求先">${esc(r.partner)}</td><td data-label="アライアンス先">${esc(r.label)}</td><td data-label="件数" class="amt">${r.count.toLocaleString()}</td><td data-label="単価" class="amt">${r.price.toLocaleString()}円</td><td data-label="金額" class="amt">${r.amount.toLocaleString()}円</td></tr>`).join('')}
+      </tbody></table></div></details>`:''}`;
+}
+
 function rateRows(){
   const mem=S.memory||{};
   const rules=mem.rates||{};
@@ -6143,6 +6462,7 @@ function closeRates(){go(S.ratesReturn||S.maxStep||1)}
 function setRateFilter(v){S.rateFilter=v;renderRates()}
 function renderRates(){
   renderLedgerChanges();
+  renderLedgerRefs();
   const all=rateRows();
   const q=(S.rateFilter||'').trim();
   const rows=q?all.filter(r=>[r.product,r.partner,r.toss,r.note||''].join(' ').includes(q)):all;
@@ -6629,6 +6949,8 @@ renderProdGrid();
   /* ルール台帳: 記憶を読み、スキル由来の初期値（rules.json）を取り込む */
   try{await loadMemory();await applyRulesSeed();}catch(e){console.error('ledger seed',e)}
   renderLedgerBadge();
+  /* Drive 同期（設定済みの端末だけ） */
+  try{syncAuto()}catch(e){console.error('sync',e)}
 })();
 function selectProd(key){
   S.prod=key;pushRecent(key);
