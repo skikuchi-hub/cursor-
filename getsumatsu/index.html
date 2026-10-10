@@ -2854,6 +2854,9 @@ function ingestXrm(wb,fileName){
 /* タブ名を商材キーに正規化（戻入・拠点違いを同一商材にまとめる） */
 function normProduct(sheetName){
   let s=String(sheetName||'').trim();
+  /* 2024年頃の明細はシート名の頭に月が付く（4LPM・12345DHモバイル・2310~Dot.A）。外して同じ商材にまとめる
+     （「8月末修正分」や「10G」のような意味のある数字は残す） */
+  s=s.replace(/^\d+~?(?=[^\d月年件円GgＧ~])/,'');
   const isStock=/ストック/.test(s),isSaki=/先出/.test(s);
   s=s.replace(/戻入|請求戻し|誤請求|OP明細|歩合|ET/g,'');
   s=s.replace(/[（(].*?[)）]/g,'');
