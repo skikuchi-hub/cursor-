@@ -5976,6 +5976,77 @@ function mkChange(key,type,oldP,newP,month,src,note,count,total){
     src,note:note||'',count:count||0,total:total||0,at:new Date().toISOString(),status:'pending'};
 }
 /* 明細の行（product/partner/toss/amount/month）から月ごとの代表単価を取り、台帳と比較して変更点を積む */
+/* 同じ内容の変更点をもう出さない: 確認待ち・却下済み（「同じ内容は次回以降も出しません」）・同じ月で採用済み */
+function ledgerSeen(k,price,m){
+  return ledgerOf().changes.some(c=>c.key===k&&Number(c.new)===Number(price)&&(c.status==='pending'||c.status==='rejected'||c.month===m));
+}
+/* 過去1年分の単価の推移（Mac が history.json にまとめたもの）から学習する。
+   月ごとの代表単価を「同じ単価が続く期間」にまとめ、いまの単価だけを適用開始月つきで提案する */
+/* 明細書由来の確認待ちは、商材×パートナー×トス会社ごとに一番新しい1件だけ残す
+   （端末間の合流や月ごとの学習で、古い月の提案が並ぶのを防ぐ） */
+function normalizePending(){
+  const lg=ledgerOf();const best={};
+  const mon=c=>String(c.src||'').replace(/^statement:/,'')+'|'+(c.month||'');
+  lg.changes.forEach(c=>{
+    if(c.status!=='pending'||!/^statement:/.test(c.src||'')||c.type==='conflict')return;
+    if(!best[c.key]||mon(c)>mon(best[c.key]))best[c.key]=c;
+  });
+  const before=lg.changes.length;
+  lg.changes=lg.changes.filter(c=>c.status!=='pending'||!/^statement:/.test(c.src||'')||c.type==='conflict'||best[c.key]===c);
+  return before-lg.changes.length;
+}
+function learnFromHistory(rates){
+  const lg=ledgerOf();lg.history=lg.history||{};
+  let n=0,keys=0;
+  Object.entries(rates||{}).forEach(([k,byM])=>{
+    const seg=[];
+    Object.keys(byM).sort().forEach(m=>{
+      const ent=Object.entries(byM[m]).sort((a,b)=>b[1]-a[1]);if(!ent.length)return;
+      const top=Number(ent[0][0]),cnt=ent[0][1],total=ent.reduce((a,[,c])=>a+c,0);
+      if(cnt/total<0.6)return;                     /* 単価がばらける月はルール化しない（learnLedger と同じ） */
+      const last=seg[seg.length-1];
+      if(last&&last.price===top){last.to=m;last.cnt+=cnt;last.total+=total}
+      else seg.push({price:top,from:m,to:m,cnt,total});
+    });
+    if(!seg.length)return;
+    keys++;lg.history[k]=seg;
+    /* 月ごとの明細書から出した確認待ちは、推移に置き換える */
+    lg.changes=lg.changes.filter(c=>!(c.key===k&&c.status==='pending'&&/^statement:/.test(c.src||'')&&c.type!=='conflict'));
+    const cur=seg[seg.length-1],prev=seg.length>1?seg[seg.length-2]:null;
+    const note=prev?`${fmtYmJa(prev.from)}〜${fmtYmJa(prev.to)} は ${prev.price.toLocaleString()}円`:'';
+    const rule=lg.rules[k];
+    if(!rule){
+      const [p0,pa0]=k.split('|');const alt=lg.rules[rateKey(p0,pa0,'')];
+      if(alt&&Number(alt.price)===cur.price)return;
+      if(!ledgerSeen(k,cur.price,cur.from)){lg.changes.push(mkChange(k,'new',null,cur.price,cur.from,'statement:'+cur.to,note,cur.cnt,cur.total));n++}
+      return;
+    }
+    if(rule.status!=='confirmed')return;
+    if(Number(rule.price)===cur.price){rule.lastSeen=cur.to;return}
+    if(rule.from&&cur.to<rule.from)return;         /* 台帳の適用開始より前の実績なら変更扱いにしない */
+    if(!ledgerSeen(k,cur.price,cur.from)){lg.changes.push(mkChange(k,'changed',rule.price,cur.price,cur.from,'statement:'+cur.to,note,cur.cnt,cur.total));n++}
+  });
+  normalizePending();
+  return {keys,changes:n};
+}
+function applyHistory(h){
+  const mem=S.memory||(S.memory=emptyMem());
+  const r=learnFromHistory(h.rates);
+  /* 案件ごとの単価（前月踏襲・戻入の単価引きに使う）: 新しい月が勝つ */
+  mem.cases=mem.cases||{};let nc=0;
+  const prods=h.products||[];
+  Object.entries(h.cases||{}).forEach(([k,v])=>{
+    const cur=mem.cases[k];const val={a:v[0],m:v[1],p:prods[v[2]]||''};
+    if(!cur||String(val.m)>=String(cur.m||'')){mem.cases[k]=val;nc++}
+  });
+  (h.months||[]).forEach(m=>{if(!mem.months.includes(m))mem.months.push(m)});mem.months.sort();
+  /* 請求書のリスト単価（1年分） */
+  if(Array.isArray(h.invoices)&&h.invoices.length){
+    const months=new Set(h.invoices.map(x=>x.month));
+    mem.invoiceLists=(mem.invoiceLists||[]).filter(x=>!months.has(x.month)).concat(h.invoices);
+  }
+  return Object.assign(r,{cases:nc});
+}
 function learnLedger(entries){
   const lg=ledgerOf();
   const obs={};
@@ -5989,8 +6060,7 @@ function learnLedger(entries){
     d[amt]=(d[amt]||0)+1;
   });
   let n=0;
-  const seen=(k,price,m)=>lg.changes.some(c=>c.key===k&&Number(c.new)===Number(price)&&c.month===m&&c.status!=='rejected')
-                        ||lg.changes.some(c=>c.key===k&&Number(c.new)===Number(price)&&c.status==='pending');
+  const seen=(k,price,m)=>ledgerSeen(k,price,m);
   Object.entries(obs).forEach(([k,byM])=>{
     Object.entries(byM).sort().forEach(([m,dist])=>{
       const ent=Object.entries(dist).sort((a,b)=>b[1]-a[1]);
@@ -6010,6 +6080,7 @@ function learnLedger(entries){
       if(!seen(k,top,m)){lg.changes.push(mkChange(k,'changed',rule.price,top,m,'statement:'+m,'',cnt,total));n++}
     });
   });
+  normalizePending();
   return n;
 }
 async function ledgerDecide(id,accept){
@@ -6041,7 +6112,7 @@ function renderLedgerChanges(){
   const row=c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-row">
       <div class="pat-l"><div class="pat-label">${typeLabel[c.type]||''} ${esc(p)} / ${esc(pa)} / ${esc(t)}</div>
         <div class="pat-sub">${c.old!=null?`${Number(c.old).toLocaleString()}円 → `:''}<b>${Number(c.new).toLocaleString()}円</b>
-          ${c.month?`　${fmtYmJa(c.month)}の明細`:''}${c.total?`（${c.count}/${c.total}件）`:''}　出典: ${esc(ledgerSrcLabel(c.src))}${c.note?`　${esc(c.note)}`:''}</div></div>
+          ${c.month?`　${fmtYmJa(c.month)}${(()=>{const sm=String(c.src||'').replace(/^statement:/,'');return /^\d{6}$/.test(sm)&&sm!==c.month?'〜'+fmtYmJa(sm):''})()}の明細`:''}${c.total?`（${c.count}/${c.total}件）`:''}　出典: ${esc(ledgerSrcLabel(c.src))}${c.note?`　${esc(c.note)}`:''}</div></div>
       <div class="pat-r"><button class="btn btn-sm" onclick="ledgerDecide('${c.id}',true)">採用</button>
         <button class="btn-ghost btn-sm" onclick="ledgerDecide('${c.id}',false)">却下</button></div></div>`};
   host.innerHTML=`<div class="patbox">
@@ -6122,6 +6193,9 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null;
+/* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
+   先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
+let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
 function syncCfg(){try{return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}')||{}}catch(e){return {}}}
 function saveSyncCfg(c){try{localStorage.setItem(SYNC_KEY,JSON.stringify(c))}catch(e){}}
 function syncReady(c){c=c||syncCfg();return !!(c.url&&c.token)}
@@ -6206,6 +6280,7 @@ function mergeLedger(remote){
     if(cur.status==='pending'&&c.status!=='pending'){Object.assign(cur,{status:c.status,decidedAt:c.decidedAt});n++}
   });
   if(remote.seed&&!lg.seed)lg.seed=remote.seed;
+  normalizePending();
   return n;
 }
 function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes}}
@@ -6222,11 +6297,18 @@ function syncLedgerSoon(){
 async function syncNow(opts){
   opts=opts||{};
   if(SYNC_BUSY)return;
+  if(!syncReady()){if(!opts.silent)openSync();return}
+  syncSetBusy(true,'準備中…');
+  const ready=await Promise.race([MEM_READY.then(()=>true),new Promise(r=>setTimeout(()=>r(false),20000))]);
+  if(!ready){
+    syncSetBusy(false);
+    if(!opts.silent)toast('保存データの読み込みが終わらないため同期を中止しました。ページを開き直してください');
+    return;
+  }
   const c=syncCfg();
-  if(!syncReady(c)){if(!opts.silent)openSync();return}
   syncSetBusy(true);
   const lg=document.getElementById('syncLog');if(lg)lg.innerHTML='';
-  const sum={xrm:'',stmt:0,inv:0,cond:'',ledger:0,errors:0};
+  const sum={xrm:'',stmt:0,hist:0,inv:0,cond:'',ledger:0,errors:0};
   try{
     syncLog('Drive の一覧を確認しています');
     const man=await syncGet({action:'manifest'});
@@ -6263,6 +6345,16 @@ async function syncNow(opts){
       }
       syncLog(`支払明細書 ${sum.stmt}件を読み込みました（変更点は「ルール台帳」に出ます）`);
     }else syncLog('支払明細書: 新しいものはありません');
+    /* 2b) 過去1年分の単価の推移（Mac が集計した history.json）: 単価の変わり目と案件ごとの単価を学習 */
+    if(man.history&&man.history.path&&man.history.mtime!==c.historyMtime){
+      const hm=man.history.months||[];
+      syncLog(`過去${hm.length}ヶ月分（${fmtYmJa(hm[0])||'?'}〜${fmtYmJa(hm[hm.length-1])||'?'}）の単価の推移を取得しています`);
+      const f=await syncFile(man.history.path,(p,n)=>syncSetBusy(true,`推移 ${p}/${n}`));
+      const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+      const r=applyHistory(h);await saveMemory();
+      c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
+      syncLog(`過去1年分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
+    }
     /* 3) 請求書: 「リスト」シートのアライアンス先×単価を参考として保存 */
     const iv=(man.invoices||[]).filter(x=>c.seen[x.path]!==x.mtime);
     if(iv.length){
@@ -6279,7 +6371,7 @@ async function syncNow(opts){
         }catch(e){sum.errors++;syncLog(`${x.name}: ${e.message}`,'err')}
       }
       /* 直近6ヶ月分だけ残す */
-      const months=[...new Set(mem.invoiceLists.map(r=>r.month))].sort().slice(-6);
+      const months=[...new Set(mem.invoiceLists.map(r=>r.month))].sort().slice(-13);
       mem.invoiceLists=mem.invoiceLists.filter(r=>months.includes(r.month));
       await saveMemory();
       syncLog(`請求書 ${sum.inv}件のリスト単価を取り込みました`);
@@ -6304,7 +6396,7 @@ async function syncNow(opts){
       syncLog(sum.ledger?`台帳: 他の端末の変更 ${sum.ledger}件を反映しました`:'台帳: 他の端末と同じです');
     }catch(e){sum.errors++;syncLog('台帳の共有に失敗: '+e.message,'err')}
     c.lastAt=new Date().toISOString();c.lastError='';
-    c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
+    c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.hist?'1年分の推移':'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
     saveSyncCfg(c);
     renderLedgerBadge();if(typeof renderIn==='function')renderIn();
     if(!opts.silent||sum.xrm||sum.stmt)toast('同期しました: '+c.lastSummary+(sum.errors?`（失敗 ${sum.errors}件）`:''));
@@ -6393,6 +6485,12 @@ function renderLedgerRefs(){
       </tbody></table></div></details>`:''}`;
 }
 
+/* 単価の推移（過去1年）を1行の文字に: 「2025年10月〜2026年3月 26,000円 → 2026年4月〜 19,000円」 */
+function ledgerTimeline(key){
+  const seg=((S.memory&&S.memory.ledger&&S.memory.ledger.history)||{})[key];
+  if(!seg||seg.length<2)return '';
+  return '推移: '+seg.map((x,i)=>`${fmtYmJa(x.from)}${i===seg.length-1?'〜':'〜'+fmtYmJa(x.to)} ${x.price.toLocaleString()}円`).join(' → ');
+}
 function rateRows(){
   const mem=S.memory||{};
   const rules=mem.rates||{};
@@ -6403,7 +6501,7 @@ function rateRows(){
     const [product,partner,toss]=key.split('|');
     out.push({key,product,partner,toss,price:Number(r.price),
       src:r.status==='confirmed'?'台帳':'台帳(参考)',srcDetail:ledgerSrcLabel(r.src),from:r.from||'',
-      note:[r.cond,r.note].filter(Boolean).join(' / '),n:0,months:r.from?[r.from]:[],fees:null,variants:[],ledger:true});
+      note:[r.cond,r.note,ledgerTimeline(key)].filter(Boolean).join(' / '),n:0,months:r.from?[r.from]:[],fees:null,variants:[],ledger:true});
   });
   Object.entries(rules).forEach(([key,v])=>{
     const [product,partner,toss]=key.split('|');
@@ -6948,6 +7046,7 @@ renderProdGrid();
   renderStmtNeed();renderPayStatus();
   /* ルール台帳: 記憶を読み、スキル由来の初期値（rules.json）を取り込む */
   try{await loadMemory();await applyRulesSeed();}catch(e){console.error('ledger seed',e)}
+  finally{if(typeof _memReadyResolve==='function')_memReadyResolve()}
   renderLedgerBadge();
   /* Drive 同期（設定済みの端末だけ） */
   try{syncAuto()}catch(e){console.error('sync',e)}
