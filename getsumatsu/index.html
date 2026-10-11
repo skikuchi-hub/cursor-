@@ -3167,11 +3167,16 @@ function lineVariant(text){
    軸は ①条件一覧にある分を初期値 ②同じ パートナー×トス で単価が割れたら、割れ方を説明できる列を自動で足す（学習）
    ③台帳で外す・足す（手動が最優先） */
 const VARIANT_HDR=['プラン名','プラン','商材','商品名','サービス名','種別','建物種別','住居','タイプ','会員区分名称','コース','区分','申込区分','契約区分','工事区分','申込種別'];
-const AXIS_NAMES=['住居','速度','区分','タイプ','単体/セット','支払方法','アポ','プラン','ITSS','独自CP','ネット','電気','オプション'];
+const AXIS_NAMES=['住居','速度','区分','タイプ','単体/セット','支払方法','アポ','プラン','所属','リスト','ITSS','独自CP','ネット','電気','オプション'];
+/* 担当者の所属先（2026-10 菊地さん「担当者の所属先、リスト、申込商材」）: 店舗名の列。無ければ担当者名 → 所属先
+   （商材フロー「営業アカウント」= lg.staffCo と、店舗名と担当者が両方ある明細から Mac が学んだ対応 = mem.staffLearned） */
+function staffNorm(v){return String(v==null?'':v).normalize('NFKC').replace(/\s|FC用|（.*?）|\(.*?\)/g,'')}
+function staffCoOf(name){const k=staffNorm(name);if(!k)return '';const lg=S.memory&&S.memory.ledger;
+  return (lg&&lg.staffCo&&lg.staffCo[k])||(S.memory&&S.memory.staffLearned&&S.memory.staffLearned[k])||''}
 const AXIS_HDR_RAW={ITSS:/^ITSS/i,'独自CP':/独自\s*CP/i,'ネット':/^ネット/,'電気':/^電気/,'オプション':/^(オプション|OP)(名|内容)?$/i};
 /* 商材ごとに名前の違う区分の列（会員区分名称・対象サービス・仕分けフラグ・プラン区分1…）も、短い文字の列なら軸の候補にする（'#列名'）。
    人・会社・番号・日付・金額の列は候補にしない */
-const AXIS_COL_SKIP=/手数料|減額|インセンティブ|教育料|業務管理費|金額|単価|料金$|日$|日時|月$|期間|番号|ID|ｺｰﾄﾞ|コード|顧客|契約者|申込者|お客様|氏名|名前|フリガナ|ﾌﾘｶﾞﾅ|名義|電話|TEL|住所|担当|パートナー|代理店|支払先|営業|トス|メール|備考|メモ|支払区分|件数|数量|責任者|部署|雇用|所属|使用欄|状況|ステータス|Serial|計算用|No\.?$|^№/i;
+const AXIS_COL_SKIP=/手数料|減額|インセンティブ|教育料|業務管理費|金額|単価|料金$|日$|日時|月$|期間|番号|ID|ｺｰﾄﾞ|コード|顧客|契約者|申込者|お客様|氏名|名前|フリガナ|ﾌﾘｶﾞﾅ|名義|電話|TEL|住所|担当|パートナー|代理店|支払先|営業|トス|メール|備考|メモ|支払区分|件数|数量|責任者|部署|雇用|所属|店舗|使用欄|状況|ステータス|Serial|計算用|No\.?$|^№/i;
 function axisLabel(x){return String(x).startsWith('#')?'「'+String(x).slice(1)+'」':String(x)}
 function axisNorm(v){return String(v==null?'':v).normalize('NFKC').replace(/\s+/g,'').slice(0,30)}
 function attrsOf(h,r,prod){
@@ -3181,11 +3186,15 @@ function attrsOf(h,r,prod){
     const v=r[i];if(v==null||v==='')return;const t=String(v).normalize('NFKC');
     if(VARIANT_HDR.some(k=>n===k||n.endsWith(k)))txt.push(t);
     if(/^(プラン名?|料金プラン|コース)$/.test(n)&&!A['プラン'])A['プラン']=axisNorm(t);
+    if(/^(店舗名?|所属先?|獲得店舗名?)$/.test(n)&&!A['所属'])A['所属']=axisNorm(t);
+    if(/^(営業担当者?名?|担当者名?|営業者名?)$/.test(n)&&!A['_担当'])A['_担当']=t;
+    if(/^(リスト\s*ID|リスト番号|リストNo)$/i.test(n)&&!A['リスト'])A['リスト']=axisNorm(t);
     if(/支払い?方法|決済方法/.test(n)&&!A['支払方法'])A['支払方法']=/クレ|カード/.test(t)?'クレカ':/口座|振替/.test(t)?'口座振替':/代引/.test(t)?'代引き':axisNorm(t);
     Object.entries(AXIS_HDR_RAW).forEach(([ax,re])=>{if(re.test(n)&&!A[ax])A[ax]=axisNorm(t)});
     if(n&&!AXIS_COL_SKIP.test(n)&&typeof v==='string'&&t.trim().length<=30&&!/^[\d\s,.\/:\-]+$/.test(t))A['#'+n]=axisNorm(t);
   });
   if(!A['プラン']){const c=hd.findIndex(n=>/^(商品名|サービス名|商材名?)$/.test(n));if(c>=0&&r[c]!=null&&r[c]!=='')A['プラン']=axisNorm(r[c])}
+  if(A['_担当']){if(!A['所属']){const c=staffCoOf(A['_担当']);if(c)A['所属']=axisNorm(c)}delete A['_担当']}
   const t=txt.join(' ')+' '+String(prod||'').normalize('NFKC');
   const lv=lineVariant(t).split('・');
   lv.forEach(x=>{if(/ファミリー|マンション/.test(x))A['住居']=x;else if(x)A['速度']=x});
@@ -3210,7 +3219,10 @@ function axesOf(product){
 }
 function variantFor(product,attrs,axes){
   axes=axes||axesOf(product);const a=attrs||{};
-  const v=axes.map(x=>a[x]).filter(Boolean).join('・');
+  /* リストは標準と違う単価のリストだけ番号で分ける（Mac が history.json で束ねた残り＝mem.listKeep） */
+  const lk=S.memory&&S.memory.listKeep&&S.memory.listKeep[String(product||'').replace(/〔.*?〕$/,'')];
+  const val=x=>x==='リスト'&&a[x]?(lk&&!lk.includes(a[x])?'':'リスト'+a[x]):a[x];
+  const v=axes.map(val).filter(Boolean).join('・');
   if(v||!isLineProduct(product))return v;
   return a['プラン']||'';    /* 回線で住居も速度も無い行（光電話・ルーターなどのオプション）は商品名そのものを区分にする */
 }
@@ -3244,20 +3256,24 @@ function learnAxes(obs){
   Object.entries(mg).forEach(([prod,byBase])=>{
     const cfg=lg.axes[prod];if(cfg&&cfg.manual)return;     /* 台帳で手直しした商材は触らない */
     const off=(cfg&&cfg.off)||[];
-    let axes=axesOf(prod).slice();const added=[];
-    for(let step=0;step<2;step++){
-      const cur=axisImpurity(byBase,axes,prod);
-      if(!cur.all||cur.bad/cur.all<0.1)break;
-      const seen=new Set();Object.values(byBase).forEach(bs=>Object.keys(bs).forEach(sig=>{try{Object.keys(JSON.parse(sig)).forEach(k=>seen.add(k))}catch(e){}}));
+    const start=axesOf(prod).slice();let axes=start.slice();
+    const c0=axisImpurity(byBase,axes,prod);
+    if(!c0.all||c0.bad/c0.all<0.05)return;
+    const seen=new Set();Object.values(byBase).forEach(bs=>Object.keys(bs).forEach(sig=>{try{Object.keys(JSON.parse(sig)).forEach(k=>seen.add(k))}catch(e){}}));
+    const cands=AXIS_NAMES.concat([...seen].filter(x=>x.startsWith('#'))).filter(x=>seen.has(x)&&!start.includes(x)&&!off.includes(x));
+    /* 1つずつでは効かず、組み合わせで初めて決まる商材がある（月額ペイ＝申込商材×支払方法×所属×リスト）。
+       少しでも割れを減らす軸を最大4つまで足し、最後に全体で4割以上減っていれば採用。効いていない軸は後ろから外す */
+    let cur=c0;
+    while(axes.length-start.length<4&&cur.bad/cur.all>=0.05){
       let best=null;
-      AXIS_NAMES.concat([...seen].filter(x=>x.startsWith('#'))).filter(x=>seen.has(x)&&!axes.includes(x)&&!off.includes(x)).forEach(x=>{
-        const r=axisImpurity(byBase,axes.concat([x]),prod);
-        /* 割れが半分以下になり、かつ細かく割りすぎない（3件以上の束に入る件数を7割以上残す）軸だけ */
-        if(r.bad<=cur.bad*0.5&&r.all>=cur.all*0.7&&(!best||r.bad<best.bad))best={x,bad:r.bad};
-      });
+      cands.forEach(x=>{if(axes.includes(x))return;const r=axisImpurity(byBase,axes.concat([x]),prod);
+        if(r.bad<=cur.bad-0.03*c0.bad&&r.all>=c0.all*0.7&&(!best||r.bad<best.r.bad))best={x,r}});
       if(!best)break;
-      axes.push(best.x);added.push(best.x);
+      axes.push(best.x);cur=best.r;
     }
+    if(cur.bad>0.6*c0.bad)return;
+    axes.filter(x=>!start.includes(x)).reverse().forEach(x=>{const t=axes.filter(y=>y!==x);const r=axisImpurity(byBase,t,prod);if(r.bad<=cur.bad+0.03*c0.bad){axes=t;cur=r}});
+    const added=axes.filter(x=>!start.includes(x));
     if(added.length){lg.axes[prod]={axes,learned:((cfg&&cfg.learned)||[]).concat(added),off,at:Date.now()};n++}
   });
   return n;
@@ -7090,7 +7106,10 @@ function ratesFromAttr(ra){
 }
 function applyHistory(h){
   const mem=S.memory||(S.memory=emptyMem());
-  if(h.ratesAttr){mem.ratesAttr=h.ratesAttr;ledgerOf().history={}}   /* 鍵の作り方が変わるので推移は作り直す */
+  if(h.staffCo)mem.staffLearned=h.staffCo;
+  if(h.ratesAttr){mem.ratesAttr=h.ratesAttr;ledgerOf().history={};
+    const lk={};Object.entries(h.ratesAttr).forEach(([b,bs])=>{const p=b.split('|')[0].replace(/〔.*?〕$/,'');const st=lk[p]||(lk[p]=new Set());Object.keys(bs).forEach(sig=>{try{const v=JSON.parse(sig)['リスト'];if(v)st.add(v)}catch(e){}})});
+    mem.listKeep={};Object.entries(lk).forEach(([p,st])=>mem.listKeep[p]=[...st]);}   /* 鍵の作り方が変わるので推移は作り直す */
   const r=learnFromHistory(h.ratesAttr?ratesFromAttr(h.ratesAttr):h.rates);
   /* 案件ごとの単価（前月踏襲・戻入の単価引きに使う）: 新しい月が勝つ */
   mem.cases=mem.cases||{};let nc=0;
@@ -7336,7 +7355,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面14';
+const APP_BUILD='2026-10-12 新画面15';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7514,6 +7533,7 @@ function mergeLedger(remote){
     const mine=lg.answers[ns]||(lg.answers[ns]={}),del=Object.assign({},m&&remote.answers[ns+'#del']||{},lg.answers[ns+'#del']||{});
     Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
   });
+  if(remote.staffCo&&Object.keys(remote.staffCo).length&&!(lg.staffCo&&Object.keys(lg.staffCo).length))lg.staffCo=remote.staffCo;
   /* 商材ごとの単価の軸: 新しい方 */
   Object.entries(remote.axes||{}).forEach(([k,r])=>{lg.axes=lg.axes||{};const cur=lg.axes[k];if(!cur||(r.at||0)>(cur.at||0)){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.axes[k]=r;n++}}});
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
@@ -7527,7 +7547,7 @@ function mergeLedger(remote){
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},staffCo:lg.staffCo||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -7692,6 +7712,15 @@ async function syncNow(opts){
           if(Object.keys(lists).length!==before)syncLog(`リスト減額の対象リスト ${Object.keys(lists).length}件を取り込みました（明細一覧2「エコエネリスト」）`)}
       }
     }catch(e){console.warn('エコエネリスト',e)}
+    /* 4e) 担当者 → 所属先（商材フロー「営業アカウント」の 会社名・営業者名 だけ。メール・電話は持たない）。単価の軸「所属」に使う */
+    try{
+      const d=await syncGet({action:'book',id:'1bRT2jWMvDEG5PuCNmEsSukPVdKiVwezTfhVNjgECuaM',sheet:'営業アカウント',n:500});
+      if(d&&d.display&&d.display.length){
+        const h=d.display[0].map(x=>String(x||'').trim());const iC=h.indexOf('会社名'),iN=h.indexOf('営業者名');
+        if(iC>=0&&iN>=0){const m={};d.display.slice(1).forEach(r=>{const k=staffNorm(r[iN]);const c=String(r[iC]||'').trim();if(k&&c)m[k]=c});
+          const lg=ledgerOf();if(JSON.stringify(lg.staffCo||{})!==JSON.stringify(m)){lg.staffCo=m;await saveMemory();syncLedgerSoon();syncLog(`担当者の所属先 ${Object.keys(m).length}人分を取り込みました（商材フロー「営業アカウント」）`)}}
+      }
+    }catch(e){console.warn('営業アカウント',e)}
     syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
     if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
