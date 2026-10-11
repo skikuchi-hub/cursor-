@@ -6136,6 +6136,7 @@ function ledgerOf(){
   if(!mem.ledger)mem.ledger={rules:{},changes:[],seed:''};
   if(!mem.ledger.rules)mem.ledger.rules={};
   if(!mem.ledger.changes)mem.ledger.changes=[];
+  if(!mem.ledger.opLists)mem.ledger.opLists={};
   return mem.ledger;
 }
 function thisYm(){const d=new Date();return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`}
@@ -6421,7 +6422,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夜版3';
+const APP_BUILD='2026-10-11 夜版4';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6591,10 +6592,12 @@ function mergeLedger(remote){
     if(cur.status==='pending'&&c.status!=='pending'){Object.assign(cur,{status:c.status,decidedAt:c.decidedAt});n++}
   });
   if(remote.seed&&!lg.seed)lg.seed=remote.seed;
+  /* リスト番号 → OP の答え（ライフサポート内訳の要確認で選んだもの）: 新しい方 */
+  Object.entries(remote.opLists||{}).forEach(([k,r])=>{const cur=lg.opLists[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.opLists[k]=r;n++}}});
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{}}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -6734,6 +6737,17 @@ async function syncNow(opts){
         c.stockSig=man.stockLs.sig;saveSyncCfg(c);
         syncLog(`ライフサポートの内訳 ${Object.keys(j.months||{}).map(m=>fmtYmJa(m.replace('-',''))).join('・')}度を取り込みました（SBPS の CSV を入れると当月分を作ります）`);
       }catch(e){sum.errors++;syncLog('ライフサポートの内訳: '+e.message,'err')}
+    }
+    /* 4c) リスト番号 → OP パートナーの対応表・電話番号 → リスト番号・WT の条件表（Mac が OPリスト番号一覧などから作る） */
+    if(man.opLists&&man.opLists.sig&&(man.opLists.sig!==c.opSig||!(S.memory&&S.memory.opLists))){
+      try{
+        const f=await syncFile(man.opLists.path,null,{size:man.opLists.size});
+        const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+        const mem=S.memory||(S.memory=emptyMem());
+        mem.opLists={sig:man.opLists.sig,lists:j.lists||{},phones:j.phones||{},table:j.table||null,tableFrom:j.tableFrom||'2025-11',opPrice:j.opPrice||{},sources:j.sources||{}};
+        await saveMemory();c.opSig=man.opLists.sig;saveSyncCfg(c);
+        syncLog(`OPリストの対応表を取り込みました（OP のリスト ${Object.values(j.lists||{}).filter(e=>e.co).length}件・電話番号 ${Object.keys(j.phones||{}).length.toLocaleString()}件）`);
+      }catch(e){sum.errors++;syncLog('OPリストの対応表: '+e.message,'err')}
     }
     syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
@@ -7455,9 +7469,38 @@ function stockBuild(p){
     })}));
   const mainPay={};Object.keys(sheetPay).forEach(sh=>{mainPay[sh]=top(sheetPay[sh]).v});
   const mains=new Set(Object.values(mainPay));
-  /* OP への並行支払い: 前月の内訳で、そのリストIDの顧客の半分以上を OP にも払っているときだけ */
-  const opOfList=l=>{const m=opList[l];if(!m)return null;const e=Object.entries(m).filter(([pt])=>!mains.has(pt));if(!e.length)return null;e.sort((a,b)=>b[1]-a[1]);
-    return e[0][1]>=0.5*Object.keys(listCust[l]||{}).length?e[0][0]:null};
+  /* ---- リスト番号 → OP パートナー（2026-10 菊地さん指示: リスト番号で判別して OP 3社に払い、WT は条件表の区分の単価に下げる） ----
+     判定の順: 台帳の答え（要確認で選んだもの）→ OPリスト番号一覧（Mac が data/op_lists.json に置く）→ 毎月の支払明細書から覚えたもの */
+  const OPL=(S.memory&&S.memory.opLists)||{lists:{},phones:{},table:null,opPrice:{}};
+  const ans=(ledgerOf().opLists)||{};
+  const autoOp=new Set(Object.keys(OPL.opPrice||{}).filter(pt=>hdrOf[pt]&&!/EN\./.test(pt)));
+  const digits=v=>String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,'');
+  const phones=Object.assign({},OPL.phones||{});
+  if(X)Object.values(X).forEach(x=>{const t=digits(x.tel);if(t.length>=9&&x.list&&!phones[t])phones[t]=x.list});
+  const rowList=(src)=>{if(!src)return '';const li=src.hdr.indexOf('リストID');const v=li>=0?src.r[li]:'';return v==null||v===''||v==='-'?'':stockId(v)};
+  const rowTel=(src)=>{if(!src)return '';const ti=src.hdr.indexOf('電話番号');return ti>=0?digits(src.r[ti]):''};
+  months.forEach(ym=>Object.values(st.months[ym]).forEach(g=>{const s2=g.PS;if(!s2)return;const li=s2.hdr.indexOf('リストID'),ti=s2.hdr.indexOf('電話番号');
+    if(li<0||ti<0)return;s2.rows.forEach(r=>{const t=digits(r[ti]),l=stockId(r[li]);if(t.length>=9&&l&&l!=='-'&&!phones[t])phones[t]=l})}));
+  const listOf=(id,hit)=>{const x=X&&X[id];if(x&&x.list)return {list:x.list,how:'XRM'};
+    const srcs=hit?Object.values(hit):[];for(const sr of srcs){const l=rowList(sr);if(l)return {list:l,how:'前月明細'}}
+    const tels=[x&&digits(x.tel),...srcs.map(rowTel)].filter(t=>t&&t.length>=9);
+    for(const t of tels)if(phones[t])return {list:phones[t],how:'電話番号'};
+    return {list:'',how:''}};
+  /* 明細から覚える: 対応表に無いリストで、OP に払った顧客がいればその会社のリスト */
+  const kbOfCo={};Object.values(OPL.lists||{}).forEach(e=>{if(e.co)bump(kbOfCo,e.co,e.kb)});
+  const learnedOp={};
+  months.forEach(ym=>Object.entries(st.months[ym]).forEach(([pt,g])=>{if(!autoOp.has(pt)||!g.PS)return;const s2=g.PS,ci=s2.hdr.indexOf('顧客ID');
+    s2.rows.forEach(r=>{const id=stockId(r[ci]);const l=listOf(id,base[id]).list;if(l&&!(OPL.lists||{})[l]&&!ans[l])bump(learnedOp,l,pt)})}));
+  const listInfo=l=>{if(!l)return null;
+    if(ans[l])return ans[l].op?{co:ans[l].op,kb:ans[l].kb||(top(kbOfCo[ans[l].op])||{}).v||'2',src:'台帳'}:{co:'',kb:'1',src:'台帳'};
+    const e=(OPL.lists||{})[l];if(e)return e.co?{co:e.co,kb:e.kb,src:'対応表',conflict:e.conflict}:{co:'',kb:e.kb||'1',src:'対応表'};
+    const lt=top(learnedOp[l]);if(lt)return {co:lt.v,kb:(top(kbOfCo[lt.v])||{}).v||'2',src:'明細から学習'};
+    return null};
+  const KN={'1':'01','01':'01','2':'02','02':'02','20':'02','3':'03/10','03':'03/10','10':'03/10','03/10':'03/10','4':'04','04':'04','9':'09','09':'09','11':'11'};
+  const tablePrice=(acq,kb,mc)=>{const t=OPL.table&&OPL.table[/Exploration/.test(acq||'')?'教育':'取次'];const c=t&&t[KN[String(kb)]];return c?c[mc==='card'?'クレカ':'キャリア']:null};
+  const opPriceOf=pt=>{const t=top(opPrice[pt]);return t?+t.v:(OPL.opPrice||{})[pt]||0};
+  const tableFrom=OPL.tableFrom||'2025-11';
+  const unknownLists={};
   /* 出力 */
   const out={},check=[];
   const put=(pt,row,how,amt)=>{(out[pt]=out[pt]||{rows:[],how:{}}).rows.push({row,how,amt});out[pt].how[how]=(out[pt].how[how]||0)+1};
@@ -7471,15 +7514,36 @@ function stockBuild(p){
     /* XRM に見つからない顧客は、前月に払っていても支払わない（2026-10 菊地さん指示） */
     if(hit&&X&&!X[id]){check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:'XRM に無い顧客（支払わない）'});return}
     if(hit){
+      const x0=X&&X[id],li=listOf(id,hit),inf=listInfo(li.list);
+      if(li.list&&!inf)unknownLists[li.list]=(unknownLists[li.list]||0)+1;
+      const op=inf&&inf.co&&autoOp.has(inf.co)?inf.co:'';
+      const curOp=Object.keys(hit).filter(pt=>autoOp.has(pt));
+      const mcT=stockMclass(d.method);
+      let addOp=false;
+      if(op&&!curOp.length)addOp=true;
+      else if(op&&curOp.length&&!curOp.includes(op))check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:`リスト ${li.list} は${stockShort(op)}のリストですが、前月は${curOp.map(stockShort).join('・')}に支払っています（前月どおり）`,soft:1});
       Object.entries(hit).forEach(([pt,src])=>{
+        /* OP のリストではないのに OP に払っている顧客は、OP に払い続けて WT には払わない（2026-10 菊地さん指示） */
+        if(pt==='Wetopia株式会社'&&!op&&curOp.length)return;
         /* 月によって列の並びが違うことがあるので、見出し名で今月の並びに直す */
         const h=hdrOf[pt]||src.hdr,pi=h.findIndex(x=>/単価/.test(x)),ki=h.indexOf('売上返金区分名称'),mi=h.indexOf('支払い方法');
         const spi=src.hdr.findIndex(x=>/単価/.test(x));
         const row=h.map((k,i)=>{const j=i===pi?spi:src.hdr.indexOf(k);return j>=0&&j<src.r.length?src.r[j]:''});
-        const pr=Math.abs(Number(row[pi])||0);
+        let pr=Math.abs(Number(row[pi])||0),how2=how;
+        /* OP のリストの顧客: WT は条件表の区分の単価まで下げる（OP を新しく払う顧客と、申込が条件表の開始月以降の顧客） */
+        if(pt==='Wetopia株式会社'&&op&&(addOp||(x0&&x0.ym>=tableFrom))){
+          const ai=src.hdr.indexOf('獲得パートナー');const tp=tablePrice(x0?x0.partner:(ai>=0?src.r[ai]:''),inf.kb,mcT);
+          if(tp&&tp<pr){pr=tp;how2='WT条件表'}
+        }
         row[pi]=neg?-pr:pr;if(ki>=0)row[ki]=d.kubunName;if(mi>=0&&d.method)row[mi]=d.method;
-        put(pt,row,neg?'返金・CB':how,row[pi]);
+        put(pt,row,neg?'返金・CB':how2,row[pi]);
       });
+      if(addOp){
+        const h=hdrOf[op],p2=opPriceOf(op),wsrc=hit['Wetopia株式会社']||Object.values(hit)[0];
+        const row=h.map(k=>{const j=wsrc.hdr.indexOf(k);return k==='顧客ID'?id:k==='支払い方法'?d.method:k==='売上返金区分名称'?d.kubunName:/単価/.test(k)?(neg?-p2:p2)
+          :k==='獲得日'&&h.indexOf('電話番号')<0?((x0&&x0.tel)||(wsrc.hdr.indexOf('電話番号')>=0?wsrc.r[wsrc.hdr.indexOf('電話番号')]:'')):j>=0?wsrc.r[j]:''});
+        put(op,row,neg?'返金・CB':'OP追加',neg?-p2:p2);
+      }
       return;
     }
     const x=X&&X[id];
@@ -7499,16 +7563,20 @@ function stockBuild(p){
       h.forEach((k,i)=>{row[i]=k==='顧客ID'?id:k==='支払い方法'?d.method:k==='売上返金区分名称'?d.kubunName:k==='獲得パートナー'?x.partner
         :k==='営業担当者名'?x.staff:k==='獲得日'?(telCol?x.tel:stockSerial(x.date)):k==='電話番号'?x.tel:k==='リストID'?(/^\d+$/.test(x.list)?+x.list:(x.list||'-')):/単価/.test(k)?(neg?-price:price):''});
       return row};
-    put(pt,mk(pt,pr),neg?'返金・CB':old?'再開':'新規',neg?-pr:pr);
-    if(t.n<0.8*t.t)ck(`${old?'再開':'新規'}の単価候補が複数（${pr}円で作成）`,{payee:pt,price:pr,soft:1});
-    const op=x.list&&opOfList(x.list);
-    if(op&&hdrOf[op]){const p2=+top(opPrice[op]).v;put(op,mk(op,p2),neg?'返金・CB':'新規OP',neg?-p2:p2)}
+    const li=listOf(id,null),inf=listInfo(li.list);
+    if(li.list&&!inf)unknownLists[li.list]=(unknownLists[li.list]||0)+1;
+    const op=pt==='Wetopia株式会社'&&inf&&inf.co&&autoOp.has(inf.co)?inf.co:'';
+    let prW=pr;
+    if(op){const tp=tablePrice(x.partner,inf.kb,mc);if(tp&&tp<prW)prW=tp}
+    put(pt,mk(pt,prW),neg?'返金・CB':old?'再開':'新規',neg?-prW:prW);
+    if(t.n<0.8*t.t&&!op)ck(`${old?'再開':'新規'}の単価候補が複数（${pr}円で作成）`,{payee:pt,price:pr,soft:1});
+    if(op){const p2=opPriceOf(op);put(op,mk(op,p2),neg?'返金・CB':'新規OP',neg?-p2:p2)}
   });
   /* 前月との比較 */
   const prevSum={};Object.entries(st.months[baseYm]||{}).forEach(([pt,g])=>{const s=g.PS;if(!s)return;const pi=s.hdr.findIndex(h=>/単価/.test(h));
     prevSum[pt]={n:s.rows.length,amt:s.rows.reduce((a,r)=>a+(Number(r[pi])||0),0)}});
   const partners=[...new Set([...Object.keys(out),...Object.keys(prevSum)])].sort((a,b)=>((out[b]||{rows:[]}).rows.length-(out[a]||{rows:[]}).rows.length));
-  const res={target,baseYm,period:`${p.summary.from}〜${p.summary.to}`,csvRows:tx.length,check,
+  const res={target,baseYm,period:`${p.summary.from}〜${p.summary.to}`,csvRows:tx.length,check,unknownLists,opReady:!!(OPL.table&&Object.keys(OPL.lists||{}).length),
     partners:partners.map(pt=>{const o=out[pt]||{rows:[],how:{}};return {name:pt,n:o.rows.length,amt:o.rows.reduce((a,r)=>a+(Number(r.amt)||0),0),how:o.how,prev:prevSum[pt]||{n:0,amt:0},hdr:hdrOf[pt],rows:o.rows.map(r=>r.row)}})};
   res.total=res.partners.reduce((a,x)=>a+x.amt,0);
   return res;
@@ -7518,10 +7586,11 @@ function stockWb(res){
   const wb=XLSX.utils.book_new();
   const ymJa=fmtYmJa(res.target.replace('-',''))+'度',baseJa=fmtYmJa(res.baseYm.replace('-',''))+'度';
   const sm=[[`ライフサポート（SBPS）支払内訳 ${ymJa}（月末明細処理クラウド生成）`],['売上明細内訳 CSV の期間',res.period],['前月として使った内訳',baseJa],[],
-    ['支払先',`${ymJa} 件数`,`${ymJa} 金額`,`${baseJa} 件数`,`${baseJa} 金額`,'差額','前月踏襲','2〜4ヶ月前から再開','古い顧客の再開','新規','新規(OP)','返金・CB']];
-  res.partners.forEach(x=>sm.push([x.name,x.n,x.amt,x.prev.n,x.prev.amt,x.amt-x.prev.amt,x.how['前月']||0,x.how['過去']||0,x.how['再開']||0,x.how['新規']||0,x.how['新規OP']||0,x.how['返金・CB']||0]));
+    ['支払先',`${ymJa} 件数`,`${ymJa} 金額`,`${baseJa} 件数`,`${baseJa} 金額`,'差額','前月踏襲','2〜4ヶ月前から再開','古い顧客の再開','新規','新規(OP)','OPを追加','WTを条件表に','返金・CB']];
+  res.partners.forEach(x=>sm.push([x.name,x.n,x.amt,x.prev.n,x.prev.amt,x.amt-x.prev.amt,x.how['前月']||0,x.how['過去']||0,x.how['再開']||0,x.how['新規']||0,x.how['新規OP']||0,x.how['OP追加']||0,x.how['WT条件表']||0,x.how['返金・CB']||0]));
   sm.push(['合計',res.partners.reduce((a,x)=>a+x.n,0),res.total,res.partners.reduce((a,x)=>a+x.prev.n,0),res.partners.reduce((a,x)=>a+x.prev.amt,0),res.total-res.partners.reduce((a,x)=>a+x.prev.amt,0)]);
-  sm.push([],['※ 前月の内訳にある顧客は同じ支払先・同じ単価で踏襲。返金・チャージバックはマイナス。与信は対象外。XRM に無い顧客は支払わない。'],['※ 内訳に入れなかった顧客は「要確認」シートにあります。']);
+  sm.push([],['※ 前月の内訳にある顧客は同じ支払先・同じ単価で踏襲。返金・チャージバックはマイナス。与信は対象外。XRM に無い顧客は支払わない。'],
+    ['※ リスト番号が OP（クラウドナイン・last Bet・Hitotech）のリストなら OP にも払い、WT は条件表の区分の単価に下げる。OP のリストでないのに OP に払っている顧客は WT には払わない。'],['※ 内訳に入れなかった顧客は「要確認」シートにあります。']);
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sm),'まとめ');
   const ck=[['顧客ID','区分','決済手段','決済金額','理由','XRMシート','獲得パートナー','申込月','リストID']];
   res.check.forEach(c=>ck.push([c.id,c.kind,c.method,c.amount,c.why,c.sheet||'',c.partner||'',c.ym||'',c.list||'']));
@@ -7536,6 +7605,20 @@ function stockWb(res){
   });
   return wb;
 }
+/* 対応表に無いリスト番号: OP の会社を選ぶと台帳に残り（端末間で共有）、次の月からも使う */
+const STOCK_OP_CHOICES=[['','OPなし'],['株式会社クラウドナイン','クラウドナイン'],['株式会社last Bet','last Bet'],['Hitotech株式会社','Hitotech']];
+function stockUnknownHtml(i,s){
+  const e=Object.entries(s.unknownLists||{}).sort((a,b)=>b[1]-a[1]);
+  if(!e.length)return '';
+  return `<details style="margin:6px 0"><summary><b style="color:var(--warn)">対応表に無いリスト ${e.length}件</b>（今は OP なしで作成。OP の会社を選ぶと覚えます）</summary>
+  <div style="display:grid;grid-template-columns:auto auto;gap:4px 10px;align-items:center;margin-top:6px">${e.slice(0,30).map(([l,n])=>`<span>リスト ${esc(l)}（${n}人）</span><select onchange="stockAnswer(${i},'${esc(l)}',this.value)">${STOCK_OP_CHOICES.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select>`).join('')}</div>${e.length>30?`<p class="note">ほか ${e.length-30}件（人数の少ないリスト）は OP なしで作成しています</p>`:''}</details>`;
+}
+async function stockAnswer(i,list,op){
+  const lg=ledgerOf();lg.opLists[list]={op,at:new Date().toISOString(),by:'ライフサポート内訳'};
+  await saveMemory();syncLedgerSoon();
+  const f=B.files[i];if(f&&f.stockSrc)f.stock=stockBuild(f.stockSrc);
+  renderIn();toast(`リスト ${list} を「${op?stockShort(op):'OPなし'}」として覚えました`);
+}
 function stockDownload(i){
   const f=B.files[i];if(!f||!f.stock||f.stock.err)return;
   deliverXlsx(stockWb(f.stock),`AI作成中_ライフサポート内訳_${f.stock.target.replace('-','')}_${stamp()}.xlsx`);
@@ -7548,9 +7631,11 @@ function stockCardHtml(i,s){
   return `<div class="stockcard"><b>ライフサポート（SBPS）支払内訳 ${esc(ymJa)}</b>
   <table class="fin" style="margin:6px 0"><tr><th style="text-align:left">支払先</th><th style="text-align:right">件数</th><th style="text-align:right">金額（前月比）</th></tr>
   ${s.partners.filter(x=>x.n||x.prev.n).map(x=>{const d=x.amt-x.prev.amt;const nw=(x.how['新規']||0)+(x.how['新規OP']||0);
-    return `<tr><td style="text-align:left">${esc(stockShort(x.name))}${nw?` <span class="pill info">新規${nw}</span>`:''}</td><td style="text-align:right">${x.n.toLocaleString()}</td><td style="text-align:right">${yen(x.amt)}<br><small style="color:${d<0?'var(--alert)':'var(--txt-3)'}">${d>=0?'+':''}${d.toLocaleString()}</small></td></tr>`}).join('')}
+    const ad=x.how['OP追加']||0,wc=x.how['WT条件表']||0;
+    const tags=[nw?`新規${nw}`:'',ad?`OP追加${ad}`:'',wc?`WT条件表${wc}`:''].filter(Boolean).join('・');
+    return `<tr><td style="text-align:left;white-space:normal">${esc(stockShort(x.name))}${tags?`<br><small style="color:var(--accent)">${esc(tags)}</small>`:''}</td><td style="text-align:right">${x.n.toLocaleString()}</td><td style="text-align:right">${yen(x.amt)}<br><small style="color:${d<0?'var(--alert)':'var(--txt-3)'}">${d>=0?'+':''}${d.toLocaleString()}</small></td></tr>`}).join('')}
   <tr><td style="text-align:left"><b>合計</b></td><td></td><td style="text-align:right"><b>${yen(s.total)}</b><br><small style="color:var(--txt-3)">${(()=>{const d=s.total-s.partners.reduce((a,x)=>a+x.prev.amt,0);return (d>=0?'+':'')+d.toLocaleString()})()}</small></td></tr></table>
-  ${gap}<p class="note">${hard?`<b style="color:var(--warn)">要確認 ${hard}件</b>（内訳に入れていません）`:'要確認はありません'}${soft?`・単価を確認したい新規 ${soft}件`:''}。前月の内訳（${esc(baseJa)}）を踏襲し、新規は XRM と過去の単価から作りました。</p>
+  ${gap}${s.opReady?'':'<p class="note" style="color:var(--warn)">OPリストの対応表がまだこの端末にありません。「同期」すると、リスト番号で OP を振り分けます</p>'}${stockUnknownHtml(i,s)}<p class="note">${hard?`<b style="color:var(--warn)">要確認 ${hard}件</b>（内訳に入れていません）`:'要確認はありません'}${soft?`・単価を確認したい新規 ${soft}件`:''}。前月の内訳（${esc(baseJa)}）を踏襲し、新規は XRM と過去の単価から作りました。</p>
   <button class="btn" onclick="stockDownload(${i})">内訳をダウンロード（支払先ごとのシート）</button></div>`;
 }
 function loadRevenueFiles(files){
@@ -8503,7 +8588,7 @@ async function batchRoute(files,opts){
         if(/\.csv$/i.test(f.name)){
           if(/SBPS|収納/i.test(f.name)){ent.kind='csv';ent.note='収納明細 → 収支推移に反映します';loadRevenueFiles([f]);
             /* 同じ CSV からライフサポートのパートナー支払内訳（LS(PS)）を作る */
-            try{const p=parseSbpsCsv(await f.text());ent.stock=stockBuild(p);
+            try{const p=parseSbpsCsv(await f.text());ent.stockSrc=p;ent.stock=stockBuild(p);
               if(!ent.stock.err)ent.note=`収支推移に反映・${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート支払内訳を作りました（下のカード）`}
             catch(ex){console.error(ex);ent.stock={err:(ex&&ex.message)||String(ex)}}
           }
