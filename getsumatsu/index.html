@@ -1818,6 +1818,9 @@ const MODULES = {
           const unit=toss==='Wetopia株式会社'?num('p_wtwt'):num('p_wtother');
           row.price=m.modo?-unit:unit;
           row.why=(toss==='Wetopia株式会社'?'WT自社トス':'WT × '+toss)+(m.modo?' / 戻入（同額マイナス）':'');
+          /* リスト減額: 仕入れたリスト（エネポート・エコライフ）の案件は WT×WT −5,000円・WT×他社 −3,000円（2026-10 菊地さん） */
+          const ld=listDeductOf(x.listId);
+          if(ld&&!m.modo){const d=toss==='Wetopia株式会社'?5000:3000;row.price-=d;row.listDeduct=d;row.why+=` / リスト減額 −${d.toLocaleString()}円（リスト ${x.listId}・${ld.vendor}）`}
           return row;
         }
         if(/クラウドナイン/.test(partner)){
@@ -2790,6 +2793,8 @@ function rowIdOf(r){
   const v=r.tel||r.key||r.rawKey||r.appNo||r.orderNo||r.user||(r.acc&&r.name?r.acc+'|'+r.name:'');
   return v?String(v).replace(/\s/g,''):'';
 }
+/* リスト減額の対象リスト: 明細一覧2 の「エコエネリスト」（リストID → エネポート / エコライフ）。同期のたびに読み直す */
+function listDeductOf(id){const L=S.memory&&S.memory.listDeduct&&S.memory.listDeduct.lists;id=String(id||'').trim();return L&&id?L[id]||null:null}
 /* 戻入（解約などで上位店から差し引かれた案件）は、そのパートナーに払った手数料を全額マイナスにする（2026-10 菊地さん）
    郵送費は戻さず手数料の満額を引く。半端な額も、昔の単価の案件も「払った額」をそのまま引く。
    払った額 = 過去の支払明細書（Mac が history.json に商材ごとに集計）。見つからなければ今の取次手数料（郵送費を引く前） */
@@ -7044,7 +7049,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面4';
+const APP_BUILD='2026-10-12 新画面5';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7383,6 +7388,17 @@ async function syncNow(opts){
         syncLog(`OPリストの対応表を取り込みました（OP のリスト ${Object.values(j.lists||{}).filter(e=>e.co).length}件・電話番号 ${Object.keys(j.phones||{}).length.toLocaleString()}件）`);
       }catch(e){sum.errors++;syncLog('OPリストの対応表: '+e.message,'err')}
     }
+    /* 4d) リスト減額の対象リスト（明細一覧2「エコエネリスト」）。社員が足したリストもそのまま反映 */
+    try{
+      const d=await syncGet({action:'book',id:'1lBsskR3KUt5IDlxN3q7DEJds0RnBJ3FXC-yZkd66vTw',sheet:'エコエネリスト',n:500});
+      if(d&&d.display&&d.display.length){
+        const h=d.display[0].map(x=>String(x||'').trim());const iI=h.indexOf('リストID'),iN=h.indexOf('リスト名'),iV=h.indexOf('対象');
+        if(iI>=0){const lists={};d.display.slice(1).forEach(r=>{const id=String(r[iI]||'').trim();if(id)lists[id]={name:iN>=0?r[iN]:'',vendor:iV>=0?r[iV]:''}});
+          const mem=S.memory||(S.memory=emptyMem());const before=Object.keys((mem.listDeduct&&mem.listDeduct.lists)||{}).length;
+          mem.listDeduct={lists,at:new Date().toISOString()};await saveMemory();
+          if(Object.keys(lists).length!==before)syncLog(`リスト減額の対象リスト ${Object.keys(lists).length}件を取り込みました（明細一覧2「エコエネリスト」）`)}
+      }
+    }catch(e){console.warn('エコエネリスト',e)}
     syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
     if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
