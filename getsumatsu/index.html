@@ -6379,7 +6379,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夕方版3';
+const APP_BUILD='2026-10-11 夕方版4';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6623,7 +6623,8 @@ async function syncNow(opts){
     }else syncLog('支払明細書: 新しいものはありません');
     syncProg(70,80,1,'単価の推移を確認しています');
     /* 2b) 過去2年分の単価の推移（Mac が集計した history.json）: 単価の変わり目と案件ごとの単価を学習 */
-    if(man.history&&man.history.path&&man.history.mtime!==c.historyMtime){
+    const lgH=ledgerOf().history;
+    if(man.history&&man.history.path&&(man.history.mtime!==c.historyMtime||!lgH||!Object.keys(lgH).length)){
       const hm=man.history.months||[];
       syncLog(`過去${hm.length}ヶ月分（${fmtYmJa(hm[0])||'?'}〜${fmtYmJa(hm[hm.length-1])||'?'}）の単価の推移を取得しています`);
       const f=await syncFile(man.history.path,null,{size:man.history.size,onFrac:fr=>syncProg(80,88,fr*0.8,'単価の推移を受信中')});
@@ -6637,7 +6638,7 @@ async function syncNow(opts){
     SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
     if(SALES_LIST.length){const sm=salesMonths()[0];syncLog(`売上明細書: ${fmtYmJa(sm.month)}分 ${sm.files.length}件ほか（「入れる」画面のボタンから取り込めます）`)}
     /* 2d) 売上明細書の3年分の集計（上位店×月の入金） */
-    if(man.salesHistory&&man.salesHistory.path&&man.salesHistory.mtime!==c.salesHistMtime){
+    if(man.salesHistory&&man.salesHistory.path&&(man.salesHistory.mtime!==c.salesHistMtime||!(S.memory&&S.memory.salesHistory))){
       const f=await syncFile(man.salesHistory.path,null,{size:man.salesHistory.size,onFrac:fr=>syncProg(88,93,fr,'売上の推移を受信中')});
       const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const mem=S.memory||(S.memory=emptyMem());
@@ -6669,13 +6670,15 @@ async function syncNow(opts){
     }
     syncProg(93,96,1,'条件表を確認しています');
     /* 4) 条件表: 単価表フォルダから抜き出した単価を参考表示用に保存 */
-    if(man.conditions&&man.conditions.path&&man.conditions.mtime!==c.condMtime){
+    /* 一度取り込めば Mac が作り直すまで取り直さない。ただし端末にデータが無ければ取り直す */
+    if(man.conditions&&man.conditions.path&&(man.conditions.mtime!==c.condMtime||!(S.memory&&S.memory.conditions&&(S.memory.conditions.items||[]).length))){
       const f=await syncFile(man.conditions.path);
       const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const mem=S.memory||(S.memory=emptyMem());
       mem.conditions={at:j.generatedAt||'',items:(j.items||[]).map(x=>({partner:x.partner,product:x.product,month:x.month,title:x.title,issued:x.issued||'',items:x.items||[],file:x.file||''}))};
-      await saveMemory();
-      c.condMtime=man.conditions.mtime;sum.cond=`${(j.items||[]).length}件`;
+      const okC=await saveMemory();
+      if(!okC)syncLog('条件表をこの端末に保存できませんでした（容量不足の可能性）','err');
+      c.condMtime=man.conditions.mtime;saveSyncCfg(c);sum.cond=`${(j.items||[]).length}件`;
       syncLog(`条件表 ${(j.items||[]).length}件を取り込みました（単価が読めたもの ${(j.items||[]).filter(x=>x.items&&x.items.length).length}件）`);
     }
     syncProg(96,98,1,'ルール台帳をまとめています');
