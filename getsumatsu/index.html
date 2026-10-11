@@ -2369,11 +2369,59 @@ const MODULES = {
    毎回アップロードしなくて済むよう、読み込んだXRMブックを丸ごと保存し、
    次回以降は自動で復元する。新しいものを入れれば上書きされる。 */
 const XRM_KEY='getsumatsu_xrm';
-async function saveXrmFile(buf,name){
+/* ===== XRM 軽量版（Mac の sync/xrm_lite.py が作る。値だけ・文字列は表で共有）=====
+   iPhone では 35MB の xlsx（展開すると約250MB）を読むと落ちるため、Drive から同期するときはこちらを使う。
+   シートは使うときに初めて組み立てる。XLSX.utils.sheet_to_json を通して従来のコードからそのまま読める */
+const _xlBase=new Date(1899,11,30,0,0,0),_xlRef=new Date();
+const _xlThresh=_xlBase.getTime()+(_xlRef.getTimezoneOffset()-_xlBase.getTimezoneOffset())*60000,_xlRefOff=_xlRef.getTimezoneOffset();
+function liteNumDate(v){const out=new Date();out.setTime(v*864e5+_xlThresh);
+  if(out.getTimezoneOffset()!==_xlRefOff)out.setTime(out.getTime()+(out.getTimezoneOffset()-_xlRefOff)*60000);return out}
+function liteDecodeRows(ws){
+  const L=ws['!lite'];if(L.rows)return L.rows;
+  const tbl=L.tbl,w=L.w;
+  L.rows=L.enc.map(er=>{const r=new Array(w);
+    for(let i=0;i<w;i++){const x=i<er.length?er[i]:-1;
+      r[i]=typeof x==='number'?(x<0?null:tbl[x]):typeof x==='string'?(x[0]==='d'?liteNumDate(+x.slice(1)):+x):x}
+    return r});
+  L.enc=null;return L.rows;
+}
+function liteWorkbook(obj){
+  const wb={SheetNames:[],Sheets:{},lite:true};
+  (obj.sheets||[]).forEach(sh=>{wb.SheetNames.push(sh.n);
+    wb.Sheets[sh.n]={'!lite':{enc:sh.r,w:sh.w||0,tbl:obj.s,rows:null},'!ref':sh.r.length?XLSX.utils.encode_range({s:{r:0,c:0},e:{r:sh.r.length-1,c:Math.max(0,(sh.w||1)-1)}}):'A1'}});
+  return wb;
+}
+(function patchSheetToJson(){
+  if(!window.XLSX||XLSX.utils._liteWrapped)return;
+  const orig=XLSX.utils.sheet_to_json;
+  XLSX.utils.sheet_to_json=function(ws,opts){
+    if(!ws||!ws['!lite'])return orig.apply(this,arguments);
+    const rows=liteDecodeRows(ws);opts=opts||{};
+    if(opts.header===1)return rows.slice();
+    /* 見出し行をキーにしたオブジェクト（SheetJS と同じく重複見出しは _1, _2…） */
+    const hdr=(rows[0]||[]).map(v=>v==null?'':String(v)),seen={};
+    const keys=hdr.map((h,i)=>{let k=h||('__EMPTY'+(i?'_'+i:''));if(seen[k]!=null){seen[k]++;k=k+'_'+seen[k]}else seen[k]=0;return k});
+    return rows.slice(1).filter(r=>r.some(v=>v!=null)).map(r=>{const o={};keys.forEach((k,i)=>{if(r[i]!=null)o[k]=r[i];else if('defval' in opts)o[k]=opts.defval});return o});
+  };
+  XLSX.utils._liteWrapped=true;
+})();
+async function gunzipBytes(u8){
+  if(typeof DecompressionStream==='undefined')throw new Error('この端末のブラウザは圧縮ファイルを展開できません（iOS 16.4 以降が必要です）');
+  const ds=new DecompressionStream('gzip');
+  const buf=await new Response(new Blob([u8]).stream().pipeThrough(ds)).arrayBuffer();
+  return new Uint8Array(buf);
+}
+async function liteFromGz(u8){
+  const raw=await gunzipBytes(u8);
+  const obj=JSON.parse(new TextDecoder().decode(raw));
+  if(!obj||obj.v!==2)throw new Error('XRM 軽量版の形式が違います');
+  return liteWorkbook(obj);
+}
+async function saveXrmFile(buf,name,lite){
   try{
     /* IndexedDB ならバイト列のまま保存（数値の配列にすると 33MB の XRM が数百MBに膨らむ） */
     const bytes=new Uint8Array(buf);
-    const ok=await Store.set(XRM_KEY,{name,savedAt:new Date().toISOString(),
+    const ok=await Store.set(XRM_KEY,{name,savedAt:new Date().toISOString(),lite:!!lite,
       data:IDB.ok()?bytes:Array.from(bytes)});
     return ok;
   }catch(e){console.error('xrm save',e);return false}
@@ -2383,7 +2431,7 @@ async function loadSavedXrm(){
     const rec=await Store.get(XRM_KEY);
     if(!rec||!rec.data)return null;
     const buf=new Uint8Array(rec.data);
-    const wb=XLSX.read(buf,{type:'array',cellDates:true});
+    const wb=rec.lite?await liteFromGz(buf):XLSX.read(buf,{type:'array',cellDates:true});
     S.xrmWb=wb;S.xrmName=rec.name;S.xrmSavedAt=rec.savedAt;S.xrmStub=false;
     return rec;
   }catch(e){console.error('xrm load',e);return null}
@@ -6450,14 +6498,15 @@ async function syncNow(opts){
     c.manifestAt=man.generatedAt||'';
     /* 1) XRM: 新しい版があれば取り込む */
     if(man.xrm&&man.xrm.path&&(man.xrm.stamp!==c.xrmStamp||!S.xrmWb||S.xrmStub)){
-      syncLog(`XRM を取得しています（${man.xrm.name}・${Math.round((man.xrm.size||0)/1048576)}MB）`);
-      const f=await syncFile(man.xrm.path,(p,n)=>syncSetBusy(true,`XRM ${p}/${n}`));
+      const lite=man.xrm.lite&&man.xrm.lite.v===2&&typeof DecompressionStream!=='undefined'?man.xrm.lite:null;
+      syncLog(`XRM を取得しています（${man.xrm.name}・${Math.round(((lite||man.xrm).size||0)/1048576)}MB${lite?'・軽量版':''}）`);
+      const f=await syncFile((lite||man.xrm).path,(p,n)=>syncSetBusy(true,`XRM ${p}/${n}`));
       syncSetBusy(true,'XRM 読み込み中');
       await new Promise(r=>setTimeout(r,30));
-      const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});
-      applyXrmWb(wb,f.buf,f.name);
+      const wb=lite?await liteFromGz(new Uint8Array(f.buf)):XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});
+      applyXrmWb(wb,f.buf,man.xrm.name,!!lite);
       c.xrmStamp=man.xrm.stamp;sum.xrm=man.xrm.name;
-      syncLog(`XRM を更新しました（${f.name}）`);
+      syncLog(`XRM を更新しました（${man.xrm.name}${lite?'・軽量版':''}）`);
     }else if(man.xrm){syncLog(`XRM は最新です（${man.xrm.name}）`)}
     c.seen=c.seen||{};
     /* 2) 支払明細書: まだ読んでいないものを古い月から順に読み、単価とルールを学習 */
@@ -7479,9 +7528,9 @@ function loadFile(n,file){
   reader.readAsArrayBuffer(file);
 }
 /* XRM契約一覧を取り込む（保存・記憶への蓄積・表示更新）。従来画面とまとめて処理の両方から使う */
-function applyXrmWb(wb,buf,name){
+function applyXrmWb(wb,buf,name,lite){
   S.xrmWb=wb;S.xrmName=name;S.xrmSavedAt=new Date().toISOString();S.xrmStub=false;
-  saveXrmFile(buf,name).then(ok=>{
+  saveXrmFile(buf,name,lite).then(ok=>{
     renderXrmStatus();
     if(typeof renderIn==='function')renderIn();
     if(!ok)toast('XRMを保持できませんでした（今回のみ有効です）');
