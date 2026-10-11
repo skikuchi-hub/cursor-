@@ -670,6 +670,9 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 .file .fx{border:0;background:transparent;color:var(--txt-3);font-size:14px;padding:0 4px;line-height:1}
 .file .fx:hover{color:var(--alert)}
 .file .d{font-size:12px;color:var(--txt-2);grid-column:1/-1;line-height:1.6}
+.stockcard{grid-column:1/-1;margin-top:8px;padding:10px 12px;border:1px solid var(--line-2);border-radius:var(--r);background:var(--surface-2);font-size:13px;line-height:1.6;overflow-x:auto}
+.stockcard.warn{color:var(--warn)}
+.stockcard table.fin td,.stockcard table.fin th{padding:2px 8px;white-space:nowrap}
 .ven{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);margin-bottom:12px;overflow:hidden}
 .ven-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 16px;border-bottom:1px solid var(--line);background:var(--surface-2)}
 .ven-h b{font-size:14px;font-weight:600}
@@ -6418,7 +6421,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夜版';
+const APP_BUILD='2026-10-11 夜版2';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6719,6 +6722,18 @@ async function syncNow(opts){
       if(!okC)syncLog('条件表をこの端末に保存できませんでした（容量不足の可能性）','err');
       c.condMtime=man.conditions.mtime;saveSyncCfg(c);sum.cond=`${(j.items||[]).length}件`;
       syncLog(`条件表 ${(j.items||[]).length}件を取り込みました（単価が読めたもの ${(j.items||[]).filter(x=>x.items&&x.items.length).length}件）`);
+    }
+    /* 4b) ライフサポートの前月までの内訳（支払明細書の LS(PS)）: SBPS の CSV を入れたときに当月の内訳を作るのに使う */
+    if(man.stockLs&&man.stockLs.sig&&(man.stockLs.sig!==c.stockSig||!(S.memory&&S.memory.stockLs))){
+      try{
+        const f=await syncFile(man.stockLs.path,null,{size:man.stockLs.size});
+        const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+        const mem=S.memory||(S.memory=emptyMem());
+        mem.stockLs={sig:man.stockLs.sig,at:j.generatedAt||'',months:j.months||{}};
+        if(!await saveMemory())syncLog('ライフサポートの内訳をこの端末に保存できませんでした（容量不足の可能性）','err');
+        c.stockSig=man.stockLs.sig;saveSyncCfg(c);
+        syncLog(`ライフサポートの内訳 ${Object.keys(j.months||{}).map(m=>fmtYmJa(m.replace('-',''))).join('・')}度を取り込みました（SBPS の CSV を入れると当月分を作ります）`);
+      }catch(e){sum.errors++;syncLog('ライフサポートの内訳: '+e.message,'err')}
     }
     syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
@@ -7363,6 +7378,177 @@ async function addTrendRow(){
   toast(`${fmtMo(mo)} に「${p}」を追加しました`);
 }
 /* 入金明細（SBPS収納明細CSV）をこの画面から読み込む */
+/* ===== ライフサポート（SBPS）: 売上明細内訳 CSV からパートナー支払明細書の LS(PS) 内訳を作る =====
+   前月までの内訳は Mac が支払明細書の LS(PS) シートから抜き出して Drive に置く（data/stock_ls.json → 同期で S.memory.stockLs）。
+   規則（2026年7〜9月度の実際の明細で答え合わせ済み）:
+   - 前月の内訳にある顧客 → 同じ支払先へ同じ単価（ストック）。Wetopia と OP の両方に払っていれば両方
+   - 返金・チャージバック（決済金額がマイナス）→ その単価のマイナス。与信は対象外
+   - 前月に無く2〜4ヶ月前にある顧客 → その単価で踏襲（入金が無かった月の分の再開）
+   - どこにも無い顧客 → XRM（ライフサポート / クラブペイ / ライフサポ＋）で獲得パートナー・リストID・申込日を引く
+     申込日が直近4ヶ月以内なら新規: 支払先はそのシートの顧客を受け持つ支払先（過去の内訳から判定）、
+     単価は同じ獲得パートナー×決済手段×リストID（無ければ×決済手段）の最近の顧客の単価。リストIDが OP のリストなら OP にも払う
+     それより古い顧客・XRM に無い顧客は内訳に入れず「要確認」に出す */
+const STOCK_XRM_SHEETS=/^(ライフサポート|クラブペイ|ライフサポ＋|ライフサポ\+)$/;
+const STOCK_NEW_MONTHS=4,STOCK_LEARN_MONTHS=12;
+function stockYmAdd(ym,n){const y=+ym.slice(0,4),m=+ym.slice(5,7)-1+n;const d=new Date(y,m,1);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+function stockId(v){return v==null?'':typeof v==='number'?String(Math.round(v)):String(v).trim()}
+function stockYmOf(v){
+  if(v instanceof Date&&!isNaN(v))return v.getFullYear()+'-'+String(v.getMonth()+1).padStart(2,'0');
+  if(typeof v==='number'&&v>20000&&v<80000){const d=liteNumDate(v);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')}
+  const m=String(v||'').match(/(20\d{2})[\/\-年.]\s*(\d{1,2})/);return m?m[1]+'-'+m[2].padStart(2,'0'):'';
+}
+function stockSerial(v){
+  if(v instanceof Date&&!isNaN(v))return Math.round((Date.UTC(v.getFullYear(),v.getMonth(),v.getDate())-Date.UTC(1899,11,30))/864e5);
+  const m=String(v||'').match(/(20\d{2})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  return m?Math.round((Date.UTC(+m[1],+m[2]-1,+m[3])-Date.UTC(1899,11,30))/864e5):(v||'');
+}
+function stockMclass(m){m=String(m||'');return /クレジット/.test(m)?'card':/au/i.test(m)?'au':/ソフトバンク/.test(m)?'sb':/ドコモ|d払い/.test(m)?'docomo':'other'}
+function stockXrmIndex(){
+  const wb=S.xrmWb;const X={};
+  if(!wb||S.xrmStub)return null;
+  wb.SheetNames.filter(n=>STOCK_XRM_SHEETS.test(n)).forEach(n=>{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1});
+    const h=(rows[0]||[]).map(v=>String(v==null?'':v));
+    const c=k=>h.indexOf(k);
+    const iId=c('申込番号'),iP=c('パートナー企業'),iL=c('リストID'),iD=c('申込日'),iS=c('営業担当者'),iT=c('顧客電話番号');
+    if(iId<0||iP<0)return;
+    for(let i=1;i<rows.length;i++){const r=rows[i];if(!r)continue;
+      const id=stockId(r[iId]);if(!id||X[id])continue;
+      X[id]={sheet:n.replace('+','＋'),partner:r[iP]||'',list:iL>=0&&r[iL]!=null?String(r[iL]):'',date:iD>=0?r[iD]:'',ym:iD>=0?stockYmOf(r[iD]):'',staff:iS>=0?r[iS]||'':'',tel:iT>=0?r[iT]||'':''};
+    }
+  });
+  return X;
+}
+/* p: parseSbpsCsv の結果 */
+function stockBuild(p){
+  const st=S.memory&&S.memory.stockLs;
+  if(!p||!p.summary)return {err:'売上明細内訳 CSV として読めません'};
+  const from=stockYmOf(p.summary.from);
+  if(!from)return {err:'CSV の集計期間が読めません'};
+  const target=stockYmAdd(from,1);
+  if(!st||!st.months)return {target,err:'前月までのライフサポート内訳がまだこの端末にありません。「同期」を一度実行してください（Mac の自動同期が支払明細書から作ります）'};
+  const months=Object.keys(st.months).filter(m=>m<target).sort().reverse();
+  if(!months.length)return {target,err:`${fmtYmJa(target.replace('-',''))}度より前の内訳がありません`};
+  const baseYm=months[0],older=months.slice(1,STOCK_NEW_MONTHS);
+  const X=stockXrmIndex();
+  /* 顧客 → 支払先 → 前月の行 */
+  const idxOf=ym=>{const o={};Object.entries(st.months[ym]||{}).forEach(([pt,g])=>{const s=g.PS;if(!s)return;
+    const ci=s.hdr.indexOf('顧客ID'),ki=s.hdr.indexOf('売上返金区分名称');
+    s.rows.forEach(r=>{const id=stockId(r[ci]);if(!id)return;const m=o[id]||(o[id]={});
+      if(!m[pt]||m[pt].r[ki]!=='売上')m[pt]={r,hdr:s.hdr}})});return o};
+  const base=idxOf(baseYm),olderIdx=older.map(idxOf);
+  /* 学習: 支払先ごとの見出し、XRM シート → 主な支払先、リストID → OP、単価 */
+  const hdrOf={},sheetPay={},opList={},listCust={},learn={},opPrice={};
+  const bump=(o,k,v)=>{const m=o[k]||(o[k]={});m[v]=(m[v]||0)+1};
+  const top=m=>{if(!m)return null;let b=null,n=-1,t=0;Object.entries(m).forEach(([k,v])=>{t+=v;if(v>n){n=v;b=k}});return {v:b,n,t}};
+  const learnFrom=stockYmAdd(target,-STOCK_LEARN_MONTHS);
+  months.forEach(ym=>Object.entries(st.months[ym]).forEach(([pt,g])=>{const s=g.PS;if(!s)return;
+    if(!hdrOf[pt])hdrOf[pt]=s.hdr;
+    const ci=s.hdr.indexOf('顧客ID'),ki=s.hdr.indexOf('売上返金区分名称'),pi=s.hdr.findIndex(h=>/単価/.test(h)),mi=s.hdr.indexOf('支払い方法');
+    s.rows.forEach(r=>{if(r[ki]!=='売上')return;const x=X&&X[stockId(r[ci])];
+      if(ym===baseYm)bump(opPrice,pt,r[pi]);
+      if(!x)return;
+      if(ym===baseYm){bump(sheetPay,x.sheet,pt);if(x.list){bump(opList,x.list,pt);bump(listCust,x.list,stockId(r[ci]))}}
+      if(x.ym&&x.ym>=learnFrom){const mc=stockMclass(r[mi]);
+        bump(learn,[pt,x.sheet,x.partner,mc,x.list].join('|'),r[pi]);bump(learn,[pt,x.sheet,x.partner,mc].join('|'),r[pi])}
+    })}));
+  const mainPay={};Object.keys(sheetPay).forEach(sh=>{mainPay[sh]=top(sheetPay[sh]).v});
+  const mains=new Set(Object.values(mainPay));
+  /* OP への並行支払い: 前月の内訳で、そのリストIDの顧客の半分以上を OP にも払っているときだけ */
+  const opOfList=l=>{const m=opList[l];if(!m)return null;const e=Object.entries(m).filter(([pt])=>!mains.has(pt));if(!e.length)return null;e.sort((a,b)=>b[1]-a[1]);
+    return e[0][1]>=0.5*Object.keys(listCust[l]||{}).length?e[0][0]:null};
+  /* 出力 */
+  const out={},check=[];
+  const put=(pt,row,how,amt)=>{(out[pt]=out[pt]||{rows:[],how:{}}).rows.push({row,how,amt});out[pt].how[how]=(out[pt].how[how]||0)+1};
+  const sumOf=new Set();
+  const tx=(p.details||[]).filter(d=>d.kubunName&&d.kubunName!=='与信'&&d.customerId);
+  tx.forEach(d=>{
+    const id=stockId(d.customerId);
+    const neg=d.kubunName==='返金'||(d.kubunName!=='売上'&&d.amount<0);
+    let hit=base[id],how='前月';
+    if(!hit){const k=olderIdx.findIndex(o=>o[id]);if(k>=0){hit=olderIdx[k][id];how='過去'}}
+    if(hit){
+      Object.entries(hit).forEach(([pt,src])=>{
+        /* 月によって列の並びが違うことがあるので、見出し名で今月の並びに直す */
+        const h=hdrOf[pt]||src.hdr,pi=h.findIndex(x=>/単価/.test(x)),ki=h.indexOf('売上返金区分名称'),mi=h.indexOf('支払い方法');
+        const spi=src.hdr.findIndex(x=>/単価/.test(x));
+        const row=h.map((k,i)=>{const j=i===pi?spi:src.hdr.indexOf(k);return j>=0&&j<src.r.length?src.r[j]:''});
+        const pr=Math.abs(Number(row[pi])||0);
+        row[pi]=neg?-pr:pr;if(ki>=0)row[ki]=d.kubunName;if(mi>=0&&d.method)row[mi]=d.method;
+        put(pt,row,neg?'返金・CB':how,row[pi]);
+      });
+      return;
+    }
+    const x=X&&X[id];
+    const ck=(why,extra)=>check.push(Object.assign({id,kind:d.kubunName,method:d.method,amount:d.amount,why},x?{sheet:x.sheet,partner:x.partner,ym:x.ym,list:x.list}:{},extra||{}));
+    if(!X){ck('XRM が未読込のため新規か判定できません');return}
+    if(!x){ck('XRM に無い顧客');return}
+    if(!x.ym||x.ym<stockYmAdd(target,-STOCK_NEW_MONTHS)){ck(`前月まで支払いが無い古い顧客（申込 ${x.ym||'不明'}）`);return}
+    const pt=mainPay[x.sheet];
+    if(!pt){ck(`XRM「${x.sheet}」の支払先が過去の明細から判定できません`);return}
+    const mc=stockMclass(d.method);
+    const t=top(learn[[pt,x.sheet,x.partner,mc,x.list].join('|')])||top(learn[[pt,x.sheet,x.partner,mc].join('|')]);
+    if(!t){ck(`単価が決められません（${pt}・${x.partner}・${d.method}）`);return}
+    const pr=+t.v;
+    const mk=(pt2,price)=>{const h=hdrOf[pt2];const row=new Array(h.length).fill('');
+      const telCol=h.indexOf('電話番号')<0&&h.indexOf('獲得日')>=0;   /* OP の内訳は「獲得日」列に電話番号が入っている */
+      h.forEach((k,i)=>{row[i]=k==='顧客ID'?id:k==='支払い方法'?d.method:k==='売上返金区分名称'?d.kubunName:k==='獲得パートナー'?x.partner
+        :k==='営業担当者名'?x.staff:k==='獲得日'?(telCol?x.tel:stockSerial(x.date)):k==='電話番号'?x.tel:k==='リストID'?(/^\d+$/.test(x.list)?+x.list:(x.list||'-')):/単価/.test(k)?(neg?-price:price):''});
+      return row};
+    put(pt,mk(pt,pr),neg?'返金・CB':'新規',neg?-pr:pr);
+    if(t.n<0.8*t.t)ck(`新規の単価候補が複数（${pr}円で作成）`,{payee:pt,price:pr,soft:1});
+    const op=x.list&&opOfList(x.list);
+    if(op&&hdrOf[op]){const p2=+top(opPrice[op]).v;put(op,mk(op,p2),neg?'返金・CB':'新規OP',neg?-p2:p2)}
+  });
+  /* 前月との比較 */
+  const prevSum={};Object.entries(st.months[baseYm]||{}).forEach(([pt,g])=>{const s=g.PS;if(!s)return;const pi=s.hdr.findIndex(h=>/単価/.test(h));
+    prevSum[pt]={n:s.rows.length,amt:s.rows.reduce((a,r)=>a+(Number(r[pi])||0),0)}});
+  const partners=[...new Set([...Object.keys(out),...Object.keys(prevSum)])].sort((a,b)=>((out[b]||{rows:[]}).rows.length-(out[a]||{rows:[]}).rows.length));
+  const res={target,baseYm,period:`${p.summary.from}〜${p.summary.to}`,csvRows:tx.length,check,
+    partners:partners.map(pt=>{const o=out[pt]||{rows:[],how:{}};return {name:pt,n:o.rows.length,amt:o.rows.reduce((a,r)=>a+(Number(r.amt)||0),0),how:o.how,prev:prevSum[pt]||{n:0,amt:0},hdr:hdrOf[pt],rows:o.rows.map(r=>r.row)}})};
+  res.total=res.partners.reduce((a,x)=>a+x.amt,0);
+  return res;
+}
+function stockShort(pt){return String(pt).replace(/株式会社|合同会社|有限会社/g,'').trim()}
+function stockWb(res){
+  const wb=XLSX.utils.book_new();
+  const ymJa=fmtYmJa(res.target.replace('-',''))+'度',baseJa=fmtYmJa(res.baseYm.replace('-',''))+'度';
+  const sm=[[`ライフサポート（SBPS）支払内訳 ${ymJa}（月末明細処理クラウド生成）`],['売上明細内訳 CSV の期間',res.period],['前月として使った内訳',baseJa],[],
+    ['支払先',`${ymJa} 件数`,`${ymJa} 金額`,`${baseJa} 件数`,`${baseJa} 金額`,'差額','前月踏襲','過去から再開','新規','新規(OP)','返金・CB']];
+  res.partners.forEach(x=>sm.push([x.name,x.n,x.amt,x.prev.n,x.prev.amt,x.amt-x.prev.amt,x.how['前月']||0,x.how['過去']||0,x.how['新規']||0,x.how['新規OP']||0,x.how['返金・CB']||0]));
+  sm.push(['合計',res.partners.reduce((a,x)=>a+x.n,0),res.total,res.partners.reduce((a,x)=>a+x.prev.n,0),res.partners.reduce((a,x)=>a+x.prev.amt,0),res.total-res.partners.reduce((a,x)=>a+x.prev.amt,0)]);
+  sm.push([],['※ 前月の内訳にある顧客は同じ支払先・同じ単価で踏襲。返金・チャージバックはマイナス。与信は対象外。'],['※ 内訳に入れなかった顧客は「要確認」シートにあります。']);
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sm),'まとめ');
+  const ck=[['顧客ID','区分','決済手段','決済金額','理由','XRMシート','獲得パートナー','申込月','リストID']];
+  res.check.forEach(c=>ck.push([c.id,c.kind,c.method,c.amount,c.why,c.sheet||'',c.partner||'',c.ym||'',c.list||'']));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(ck),'要確認');
+  const used=new Set(['まとめ','要確認']);
+  res.partners.filter(x=>x.n&&x.hdr).forEach(x=>{
+    let nm=(stockShort(x.name)+' LS(PS)').slice(0,31);while(used.has(nm))nm=nm.slice(0,29)+'_'+used.size;used.add(nm);
+    const ws=XLSX.utils.aoa_to_sheet([x.hdr,...x.rows]);
+    const di=x.hdr.indexOf('獲得日');
+    if(di>=0&&x.hdr.indexOf('電話番号')>=0)for(let r=1;r<=x.rows.length;r++){const a=XLSX.utils.encode_cell({r,c:di});if(ws[a]&&ws[a].t==='n')ws[a].z='yyyy/m/d'}
+    XLSX.utils.book_append_sheet(wb,ws,nm);
+  });
+  return wb;
+}
+function stockDownload(i){
+  const f=B.files[i];if(!f||!f.stock||f.stock.err)return;
+  deliverXlsx(stockWb(f.stock),`AI作成中_ライフサポート内訳_${f.stock.target.replace('-','')}_${stamp()}.xlsx`);
+}
+function stockCardHtml(i,s){
+  if(s.err)return `<div class="stockcard warn">ライフサポートの内訳を作れませんでした: ${esc(s.err)}</div>`;
+  const ymJa=fmtYmJa(s.target.replace('-',''))+'度',baseJa=fmtYmJa(s.baseYm.replace('-',''))+'度';
+  const gap=s.baseYm!==stockYmAdd(s.target,-1)?`<p class="note" style="color:var(--warn)">${esc(fmtYmJa(stockYmAdd(s.target,-1).replace('-',''))+'度')}の支払明細書がまだ無いため、${esc(baseJa)}を前月として使いました</p>`:'';
+  const soft=s.check.filter(c=>c.soft).length,hard=s.check.length-soft;
+  return `<div class="stockcard"><b>ライフサポート（SBPS）支払内訳 ${esc(ymJa)}</b>
+  <table class="fin" style="margin:6px 0"><tr><th style="text-align:left">支払先</th><th style="text-align:right">件数</th><th style="text-align:right">金額（前月比）</th></tr>
+  ${s.partners.filter(x=>x.n||x.prev.n).map(x=>{const d=x.amt-x.prev.amt;const nw=(x.how['新規']||0)+(x.how['新規OP']||0);
+    return `<tr><td style="text-align:left">${esc(stockShort(x.name))}${nw?` <span class="pill info">新規${nw}</span>`:''}</td><td style="text-align:right">${x.n.toLocaleString()}</td><td style="text-align:right">${yen(x.amt)}<br><small style="color:${d<0?'var(--alert)':'var(--txt-3)'}">${d>=0?'+':''}${d.toLocaleString()}</small></td></tr>`}).join('')}
+  <tr><td style="text-align:left"><b>合計</b></td><td></td><td style="text-align:right"><b>${yen(s.total)}</b><br><small style="color:var(--txt-3)">${(()=>{const d=s.total-s.partners.reduce((a,x)=>a+x.prev.amt,0);return (d>=0?'+':'')+d.toLocaleString()})()}</small></td></tr></table>
+  ${gap}<p class="note">${hard?`<b style="color:var(--warn)">要確認 ${hard}件</b>（内訳に入れていません）`:'要確認はありません'}${soft?`・単価を確認したい新規 ${soft}件`:''}。前月の内訳（${esc(baseJa)}）を踏襲し、新規は XRM と過去の単価から作りました。</p>
+  <button class="btn" onclick="stockDownload(${i})">内訳をダウンロード（支払先ごとのシート）</button></div>`;
+}
 function loadRevenueFiles(files){
   const list=Array.from(files).filter(f=>/\.csv$/i.test(f.name));
   if(!list.length){toast('SBPSの収納明細CSVを選んでください');return}
@@ -8311,7 +8497,12 @@ async function batchRoute(files,opts){
       try{
         if(/\.json$/i.test(f.name)){ent.kind='json';ent.note='記憶・台帳データとして読み込みました';importMemory(f);continue}
         if(/\.csv$/i.test(f.name)){
-          if(/SBPS|収納/i.test(f.name)){ent.kind='csv';ent.note='収納明細 → 収支推移に反映します';loadRevenueFiles([f])}
+          if(/SBPS|収納/i.test(f.name)){ent.kind='csv';ent.note='収納明細 → 収支推移に反映します';loadRevenueFiles([f]);
+            /* 同じ CSV からライフサポートのパートナー支払内訳（LS(PS)）を作る */
+            try{const p=parseSbpsCsv(await f.text());ent.stock=stockBuild(p);
+              if(!ent.stock.err)ent.note=`収支推移に反映・${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート支払内訳を作りました（下のカード）`}
+            catch(ex){console.error(ex);ent.stock={err:(ex&&ex.message)||String(ex)}}
+          }
           else{ent.kind='skip';ent.note='CSV は収納明細（SBPS）のみ対応です'}
           continue;
         }
@@ -8402,7 +8593,7 @@ function renderIn(){
     else if(f.kind==='csv'){tag=pill('flat','収納明細');d=f.note}
     else if(!f.kind){tag=pill('flat','読込中…');d=''}
     else{tag=pill('flat','対象外');d=f.note}
-    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span></div>`;
+    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${f.stock?stockCardHtml(i,f.stock):''}</div>`;
   }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
   const xs=document.getElementById('inXrm');
   if(xs){
@@ -8418,7 +8609,8 @@ function renderIn(){
     btn.disabled=!n||B.busy>0;
     /* 収納明細・支払明細書・記憶データ・XRM だけを入れたときは、その場で反映済み（突合する上位店明細が無いので実行は不要） */
     const applied=(B.files||[]).filter(f=>['csv','pay','json','xrm'].includes(f.kind));
-    const kindJa={csv:'収納明細は収支推移',pay:'支払明細書は単価の記憶',json:'記憶データ',xrm:'XRM'};
+    if(applied.some(f=>f.stock&&!f.stock.err))applied.unshift({kind:'stock'});
+    const kindJa={stock:'ライフサポート内訳は下のカード',csv:'収納明細は収支推移',pay:'支払明細書は単価の記憶',json:'記憶データ',xrm:'XRM'};
     const doneMsg=applied.length?`✓ ${[...new Set(applied.map(f=>kindJa[f.kind]))].join('・')}に反映済み（上位店の明細を入れると実行できます）`:'';
     btn.textContent=B.busy>0?'読み込み中…':!n?(doneMsg||'ファイルを入れると実行できます')
       :(B.ran&&!todo.length?'✓ 実行済み → 結果を見る':`▶ ${ym}をまとめて実行（${todo.length<n?`追加分 ${todo.length} / `:''}${n}商材）`);
