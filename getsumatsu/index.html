@@ -3150,6 +3150,25 @@ function normProduct(sheetName){
 function rateKey(product,partner,toss){
   return [product||'',partner||'',toss||'(トスなし)'].join('|');
 }
+/* 回線商材の単価は「ファミリー（戸建）かマンションか × プラン（速度）」で変わる（2026-10 菊地さん）。
+   回線商材のルールは 商材|パートナー|トス|区分 の4つで持つ。区分が読めない行（住居もプランも商材名も無い）は学ばない */
+const LINE_PRODUCT_RE=/光|BIGLOBE|So-net|ｿﾈｯﾄ|nifty|NURO|フレッツ|docomo|ドコモ光|SoftBank光|ソフトバンク光|auひかり|コミュファ|ギガらく|TCOM|回線/i;
+function isLineProduct(p){return LINE_PRODUCT_RE.test(String(p||''))}
+function lineVariant(text){
+  const t=String(text||'').normalize('NFKC');
+  const dw=/戸建|ファミリー|ホーム|一戸建/.test(t)?'ファミリー':(/マンション|集合|MDU|アパート/.test(t)?'マンション':'');
+  const m=t.match(/(\d+(?:\.\d+)?)\s*(ギガ|G(?:bps)?|メガ|M(?:bps)?)(?![a-z])/i);
+  const sp=m?m[1]+(/^[ギGg]/.test(m[2])?'ギガ':'メガ'):'';
+  return [dw,sp].filter(Boolean).join('・');
+}
+const VARIANT_HDR=['プラン名','プラン','商材','商品名','サービス名','種別','建物種別','住居','タイプ','会員区分名称','コース'];
+function variantOf(h,r,prod){
+  if(!isLineProduct(prod))return '';
+  const parts=[];VARIANT_HDR.forEach(n=>{const c=findCol(h,[n]);if(c>=0&&r[c]!=null&&r[c]!=='')parts.push(String(r[c]))});
+  return lineVariant(parts.join(' ')+' '+prod)||(parts.length?parts[0].normalize('NFKC').replace(/\s+/g,'').slice(0,30):'');
+}
+/* ルールの鍵（回線は区分つき）。回線で区分が無ければ null（学ばない） */
+function ruleKeyOf(e){const k=rateKey(e.product,e.partner,e.toss);if(!isLineProduct(e.product))return k;return e.variant?k+'|'+e.variant:null}
 /* 確定単価を登録する（菊地さんが正と確認した単価。学習値より常に優先） */
 async function setFixedRate(product,partner,toss,amount){
   const mem=S.memory||emptyMem();
@@ -3300,7 +3319,7 @@ async function mergeWtEntries(entries){
     if(put)n++;
     /* 単価学習: 商材 × パートナー × トス会社 → 実支払額の出現回数 */
     if(e.amount!=null&&e.amount>0&&e.partner){
-      const k=rateKey(e.product,e.partner,e.toss);
+      const k=ruleKeyOf(e);if(!k)return;
       const slot=mem.rates[k]||(mem.rates[k]={v:{},m:''});
       slot.v[e.amount]=(slot.v[e.amount]||0)+1;
       if(String(e.month||'')>String(slot.m||''))slot.m=e.month;
@@ -4240,7 +4259,7 @@ function paySheetStd(rows,sn,month,fileName){
       /* 手数料の内訳（取次・アポ・郵送 等）とトス会社も保持する */
       let toss='',ti=-1;
       if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;ti=c;break}}}
-      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,
+      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,variant:variantOf(h,r,prod),
         partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
         fees:pickFees(h,r),
         name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -4320,7 +4339,7 @@ function paySheetExt(rows,sn,month,fileName){
     const modo=/請求/.test(kubun)||/戻入/.test(item)||/戻入/.test(sn);
     let toss='';
     if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;break}}}
-    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,
+    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,variant:variantOf(h,r,prod),
       partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
       fees:null,ext:true,
       name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -6861,6 +6880,7 @@ function ledgerIsStable(c){
 }
 function normalizePending(){
   const lg=ledgerOf();const best={};
+  lg.changes=lg.changes.filter(c=>!(c.status==='pending'&&isLineProduct(String(c.key).split('|')[0])&&String(c.key).split('|').length<4));
   lg.changes=lg.changes.filter(c=>!(c.status==='pending'&&ledgerIsStale(c)));
   const mon=c=>String(c.src||'').replace(/^statement:/,'')+'|'+(c.month||'');
   lg.changes.forEach(c=>{
@@ -6875,6 +6895,7 @@ function learnFromHistory(rates){
   const lg=ledgerOf();lg.history=lg.history||{};
   let n=0,keys=0;
   Object.entries(rates||{}).forEach(([k,byM])=>{
+    if(isLineProduct(k.split('|')[0])&&k.split('|').length<4)return;   /* 回線は区分（ファミリー/マンション・プラン）が無いと単価が決まらない */
     const seg=[];
     Object.keys(byM).sort().forEach(m=>{
       const ent=Object.entries(byM[m]).sort((a,b)=>b[1]-a[1]);if(!ent.length)return;
@@ -6937,7 +6958,7 @@ function learnLedger(entries){
     if(e.modo)return;
     const amt=e.amount!=null?Number(e.amount):NaN;
     if(!(amt>0)||!e.partner||!e.product)return;
-    const k=rateKey(e.product,e.partner,e.toss);
+    const k=ruleKeyOf(e);if(!k)return;
     const m=String(e.month||'');
     const bm=obs[k]||(obs[k]={});const d=bm[m]||(bm[m]={});
     d[amt]=(d[amt]||0)+1;
@@ -7009,8 +7030,8 @@ function renderLedgerChanges(){
   const ansHtml=ledgerAnswersHtml();
   if(!pend.length&&!done.length){host.innerHTML=ansHtml;return}
   const typeLabel={new:'<span class="badge b-fill">新規</span>',changed:'<span class="badge b-warn">単価変更</span>',conflict:'<span class="badge b-alert">食い違い</span>'};
-  const row=c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-row">
-      <div class="pat-l"><div class="pat-label">${typeLabel[c.type]||''} ${esc(p)} / ${esc(pa)} / ${esc(t)}</div>
+  const row=c=>{const [p,pa,t,v]=c.key.split('|');return `<div class="pat-row">
+      <div class="pat-l"><div class="pat-label">${typeLabel[c.type]||''} ${esc(p)}${v?`（${esc(v)}）`:''} / ${esc(pa)} / ${esc(t)}</div>
         <div class="pat-sub">${c.old!=null?`${Number(c.old).toLocaleString()}円 → `:''}<b>${Number(c.new).toLocaleString()}円</b>
           ${c.month?`　${fmtYmJa(c.month)}${(()=>{const sm=String(c.src||'').replace(/^statement:/,'');return /^\d{6}$/.test(sm)&&sm!==c.month?'〜'+fmtYmJa(sm):''})()}の明細`:''}${c.total?`（${c.count}/${c.total}件）`:''}　出典: ${esc(ledgerSrcLabel(c.src))}${c.note?`　${esc(c.note)}`:''}</div></div>
       <div class="pat-r"><button class="btn btn-sm" onclick="ledgerDecide('${c.id}',true)">採用</button>
@@ -7115,7 +7136,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面11';
+const APP_BUILD='2026-10-12 新画面12';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10123,7 +10144,7 @@ function renderTodo(){
         <div class="ans"><button class="btn btn-sm" onclick="todoAudit(${idx},'claim')">載せる（推奨）</button><button class="btn-ghost btn-sm" onclick="todoAudit(${idx},'skip')">今回は対象から外す</button></div></div>`;
     }
     if(it.type==='ledger'){
-      const c=it.c;const [p,pa,t]=c.key.split('|');
+      const c=it.c;const [p0,pa,t,v]=c.key.split('|');const p=p0+(v?`（${v}）`:'');
       const typ=c.type==='new'?'新しい組み合わせ':c.type==='changed'?'単価の変更':'食い違い';
       return `<div class="titem"><div class="t"><span>ルール台帳 ・ ${esc(p)}</span><span>${typ}</span></div>
         <div class="q">${esc(pa)} / ${esc(t)}: ${c.old!=null?`${Number(c.old).toLocaleString()}円 → `:''}${Number(c.new).toLocaleString()}円 を台帳に採用しますか？<small>${c.month?fmtYmJa(c.month)+'の明細 ':''}${c.total?`（${c.count}/${c.total}件） `:''}出典: ${esc(ledgerSrcLabel(c.src))}${c.note?' ・ '+esc(c.note):''}</small></div>
