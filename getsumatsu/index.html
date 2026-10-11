@@ -3161,14 +3161,106 @@ function lineVariant(text){
   const sp=m?m[1]+(/^[ギGg]/.test(m[2])?'ギガ':'メガ'):'';
   return [dw,sp].filter(Boolean).join('・');
 }
-const VARIANT_HDR=['プラン名','プラン','商材','商品名','サービス名','種別','建物種別','住居','タイプ','会員区分名称','コース'];
-function variantOf(h,r,prod){
-  if(!isLineProduct(prod))return '';
-  const parts=[];VARIANT_HDR.forEach(n=>{const c=findCol(h,[n]);if(c>=0&&r[c]!=null&&r[c]!=='')parts.push(String(r[c]))});
-  return lineVariant(parts.join(' ')+' '+prod)||(parts.length?parts[0].normalize('NFKC').replace(/\s+/g,'').slice(0,30):'');
+/* 単価が分かれる「軸」は商材ごとに違う（2026-10 菊地さん「商材によって他にも軸がある」）。
+   明細の行から読める軸をぜんぶ attrs に取っておき、商材ごとに使う軸（台帳 lg.axes）で鍵を作る。
+   軸は ①条件一覧にある分を初期値 ②同じ パートナー×トス で単価が割れたら、割れ方を説明できる列を自動で足す（学習）
+   ③台帳で外す・足す（手動が最優先） */
+const VARIANT_HDR=['プラン名','プラン','商材','商品名','サービス名','種別','建物種別','住居','タイプ','会員区分名称','コース','区分','申込区分','契約区分','工事区分','申込種別'];
+const AXIS_NAMES=['住居','速度','区分','タイプ','単体/セット','支払方法','アポ','プラン','ITSS','独自CP','ネット','電気','オプション'];
+const AXIS_HDR_RAW={ITSS:/^ITSS/i,'独自CP':/独自\s*CP/i,'ネット':/^ネット/,'電気':/^電気/,'オプション':/^(オプション|OP)(名|内容)?$/i};
+/* 商材ごとに名前の違う区分の列（会員区分名称・対象サービス・仕分けフラグ・プラン区分1…）も、短い文字の列なら軸の候補にする（'#列名'）。
+   人・会社・番号・日付・金額の列は候補にしない */
+const AXIS_COL_SKIP=/手数料|減額|インセンティブ|教育料|業務管理費|金額|単価|料金$|日$|日時|月$|期間|番号|ID|ｺｰﾄﾞ|コード|顧客|契約者|申込者|お客様|氏名|名前|フリガナ|ﾌﾘｶﾞﾅ|名義|電話|TEL|住所|担当|パートナー|代理店|支払先|営業|トス|メール|備考|メモ|支払区分|件数|数量|責任者|部署|雇用|所属|使用欄|状況|ステータス|Serial|計算用|No\.?$|^№/i;
+function axisLabel(x){return String(x).startsWith('#')?'「'+String(x).slice(1)+'」':String(x)}
+function axisNorm(v){return String(v==null?'':v).normalize('NFKC').replace(/\s+/g,'').slice(0,30)}
+function attrsOf(h,r,prod){
+  const A={};const hd=(h||[]).map(x=>String(x==null?'':x).normalize('NFKC').trim());
+  const txt=[];
+  hd.forEach((n,i)=>{
+    const v=r[i];if(v==null||v==='')return;const t=String(v).normalize('NFKC');
+    if(VARIANT_HDR.some(k=>n===k||n.endsWith(k)))txt.push(t);
+    if(/^(プラン名?|料金プラン|コース)$/.test(n)&&!A['プラン'])A['プラン']=axisNorm(t);
+    if(/支払い?方法|決済方法/.test(n)&&!A['支払方法'])A['支払方法']=/クレ|カード/.test(t)?'クレカ':/口座|振替/.test(t)?'口座振替':/代引/.test(t)?'代引き':axisNorm(t);
+    Object.entries(AXIS_HDR_RAW).forEach(([ax,re])=>{if(re.test(n)&&!A[ax])A[ax]=axisNorm(t)});
+    if(n&&!AXIS_COL_SKIP.test(n)&&typeof v==='string'&&t.trim().length<=30&&!/^[\d\s,.\/:\-]+$/.test(t))A['#'+n]=axisNorm(t);
+  });
+  if(!A['プラン']){const c=hd.findIndex(n=>/^(商品名|サービス名|商材名?)$/.test(n));if(c>=0&&r[c]!=null&&r[c]!=='')A['プラン']=axisNorm(r[c])}
+  const t=txt.join(' ')+' '+String(prod||'').normalize('NFKC');
+  const lv=lineVariant(t).split('・');
+  lv.forEach(x=>{if(/ファミリー|マンション/.test(x))A['住居']=x;else if(x)A['速度']=x});
+  const kb=/事業者変更|事変/.test(t)?'事業者変更':/再転用/.test(t)?'再転用':/転用/.test(t)?'転用':/新規|新設/.test(t)?'新規':'';
+  if(kb)A['区分']=kb;
+  const ty=t.match(/タイプ\s*([A-Z])(?![a-z])/i);if(ty)A['タイプ']='タイプ'+ty[1].toUpperCase();
+  const st=t.match(/単体|セット/);if(st)A['単体/セット']=st[0];
+  const ap=t.match(/STN|SCF/i);if(ap)A['アポ']=ap[0].toUpperCase();
+  return A;
 }
-/* ルールの鍵（回線は区分つき）。回線で区分が無ければ null（学ばない） */
-function ruleKeyOf(e){const k=rateKey(e.product,e.partner,e.toss);if(!isLineProduct(e.product))return k;return e.variant?k+'|'+e.variant:null}
+/* 条件一覧（明細一覧）にある商材ごとの軸。トス・社名は鍵に入っているので除く */
+const AXES_SEED=[
+  [/DH\s*Mobile/i,['プラン','単体/セット']],[/BiZiMo/i,['プラン','ITSS']],[/BIGLOBE/i,['住居','速度','区分']],
+  [/hi-?ho/i,['独自CP','支払方法']],[/HTB/i,['プラン']],[/^SoftBank(?!光)|SoftBank\s*Air/i,['プラン']],
+  [/コスモウォーター/,['プラン','支払方法']],[/不動産/,['ネット','電気']]];
+function axesOf(product){
+  const p=String(product||'').replace(/〔.*?〕$/,'');
+  const lg=S.memory&&S.memory.ledger;const cfg=lg&&lg.axes&&lg.axes[p];
+  if(cfg&&Array.isArray(cfg.axes))return cfg.axes;
+  const sd=AXES_SEED.find(([re])=>re.test(p));if(sd)return sd[1];
+  return isLineProduct(p)?['住居','速度']:[];
+}
+function variantFor(product,attrs,axes){
+  axes=axes||axesOf(product);const a=attrs||{};
+  const v=axes.map(x=>a[x]).filter(Boolean).join('・');
+  if(v||!isLineProduct(product))return v;
+  return a['プラン']||'';    /* 回線で住居も速度も無い行（光電話・ルーターなどのオプション）は商品名そのものを区分にする */
+}
+function variantOf(h,r,prod){return variantFor(prod,attrsOf(h,r,prod))}
+/* ルールの鍵。軸のある商材は 商材|パートナー|トス|区分。回線で区分が無ければ null（学ばない） */
+function ruleKeyOf(e){
+  const k=rateKey(e.product,e.partner,e.toss);
+  const v=e.attrs?variantFor(e.product,e.attrs):(e.variant||'');
+  if(v)return k+'|'+v;
+  return isLineProduct(e.product)?null:k;
+}
+/* 単価の割れ方から軸を学ぶ。obs: {product:{'パートナー|トス':{sig:{month:{amt:cnt}}}}}（sig は attrs の JSON）
+   いまの軸で束ねると代表値が8割に届かない月がある → その割れを最もよく説明する軸を1つずつ足す（最大2つ） */
+function axisImpurity(byBase,axes,prod){
+  let bad=0,all=0;
+  Object.values(byBase).forEach(bySig=>{
+    const g={};
+    Object.entries(bySig).forEach(([sig,byM])=>{
+      let a={};try{a=JSON.parse(sig)}catch(e){}
+      const v=variantFor(prod,a,axes);
+      Object.entries(byM).forEach(([m,d])=>{const x=g[v+'#'+m]||(g[v+'#'+m]={});Object.entries(d).forEach(([amt,c])=>x[amt]=(x[amt]||0)+c)});
+    });
+    Object.values(g).forEach(d=>{const cs=Object.values(d);const t=cs.reduce((a,b)=>a+b,0);if(t<3)return;all+=t;bad+=t-Math.max(...cs)});
+  });
+  return {bad,all};
+}
+function learnAxes(obs){
+  const lg=ledgerOf();lg.axes=lg.axes||{};let n=0;
+  const mg={};   /* EX・WST・TIME の同じ商材はまとめて見る */
+  Object.entries(obs||{}).forEach(([p0,bb])=>{const p=String(p0).replace(/〔.*?〕$/,'');const o=mg[p]||(mg[p]={});Object.entries(bb).forEach(([b,v])=>o[p0+'#'+b]=v)});
+  Object.entries(mg).forEach(([prod,byBase])=>{
+    const cfg=lg.axes[prod];if(cfg&&cfg.manual)return;     /* 台帳で手直しした商材は触らない */
+    const off=(cfg&&cfg.off)||[];
+    let axes=axesOf(prod).slice();const added=[];
+    for(let step=0;step<2;step++){
+      const cur=axisImpurity(byBase,axes,prod);
+      if(!cur.all||cur.bad/cur.all<0.1)break;
+      const seen=new Set();Object.values(byBase).forEach(bs=>Object.keys(bs).forEach(sig=>{try{Object.keys(JSON.parse(sig)).forEach(k=>seen.add(k))}catch(e){}}));
+      let best=null;
+      AXIS_NAMES.concat([...seen].filter(x=>x.startsWith('#'))).filter(x=>seen.has(x)&&!axes.includes(x)&&!off.includes(x)).forEach(x=>{
+        const r=axisImpurity(byBase,axes.concat([x]),prod);
+        /* 割れが半分以下になり、かつ細かく割りすぎない（3件以上の束に入る件数を7割以上残す）軸だけ */
+        if(r.bad<=cur.bad*0.5&&r.all>=cur.all*0.7&&(!best||r.bad<best.bad))best={x,bad:r.bad};
+      });
+      if(!best)break;
+      axes.push(best.x);added.push(best.x);
+    }
+    if(added.length){lg.axes[prod]={axes,learned:((cfg&&cfg.learned)||[]).concat(added),off,at:Date.now()};n++}
+  });
+  return n;
+}
 /* 確定単価を登録する（菊地さんが正と確認した単価。学習値より常に優先） */
 async function setFixedRate(product,partner,toss,amount){
   const mem=S.memory||emptyMem();
@@ -3179,7 +3271,26 @@ async function setFixedRate(product,partner,toss,amount){
   S.memory=mem;await saveMemory();
 }
 /* 学習済み単価を引く: {amount,count,distinct,month,samples,fixed} */
-function learnedRate(product,partner,toss){
+/* 上位店明細の行から軸の材料を読む（見出し行は先頭10行のうち文字の列がいちばん多い行） */
+function upAttrsOf(r,product){
+  if(!S.meisaiWb||!S.meisaiSheet||!r||!r.sheetRow)return null;
+  if(!S._upRaw||S._upRaw.wb!==S.meisaiWb||S._upRaw.sheet!==S.meisaiSheet){
+    const rows=XLSX.utils.sheet_to_json(S.meisaiWb.Sheets[S.meisaiSheet],{header:1,defval:null});
+    let hi=0,best=-1;rows.slice(0,10).forEach((x,i)=>{const n=(x||[]).filter(v=>typeof v==='string'&&v.trim()&&!/^\d/.test(v)).length;if(n>best){best=n;hi=i}});
+    S._upRaw={wb:S.meisaiWb,sheet:S.meisaiSheet,rows,hi};
+  }
+  const u=S._upRaw;const row=u.rows[r.sheetRow-1];if(!row||r.sheetRow-1<=u.hi)return null;
+  return attrsOf(u.rows[u.hi],row,product);
+}
+function learnedRate(product,partner,toss,variant){
+  if(variant){
+    const k4=rateKey(product,partner,toss)+'|'+variant;const r4=ledgerOf().rules[k4];
+    if(r4&&r4.status==='confirmed')return {amount:Number(r4.price),count:0,distinct:1,month:r4.from||'',fixed:true,ledger:true,variant,
+      samples:[`${Number(r4.price).toLocaleString()}円（台帳: ${variant} / ${ledgerSrcLabel(r4.src)}）`]};
+    const h4=((S.memory&&S.memory.rates)||{})[k4];
+    if(h4&&h4.v){const ent=Object.entries(h4.v).sort((a,b)=>b[1]-a[1]);if(ent.length)return {amount:Number(ent[0][0]),count:ent[0][1],distinct:ent.length,month:h4.m||'',variant,
+      samples:ent.slice(0,3).map(([a,c])=>`${Number(a).toLocaleString()}円×${c}件（${variant}）`)}}
+  }
   const lr=ledgerRule(product,partner,toss);
   if(lr){
     return {amount:Number(lr.price),count:0,distinct:1,month:lr.from||'',fixed:true,ledger:true,
@@ -3207,7 +3318,7 @@ function applyLearnedRates(){
   S.rows.forEach(r=>{
     if(r.resolved||r.price!=null||!r.x)return;
     if(!m.pricePattern(r))return;
-    const lr=learnedRate(m.wtProduct,r.x.partner,r.x.toss);
+    const lr=learnedRate(m.wtProduct,r.x.partner,r.x.toss,variantFor(m.wtProduct,upAttrsOf(r,m.wtProduct)||{}));
     if(!lr)return;
     if(!lr.fixed&&(lr.distinct!==1||lr.count<2))return; /* 確定単価以外は、金額がブレる組合せを自動適用しない */
     r.price=r.modo?-lr.amount:lr.amount;
@@ -4259,7 +4370,7 @@ function paySheetStd(rows,sn,month,fileName){
       /* 手数料の内訳（取次・アポ・郵送 等）とトス会社も保持する */
       let toss='',ti=-1;
       if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;ti=c;break}}}
-      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,variant:variantOf(h,r,prod),
+      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,attrs:attrsOf(h,r,prod),
         partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
         fees:pickFees(h,r),
         name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -4339,7 +4450,7 @@ function paySheetExt(rows,sn,month,fileName){
     const modo=/請求/.test(kubun)||/戻入/.test(item)||/戻入/.test(sn);
     let toss='';
     if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;break}}}
-    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,variant:variantOf(h,r,prod),
+    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,attrs:attrsOf(h,r,prod),
       partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
       fees:null,ext:true,
       name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -6931,9 +7042,32 @@ function learnFromHistory(rates){
   normalizePending();
   return {keys,changes:n};
 }
+/* history.json の ratesAttr（軸の材料つき）→ 商材ごとの軸を学んでから、いまの軸で 鍵→月→単価 に束ね直す */
+function ratesFromAttr(ra){
+  const obs={};
+  Object.entries(ra||{}).forEach(([base,bySig])=>{const [p,pa,t]=base.split('|');((obs[p]||(obs[p]={})))[pa+'|'+(t==='(トスなし)'?'':t)]=bySig});
+  const before=JSON.stringify(ledgerOf().axes||{});
+  learnAxes(obs);
+  if(JSON.stringify(ledgerOf().axes||{})!==before){
+    const lg=ledgerOf();const ch=new Set(Object.keys(lg.axes));
+    lg.changes=lg.changes.filter(c=>!(c.status==='pending'&&/^statement:/.test(c.src||'')&&ch.has(String(c.key).split('|')[0].replace(/〔.*?〕$/,''))));
+  }
+  const out={};
+  Object.entries(ra||{}).forEach(([base,bySig])=>{
+    const [p,pa,t]=base.split('|');
+    Object.entries(bySig).forEach(([sig,byM])=>{
+      let a={};try{a=JSON.parse(sig)}catch(e){}
+      const k=ruleKeyOf({product:p,partner:pa,toss:t==='(トスなし)'?'':t,attrs:a});if(!k)return;
+      const o=out[k]||(out[k]={});
+      Object.entries(byM).forEach(([m,d])=>{const x=o[m]||(o[m]={});Object.entries(d).forEach(([amt,c])=>x[amt]=(x[amt]||0)+c)});
+    });
+  });
+  return out;
+}
 function applyHistory(h){
   const mem=S.memory||(S.memory=emptyMem());
-  const r=learnFromHistory(h.rates);
+  if(h.ratesAttr){mem.ratesAttr=h.ratesAttr;ledgerOf().history={}}   /* 鍵の作り方が変わるので推移は作り直す */
+  const r=learnFromHistory(h.ratesAttr?ratesFromAttr(h.ratesAttr):h.rates);
   /* 案件ごとの単価（前月踏襲・戻入の単価引きに使う）: 新しい月が勝つ */
   mem.cases=mem.cases||{};let nc=0;
   const prods=h.products||[];
@@ -6951,8 +7085,19 @@ function applyHistory(h){
   }
   return Object.assign(r,{cases:nc});
 }
+function axisObs(entries){
+  const o={};
+  (entries||[]).forEach(e=>{
+    if(e.modo||!e.attrs||!e.partner||!e.product)return;const amt=Number(e.amount);if(!(amt>0))return;
+    const b=(o[e.product]||(o[e.product]={}))[e.partner+'|'+(e.toss||'')]||(o[e.product][e.partner+'|'+(e.toss||'')]={});
+    const sig=JSON.stringify(e.attrs);const m=String(e.month||'');
+    const d=(b[sig]||(b[sig]={}))[m]||(b[sig][m]={});d[amt]=(d[amt]||0)+1;
+  });
+  return o;
+}
 function learnLedger(entries){
   const lg=ledgerOf();
+  learnAxes(axisObs(entries));
   const obs={};
   (entries||[]).forEach(e=>{
     if(e.modo)return;
@@ -7027,7 +7172,7 @@ function renderLedgerChanges(){
   const pend=lg.changes.filter(c=>c.status==='pending').sort((a,b)=>(b.month||'').localeCompare(a.month||''));
   const stable=pend.filter(ledgerIsStable);
   const done=lg.changes.filter(c=>c.status!=='pending').slice(-8).reverse();
-  const ansHtml=ledgerAnswersHtml();
+  const ansHtml=ledgerAxesHtml()+ledgerAnswersHtml();
   if(!pend.length&&!done.length){host.innerHTML=ansHtml;return}
   const typeLabel={new:'<span class="badge b-fill">新規</span>',changed:'<span class="badge b-warn">単価変更</span>',conflict:'<span class="badge b-alert">食い違い</span>'};
   const row=c=>{const [p,pa,t,v]=c.key.split('|');return `<div class="pat-row">
@@ -7044,6 +7189,37 @@ function renderLedgerChanges(){
     ${pend.length>1?`<div class="pm-bar"><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(true)">すべて採用</button><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(false)">すべて却下</button></div>`:''}
     ${done.length?`<details style="margin-top:14px"><summary class="note" style="cursor:pointer">最近の判断 ${done.length}件</summary>${done.map(c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-sub">${c.status==='accepted'?'✓ 採用':'✕ 却下'}: ${esc(p)} / ${esc(pa)} / ${esc(t)} ${Number(c.new).toLocaleString()}円${c.month?`（${fmtYmJa(c.month)}）`:''}</div>`}).join('')}</details>`:''}
   </div>${ansHtml}`;
+}
+/* 商材ごとの単価の軸（条件一覧の初期値・学習・手直し）。軸を変えると、取り込んだ明細の実績から鍵を作り直す */
+function ledgerAxesHtml(){
+  const lg=ledgerOf();const prods=new Set();
+  Object.keys(lg.rules||{}).concat(Object.keys(lg.history||{})).forEach(k=>prods.add(String(k).split('|')[0].replace(/〔.*?〕$/,'')));
+  Object.keys(lg.axes||{}).forEach(p=>prods.add(p));
+  const list=[...prods].filter(p=>p&&(axesOf(p).length||(lg.axes&&lg.axes[p]))).sort();
+  if(!list.length)return '';
+  const src=p=>{const c=lg.axes&&lg.axes[p];return c&&c.manual?'手直し':c&&c.learned&&c.learned.length?'学習':AXES_SEED.some(([re])=>re.test(p))?'条件一覧':isLineProduct(p)?'回線の基本':''};
+  const pq=p=>esc(p).replace(/'/g,'&#39;');
+  return `<div class="patbox"><details><summary class="pat-h" style="cursor:pointer">商材ごとの単価の軸 ${list.length}商材</summary>
+    <div class="pat-n">同じパートナー・同じトスでも、ここに並んだ軸ごとに単価を分けて覚えます。単価が割れたときは、割れ方を説明できる列（区分・タイプ・支払方法など）を自動で足します（学習）。違うと思う軸は × で外してください。</div>
+    ${list.map(p=>{const ax=axesOf(p);const c=(lg.axes&&lg.axes[p])||{};const learned=c.learned||[];
+      const cols=new Set();Object.entries((S.memory&&S.memory.ratesAttr)||{}).forEach(([b,bs])=>{if(b.split('|')[0].replace(/〔.*?〕$/,'')!==p)return;Object.keys(bs).forEach(sig=>{try{Object.keys(JSON.parse(sig)).forEach(k=>cols.add(k))}catch(e){}})});
+      const rest=AXIS_NAMES.filter(x=>cols.has(x)||!cols.size).concat([...cols].filter(x=>x.startsWith('#')).sort()).filter(x=>!ax.includes(x));
+      return `<div class="pat-row"><div class="pat-l"><div class="pat-label">${esc(p)} <span class="note">${src(p)}</span></div>
+        <div class="pat-sub">${ax.length?ax.map(x=>`<span class="badge ${learned.includes(x)?'b-warn':'b-fill'}" style="margin-right:4px">${esc(axisLabel(x))}${learned.includes(x)?'（学習）':''} <a href="javascript:void 0" onclick="axisSet('${pq(p)}','${esc(x)}',false)" style="text-decoration:none">×</a></span>`).join(''):'軸なし（パートナー×トスだけで単価が決まる）'}</div></div>
+        <div class="pat-r"><select class="btn-ghost btn-sm" onchange="if(this.value)axisSet('${pq(p)}',this.value,true)"><option value="">＋軸を足す</option>${rest.map(x=>`<option value="${esc(x)}">${esc(axisLabel(x))}</option>`).join('')}</select></div></div>`}).join('')}
+  </details></div>`;
+}
+async function axisSet(prod,axis,on){
+  const lg=ledgerOf();lg.axes=lg.axes||{};const c=lg.axes[prod]||{};
+  let ax=axesOf(prod).slice();const off=(c.off||[]).filter(x=>x!==axis);
+  if(on){if(!ax.includes(axis))ax.push(axis)}else{ax=ax.filter(x=>x!==axis);off.push(axis)}
+  lg.axes[prod]={axes:ax,learned:(c.learned||[]).filter(x=>ax.includes(x)),off,manual:true,at:Date.now()};
+  /* 古い鍵の確認待ちを片づけて、取り込み済みの実績から作り直す */
+  lg.changes=lg.changes.filter(x=>!(x.status==='pending'&&/^statement:/.test(x.src||'')&&String(x.key).split('|')[0].replace(/〔.*?〕$/,'')===prod));
+  Object.keys(lg.history||{}).forEach(k=>{if(String(k).split('|')[0].replace(/〔.*?〕$/,'')===prod)delete lg.history[k]});
+  const mem=S.memory;if(mem&&mem.ratesAttr)learnFromHistory(ratesFromAttr(mem.ratesAttr));
+  await saveMemory();syncLedgerSoon();renderLedgerChanges();
+  toast(`${prod} の軸: ${ax.map(axisLabel).join('・')||'なし'}`);
 }
 /* 覚えた答え（要確認で答えたもの・リスト番号の持ち主）の一覧。間違えたものは「忘れる」 */
 function ledgerAnswersHtml(){
@@ -7136,7 +7312,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面12';
+const APP_BUILD='2026-10-12 新画面13';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7314,6 +7490,8 @@ function mergeLedger(remote){
     const mine=lg.answers[ns]||(lg.answers[ns]={}),del=Object.assign({},m&&remote.answers[ns+'#del']||{},lg.answers[ns+'#del']||{});
     Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
   });
+  /* 商材ごとの単価の軸: 新しい方 */
+  Object.entries(remote.axes||{}).forEach(([k,r])=>{lg.axes=lg.axes||{};const cur=lg.axes[k];if(!cur||(r.at||0)>(cur.at||0)){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.axes[k]=r;n++}}});
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
   /* ショット先出OP: 計画は会社ごと、実績は月×会社ごとに新しい方 */
   if(remote.shot){const m=shotMem();
@@ -7325,7 +7503,7 @@ function mergeLedger(remote){
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
