@@ -699,6 +699,9 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 .sync-status{margin-bottom:12px}
 .sync-log{max-height:220px;overflow-y:auto;margin-top:0;padding:12px 14px}
 .sync-log:empty{display:none}
+.sync-bar{position:relative;height:24px;border-radius:12px;background:var(--accent-soft);border:1px solid var(--line-2);overflow:hidden;margin:4px 0 12px}
+.sync-bar-fill{height:100%;width:0;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .35s ease}
+.sync-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink,#0b2040)}
 /* 台帳・ボードなどボタンが多い画面のフッターはスマホで固定しない（本文を隠すため） */
 @media(max-width:640px){#scRates .footer-nav,#scBoard .footer-nav,#scTrend .footer-nav,#scRecov .footer-nav{position:static;background:transparent;backdrop-filter:none}}
 </style>
@@ -1123,6 +1126,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <button class="btn-ghost btn-sm" onclick="forgetSync()">この端末の設定を消す</button>
     </div>
     <div class="pm-note" id="syncState" style="display:none;font-weight:600"></div>
+    <div class="sync-bar" id="syncBar" style="display:none" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div class="sync-bar-fill" id="syncBarFill"></div><span class="sync-pct" id="syncPct">0%</span></div>
     <div class="diag sync-status" id="syncStatus" style="display:block"></div>
     <div class="sync-acts" id="syncSales"></div>
     <div class="prog on sync-log" id="syncLog"></div>
@@ -6375,7 +6379,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夕方版';
+const APP_BUILD='2026-10-11 夕方版3';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6383,11 +6387,28 @@ function syncCfg(){try{return JSON.parse(localStorage.getItem(SYNC_KEY)||'{}')||
 function saveSyncCfg(c){try{localStorage.setItem(SYNC_KEY,JSON.stringify(c))}catch(e){}}
 function syncReady(c){c=c||syncCfg();return !!(c.url&&c.token)}
 function b64ToBytes(b64){const s=atob(b64);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u}
+/* 一時的な失敗（通信切れ・Drive 側の混雑で HTML が返る等）は少し待って最大3回まで取り直す */
 async function syncGet(params){
+  let last;
+  for(let t=0;t<3;t++){
+    try{return await syncGetOnce(params)}
+    catch(e){
+      last=e;
+      if(!e.retry||(SYNC_CTRL&&SYNC_CTRL.signal.aborted))throw e;
+      const lab=document.getElementById('syncState');
+      if(lab&&SYNC_BUSY)lab.textContent=`通信をやり直しています（${t+1}回目）… 止めるときは「中止」`;
+      await new Promise(r=>setTimeout(r,t?6000:2000));
+    }
+  }
+  throw last;
+}
+function syncErr(msg,retry){const e=new Error(msg);e.retry=!!retry;return e}
+async function syncGetOnce(params){
   const c=syncCfg();
   const u=new URL(c.url);
   u.searchParams.set('token',c.token);
-  Object.entries(params||{}).forEach(([k,v])=>u.searchParams.set(k,String(v)));
+  const onBytes=params&&params._onBytes;
+  Object.entries(params||{}).forEach(([k,v])=>{if(k[0]!=='_')u.searchParams.set(k,String(v))});
   /* 中止ボタンと時間切れ（1回 4分）で止められるようにする */
   const ac=new AbortController();let timedOut=false;
   const tm=setTimeout(()=>{timedOut=true;ac.abort()},240000);
@@ -6396,13 +6417,33 @@ async function syncGet(params){
   let r;
   try{r=await fetch(u.toString(),{redirect:'follow',cache:'no-store',signal:ac.signal})}
   catch(e){
-    if(outer&&outer.signal.aborted)throw new Error('中止しました');
-    if(timedOut)throw new Error('時間切れです。電波の良いところでもう一度押してください');
-    throw new Error('通信が切れました（電波が弱い・画面がロックされた・アプリを切り替えた、などで止まります）。もう一度押してください');
+    clearTimeout(tm);if(outer)outer.signal.removeEventListener('abort',onAbort);
+    if(outer&&outer.signal.aborted)throw syncErr('中止しました');
+    if(timedOut)throw syncErr('時間切れです。電波の良いところでもう一度押してください',true);
+    throw syncErr('通信が切れました（電波が弱い・画面がロックされた・アプリを切り替えた、などで止まります）。もう一度押してください',true);
+  }
+  let text;
+  try{
+    if(onBytes&&r.body&&r.body.getReader){
+      /* 届いた量を数えて進み具合に使う */
+      const rd=r.body.getReader(),dec=new TextDecoder();let got=0;const parts=[];
+      for(;;){const {done,value}=await rd.read();if(done)break;got+=value.length;parts.push(dec.decode(value,{stream:true}));onBytes(got)}
+      parts.push(dec.decode());text=parts.join('');
+    }else text=await r.text();
+  }
+  catch(e){
+    if(outer&&outer.signal.aborted)throw syncErr('中止しました');
+    throw syncErr('受信の途中で通信が切れました。もう一度押してください',true);
   }finally{clearTimeout(tm);if(outer)outer.signal.removeEventListener('abort',onAbort)}
-  if(!r.ok)throw new Error('通信エラー（HTTP '+r.status+'）');
-  let j;try{j=await r.json()}catch(e){throw new Error('応答を読めませんでした。URL が「ウェブアプリ」のものか確認してください')}
-  if(j&&j.error)throw new Error(j.error==='unauthorized'?'合言葉が違います':j.error);
+  if(!r.ok)throw syncErr('通信エラー（HTTP '+r.status+'）',r.status>=500||r.status===429);
+  let j;
+  try{j=JSON.parse(text)}
+  catch(e){
+    /* Apps Script が混み合うと JSON ではなく HTML のエラー画面が返る */
+    if(/^\s*</.test(text))throw syncErr('Drive 側が一時的に混み合っています。少し待ってもう一度押してください',true);
+    throw syncErr('応答を読めませんでした。URL が「ウェブアプリ」のものか確認してください',true);
+  }
+  if(j&&j.error)throw syncErr(j.error==='unauthorized'?'合言葉が違います':j.error,false);
   return j;
 }
 async function syncPost(body){
@@ -6415,19 +6456,23 @@ async function syncPost(body){
   return j;
 }
 /* 大きいファイルは 6MB ずつ分割で届くのでつなぎ直す */
-async function syncFile(path,onPart){
-  // 1つ目で総数を知り、残りは並べて取る（Apps Script は1区切り約75秒。順番だと XRM で7分以上かかる）
-  const first=await syncGet({action:'file',path,part:0});
+async function syncFile(path,onPart,opt){
+  // 1つ目で総数を知り、残りは並べて取る（Apps Script は1区切りに時間がかかるため）
+  opt=opt||{};
+  const expect=opt.size?Math.ceil(opt.size*4/3)+400:0;   /* base64 にすると約4/3倍 */
+  const got={};const tick=()=>{if(opt.onFrac&&expect){const t=Object.values(got).reduce((a,b)=>a+b,0);opt.onFrac(Math.min(0.99,t/expect))}};
+  const first=await syncGet({action:'file',path,part:0,_onBytes:n=>{got[0]=n;tick()}});
   const parts=first.parts||1,size=first.size||0,name=first.name||path.split('/').pop();
   const chunks=new Array(parts);chunks[0]=b64ToBytes(first.data||'');
   let done=1;if(onPart)onPart(done,parts);
   const rest=[];for(let i=1;i<parts;i++)rest.push(i);
   await Promise.all(rest.map(async i=>{
     let j,err;
-    for(let t=0;t<2;t++){try{j=await syncGet({action:'file',path,part:i});break}catch(e){err=e}}
+    for(let t=0;t<2;t++){try{j=await syncGet({action:'file',path,part:i,_onBytes:n=>{got[i]=n;tick()}});break}catch(e){err=e;got[i]=0}}
     if(!j)throw err;
     chunks[i]=b64ToBytes(j.data||'');done++;if(onPart)onPart(done,parts);
   }));
+  if(opt.onFrac)opt.onFrac(1);
   const total=chunks.reduce((a,c)=>a+c.length,0);
   if(size&&total!==size)throw new Error(`${name} のサイズが合いません（${total}/${size}）`);
   const buf=new Uint8Array(total);let off=0;chunks.forEach(c=>{buf.set(c,off);off+=c.length});
@@ -6445,7 +6490,22 @@ function syncSetBusy(on,label){
   const run=document.getElementById('syncRun');if(run)run.disabled=on;
   const st=document.getElementById('syncStop');if(st)st.style.display=on?'':'none';
   const sv=document.getElementById('syncState');
-  if(sv){sv.style.display=on?'block':'none';sv.textContent=on?`同期しています: ${label||'同期中…'}（止めるときは「中止」）`:''}
+  if(sv){sv.style.display=on?'block':'none';sv.textContent=on?`同期しています: ${label||SYNC_LABEL||'同期中…'}（止めるときは「中止」）`:''}
+  if(label)SYNC_LABEL=label;
+  const bar=document.getElementById('syncBar');if(bar)bar.style.display=on?'block':'none';
+  if(on&&b)b.textContent=`同期 ${SYNC_PCT}%`;
+}
+/* 進み具合（0〜100%）。工程ごとの範囲 [a,b] の中で frac(0〜1) だけ進める */
+let SYNC_PCT=0,SYNC_LABEL='';
+function syncProg(a,b,frac,label){
+  const pct=Math.max(SYNC_PCT,Math.min(100,Math.round(a+(b-a)*Math.max(0,Math.min(1,frac||0)))));
+  SYNC_PCT=pct;if(label)SYNC_LABEL=label;
+  const bar=document.getElementById('syncBar'),fill=document.getElementById('syncBarFill'),tx=document.getElementById('syncPct');
+  if(bar){bar.style.display=SYNC_BUSY?'block':'none';bar.setAttribute('aria-valuenow',pct)}
+  if(fill)fill.style.width=pct+'%';
+  if(tx)tx.textContent=pct+'%';
+  const btn=document.getElementById('syncBtn');if(btn&&SYNC_BUSY)btn.textContent=`同期 ${pct}%`;
+  const sv=document.getElementById('syncState');if(sv&&SYNC_BUSY)sv.textContent=`同期しています: ${SYNC_LABEL}（止めるときは「中止」）`;
 }
 /* 同期を止める。通信中なら打ち切り、固まっていても押せる状態に戻す */
 function syncCancel(){
@@ -6518,24 +6578,28 @@ async function syncNow(opts){
   const c=syncCfg();
   syncSetBusy(true);
   const lg=document.getElementById('syncLog');if(lg)lg.innerHTML='';
+  SYNC_PCT=0;syncProg(0,5,0,'Drive の一覧を確認しています');
   const sum={xrm:'',stmt:0,hist:0,inv:0,cond:'',ledger:0,errors:0};
   try{
     syncLog('Drive の一覧を確認しています');
     const man=await syncGet({action:'manifest'});
     c.manifestAt=man.generatedAt||'';
+    syncProg(0,5,1,'一覧を確認しました');
     /* 1) XRM: 新しい版があれば取り込む */
     const liteOk=man.xrm&&man.xrm.lite&&man.xrm.lite.v===2&&typeof DecompressionStream!=='undefined';
     if(man.xrm&&man.xrm.path&&(man.xrm.stamp!==c.xrmStamp||!S.xrmWb||S.xrmStub||(liteOk&&!S.xrmWb.lite))){
       const lite=man.xrm.lite&&man.xrm.lite.v===2&&typeof DecompressionStream!=='undefined'?man.xrm.lite:null;
       syncLog(`XRM を取得しています（${man.xrm.name}・${Math.round(((lite||man.xrm).size||0)/1048576)}MB${lite?'・軽量版':''}）`);
-      const f=await syncFile((lite||man.xrm).path,(p,n)=>syncSetBusy(true,`XRM ${p}/${n}`));
-      syncSetBusy(true,'XRM 読み込み中');
+      syncProg(5,65,0,'XRM を取得しています（Drive 側で準備中）');
+      const f=await syncFile((lite||man.xrm).path,null,{size:(lite||man.xrm).size,onFrac:fr=>syncProg(5,65,fr,'XRM を受信しています')});
+      syncSetBusy(true,'XRM 読み込み中');syncProg(65,70,0.2,'XRM を読み込んでいます');
       await new Promise(r=>setTimeout(r,30));
       const wb=lite?await liteFromGz(new Uint8Array(f.buf)):XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});
       applyXrmWb(wb,f.buf,man.xrm.name,!!lite);
       c.xrmStamp=man.xrm.stamp;sum.xrm=man.xrm.name;
       syncLog(`XRM を更新しました（${man.xrm.name}${lite?'・軽量版':''}）`);
     }else if(man.xrm){syncLog(`XRM は最新です（${man.xrm.name}）`)}
+    syncProg(65,70,1,'支払明細書を確認しています');
     c.seen=c.seen||{};
     /* 2) 支払明細書: まだ読んでいないものを古い月から順に読み、単価とルールを学習 */
     const st=(man.statements||[]).filter(x=>c.seen[x.path]!==x.mtime).sort((a,b)=>String(a.month).localeCompare(String(b.month)));
@@ -6543,7 +6607,7 @@ async function syncNow(opts){
       syncLog(`支払明細書 ${st.length}件を取得しています`);
       const files=[];let i=0;
       for(const x of st){
-        i++;syncSetBusy(true,`明細書 ${i}/${st.length}`);
+        i++;syncSetBusy(true,`明細書 ${i}/${st.length}`);syncProg(70,80,(i-1)/st.length,`支払明細書 ${i}/${st.length}`);
         try{const f=await syncFile(x.path);files.push({file:new File([f.buf],f.name),x})}
         catch(e){sum.errors++;syncLog(`${x.name}: ${e.message}`,'err')}
       }
@@ -6557,28 +6621,31 @@ async function syncNow(opts){
       }
       syncLog(`支払明細書 ${sum.stmt}件を読み込みました（変更点は「ルール台帳」に出ます）`);
     }else syncLog('支払明細書: 新しいものはありません');
+    syncProg(70,80,1,'単価の推移を確認しています');
     /* 2b) 過去2年分の単価の推移（Mac が集計した history.json）: 単価の変わり目と案件ごとの単価を学習 */
     if(man.history&&man.history.path&&man.history.mtime!==c.historyMtime){
       const hm=man.history.months||[];
       syncLog(`過去${hm.length}ヶ月分（${fmtYmJa(hm[0])||'?'}〜${fmtYmJa(hm[hm.length-1])||'?'}）の単価の推移を取得しています`);
-      const f=await syncFile(man.history.path,(p,n)=>syncSetBusy(true,`推移 ${p}/${n}`));
+      const f=await syncFile(man.history.path,null,{size:man.history.size,onFrac:fr=>syncProg(80,88,fr*0.8,'単価の推移を受信中')});
       const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const r=applyHistory(h);await saveMemory();
       c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
       syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
     }
+    syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
     SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
     if(SALES_LIST.length){const sm=salesMonths()[0];syncLog(`売上明細書: ${fmtYmJa(sm.month)}分 ${sm.files.length}件ほか（「入れる」画面のボタンから取り込めます）`)}
     /* 2d) 売上明細書の3年分の集計（上位店×月の入金） */
     if(man.salesHistory&&man.salesHistory.path&&man.salesHistory.mtime!==c.salesHistMtime){
-      const f=await syncFile(man.salesHistory.path,(p,n)=>syncSetBusy(true,`売上推移 ${p}/${n}`));
+      const f=await syncFile(man.salesHistory.path,null,{size:man.salesHistory.size,onFrac:fr=>syncProg(88,93,fr,'売上の推移を受信中')});
       const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const mem=S.memory||(S.memory=emptyMem());
       mem.salesHistory={months:h.months||[],upstreams:h.upstreams||{},at:h.generatedAt||''};
       await saveMemory();c.salesHistMtime=man.salesHistory.mtime;saveSyncCfg(c);
       syncLog(`売上明細書 ${(h.months||[]).length}ヶ月分の入金を集計しました（上位店 ${Object.keys(h.upstreams||{}).length}社。「収支推移」に表示）`);
     }
+    syncProg(88,93,1,'請求書を確認しています');
     /* 3) 請求書: 「リスト」シートのアライアンス先×単価を参考として保存 */
     const iv=(man.invoices||[]).filter(x=>c.seen[x.path]!==x.mtime);
     if(iv.length){
@@ -6600,6 +6667,7 @@ async function syncNow(opts){
       await saveMemory();
       syncLog(`請求書 ${sum.inv}件のリスト単価を取り込みました`);
     }
+    syncProg(93,96,1,'条件表を確認しています');
     /* 4) 条件表: 単価表フォルダから抜き出した単価を参考表示用に保存 */
     if(man.conditions&&man.conditions.path&&man.conditions.mtime!==c.condMtime){
       const f=await syncFile(man.conditions.path);
@@ -6610,6 +6678,7 @@ async function syncNow(opts){
       c.condMtime=man.conditions.mtime;sum.cond=`${(j.items||[]).length}件`;
       syncLog(`条件表 ${(j.items||[]).length}件を取り込みました（単価が読めたもの ${(j.items||[]).filter(x=>x.items&&x.items.length).length}件）`);
     }
+    syncProg(96,98,1,'ルール台帳をまとめています');
     /* 5) ルール台帳: Drive の台帳とまとめて、結果を送り返す */
     try{
       const remote=await syncGet({action:'ledger'});
@@ -6619,6 +6688,7 @@ async function syncNow(opts){
       c.ledgerPushedAt=new Date().toISOString();
       syncLog(sum.ledger?`台帳: 他の端末の変更 ${sum.ledger}件を反映しました`:'台帳: 他の端末と同じです');
     }catch(e){sum.errors++;syncLog('台帳の共有に失敗: '+e.message,'err')}
+    syncProg(98,100,1,'完了しました');
     c.lastAt=new Date().toISOString();c.lastError='';
     c.lastSummary=[sum.xrm?'XRM更新':'',sum.stmt?`明細書${sum.stmt}`:'',sum.hist?'過去分の推移':'',sum.inv?`請求書${sum.inv}`:'',sum.cond?'条件表':'',sum.ledger?`台帳${sum.ledger}`:''].filter(Boolean).join('・')||'変更なし';
     saveSyncCfg(c);
