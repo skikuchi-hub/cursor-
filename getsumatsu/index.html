@@ -1310,6 +1310,7 @@ function parseDate(v){
   return m2?new Date(new Date().getFullYear(),+m2[1]-1,+m2[2]):null;
 }
 /* 日時（表記ゆれ吸収: 全角記号・全角スペース・重複日付 '2026/5/26 5/26 15:00' 等） */
+function ymOfDate(d){return d.getFullYear()*100+d.getMonth()+1}
 function parseDateTime(v){
   if(v==null||v==='')return null;
   if(v instanceof Date&&!isNaN(v))return v;
@@ -3735,23 +3736,37 @@ function auditScan(cfg,inp,log){
   const hidx={};
   const G=r=>name=>{let i=hidx[name];if(i===undefined){i=findCol(h0,[name]);hidx[name]=i}return i>=0?r[i]:undefined};
   const seen=new Set();const cands=[];
-  let exCancel=0,exNoOpen=0,exFuture=0,exFilter=0,exBefore=0;
+  let exCancel=0,exCancelNoOpen=0,exNoOpen=0,exFuture=0,exFilter=0,exBefore=0,exWait=0;
   for(let i=1;i<rows.length;i++){
     const r=rows[i];if(!r)continue;
     const no=clean(r[ax.no]);if(!no)continue;
-    if(clean(r[ax.cancel])){exCancel++;continue}
-    const open=parseDate(r[ax.open]);
-    if(!open){exNoOpen++;continue}
+    const open0=parseDate(r[ax.open]);
+    /* 開通月に解約した案件は手数料の対象外。翌月以降の解約は対象（2026-10 菊地さん「どの商材も大体」）。
+       解約日が読めないのに解約の印がある行は、これまでどおり外す */
+    const cxl=clean(r[ax.cancel]);let cancelled=null;
+    if(cxl){const cd=parseDate(r[ax.cancel]);
+      if(!open0){exCancelNoOpen++;continue}
+      if(!cd||ymOfDate(cd)<=ymOfDate(open0)){exCancel++;continue}
+      cancelled=cd}
+    if(!open0){exNoOpen++;continue}
+    /* 手数料の対象になる日（商材ごとの条件。So-net光=開通＋決済登録完了、NURO光=室外・室内の2回工事完了）。条件がそろった月で締めに入れる */
+    let open=open0,dueNote='';
+    if(cfg.dueDate){
+      const d=cfg.dueDate(r,G(r),open0)||{};
+      if(d.wait){exWait++;continue}
+      if(d.date)open=d.date;
+      if(d.unknown)dueNote=d.unknown;
+    }
     if(cutoff&&open>cutoff){exFuture++;continue}
     if(openFrom&&open<openFrom){exBefore++;continue}
     if(cfg.xrmFilter&&!cfg.xrmFilter(r,G(r))){exFilter++;continue}
     if(seen.has(no))continue;
     seen.add(no);
-    cands.push({no,open,svc:clean(r[ax.svc]),status:clean(r[ax.status]),
+    cands.push({no,open,open0,dueNote,cancelled,svc:clean(r[ax.svc]),status:clean(r[ax.status]),
       partner:clean(r[ax.partner]),tel:normPhone(r[ax.tel]),name:clean(r[ax.name]),
       app:clean(r[ax.app]),raw:r});
   }
-  L(`XRM「${xs}」から対象 ${cands.length}件を抽出（解約済 ${exCancel} / 開通日なし ${exNoOpen} / 締め後 ${exFuture}${exBefore?` / 期間前 ${exBefore}`:''}${exFilter?` / 条件外 ${exFilter}`:''} を除外）`);
+  L(`XRM「${xs}」から対象 ${cands.length}件を抽出（開通前に解約 ${exCancelNoOpen} / 開通月に解約 ${exCancel} / 開通日なし ${exNoOpen} / 締め後 ${exFuture}${exBefore?` / 期間前 ${exBefore}`:''}${exFilter?` / 条件外 ${exFilter}`:''} ${exWait?` / ${cfg.dueLabel||'手数料の条件'}がまだ ${exWait}`:''} を除外）`);
   const out=cands.map((c,i)=>{
     const keys=cfg.xrmKeys(c.raw,G(c.raw)).map(cfg.norm).filter(Boolean);
     const hit=keys.some(k=>paid.keys.has(k));
@@ -3759,6 +3774,9 @@ function auditScan(cfg,inp,log){
     const row={i:i+1,...c,keys,upAmount,state:hit?'ok':'alert',resolved:true,price:null,
       payTo:c.partner,why:hit?'入金明細で確認':'開通済みだが入金明細に無し → 請求対象'};
     if(!keys.length){row.state='warn';row.why='突合キー（'+cfg.keyLabel+'）がXRMに入っていないため判定できません'}
+    else if(!hit&&c.dueNote){row.state='warn';row.why=c.dueNote+' → 手数料の条件がそろったか確認してください'}
+    else if(c.open0&&c.open>c.open0)row.why+=`（開通 ${fmtDate(c.open0)}・条件がそろった日 ${fmtDate(c.open)}）`;
+    if(c.cancelled)row.why+=`（${fmtDate(c.cancelled)} 解約。開通月より後なので手数料の対象）`;
     return row;
   });
   L(`突合完了: 支払済 ${out.filter(r=>r.state==='ok').length}件 / 未払い ${out.filter(r=>r.state==='alert').length}件`);
@@ -3870,6 +3888,8 @@ const AUDITS={
   audit_sonet:{
     title:'So-net光/Liberte', jouiten:'株式会社Liberte', short:'So-net光',
     xrmSheet:'So-net光B', keyLabel:'ISP受付番号',
+    /* 手数料の対象は 開通 かつ 決済登録完了（2026-10 菊地さん） */
+    dueLabel:'決済登録', dueDate:(r,g,open)=>{const p=parseDate(g('決済登録日'))||parseDate(g('決済情報登録日'));return p?{date:p>open?p:open}:{wait:1}},
     xrmKeys:(r,g)=>[g('ISP受付番号')], norm:v=>String(v??'').trim(),
     meisaiRe:/So-?net|ISP|明細/i, keyHeaders:['ISP受付番号'],
     xrmFilter:(r,g)=>{
@@ -3877,7 +3897,7 @@ const AUDITS={
       if(!/【1G】|【10G】/.test(s))return false;
       if(/無線レンタル/.test(s))return false;
       const st=String(g('ステータス')??'');
-      if(/96 解約済み|88 退会受付済み|95 キャンセル済み|キャンセル/.test(st))return false;
+      if(/95 キャンセル済み|キャンセル/.test(st))return false;   /* 解約・退会は解約日で判定（開通月の解約だけ外す） */
       return true;
     }
   },
@@ -3908,6 +3928,10 @@ const AUDITS={
   audit_nuro:{
     title:'NURO光/SOFI', jouiten:'合同会社SOFI', short:'NURO光',
     xrmSheet:'NURO光', keyLabel:'申込番号 / ISP契約番号',
+    /* 手数料の対象は 室外工事（NTT）と室内工事（So-net）の2回とも完了（2026-10 菊地さん）。
+       XRM の開通日は「開通済み」＝2回目の工事が終わった案件にだけ入る。工事予定日がそれより後なら、遅い方で締めに入れる */
+    dueLabel:'2回目の工事', dueDate:(r,g,open)=>{const d=[open,parseDate(g('NTT工事予定日')),parseDate(g('So-net工事予定日'))].filter(Boolean).reduce((x,y)=>y>x?y:x);
+      return d>new Date()?{wait:1}:{date:d}},
     xrmKeys:(r,g)=>[g('申込番号'),g('ISP契約番号')], norm:v=>String(v??'').trim(),
     meisaiRe:/NURO/i, keyHeaders:['EX番号','ISP契約番号','申込番号']
   },
@@ -7312,7 +7336,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面13';
+const APP_BUILD='2026-10-12 新画面14';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
