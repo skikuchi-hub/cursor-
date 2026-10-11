@@ -7115,7 +7115,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面10';
+const APP_BUILD='2026-10-12 新画面11';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9466,10 +9466,64 @@ const VENDOR_ORDER=['ユーネット','Liberte','SOFI','マーカスネットワ
 function vendorOf(m){return (String(m.title).split('/')[1]||'その他').trim()}
 function productOf(m){return String(m.title).split('/')[0].trim()}
 function vendorRank(v){const i=VENDOR_ORDER.findIndex(x=>v.includes(x));return i<0?99:i}
+/* ===== パスワード付きエクセル（Office の Agile 暗号: AES-CBC × SHA-512）をブラウザだけで開く =====
+   上位店のパスワード付き明細は、ファイル名の最初の【】の中がパスワード（2026-10 菊地さん）。開けなければ諦める */
+async function officeDecrypt(u8,password){
+  const cfb=XLSX.CFB.read(u8,{type:'array'});
+  const ei=XLSX.CFB.find(cfb,'EncryptionInfo'),ep=XLSX.CFB.find(cfb,'EncryptedPackage');
+  if(!ei||!ep)throw new Error('暗号化されたファイルではありません');
+  const info=new Uint8Array(ei.content);if(!(info[0]===4&&info[2]===4))throw new Error('この暗号の形式には対応していません');
+  const xml=new TextDecoder().decode(info.slice(8));
+  const attr=(tag,name)=>{const m=xml.match(new RegExp('<'+tag+'\\b[^>]*\\b'+name+'="([^"]*)"'));return m?m[1]:''};
+  const b64=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+  const kdSalt=b64(attr('keyData','saltValue')),blk=+attr('keyData','blockSize')||16,kdBits=+attr('keyData','keyBits')||256;
+  const ekXml=xml.slice(xml.indexOf('<p:encryptedKey'));
+  const ea=name=>{const m=ekXml.match(new RegExp('\\b'+name+'="([^"]*)"'));return m?m[1]:''};
+  const spin=+ea('spinCount'),pSalt=b64(ea('saltValue')),keyBits=+ea('keyBits')||256,hashAlg=(ea('hashAlgorithm')||'SHA512').replace(/^SHA(\d+)$/,'SHA-$1');
+  const encKeyValue=b64(ea('encryptedKeyValue'));
+  const H=async(...parts)=>{const len=parts.reduce((a,p)=>a+p.length,0),b=new Uint8Array(len);let o=0;parts.forEach(p=>{b.set(p,o);o+=p.length});return new Uint8Array(await crypto.subtle.digest(hashAlg,b))};
+  const pw=new Uint8Array(password.length*2);for(let i=0;i<password.length;i++){const c=password.charCodeAt(i);pw[i*2]=c&255;pw[i*2+1]=c>>8}
+  let h=await H(pSalt,pw);const it=new Uint8Array(4);
+  for(let i=0;i<spin;i++){it[0]=i&255;it[1]=(i>>8)&255;it[2]=(i>>16)&255;it[3]=(i>>>24)&255;h=await H(it,h)}
+  const fix=(b,n)=>{const o=new Uint8Array(n).fill(0x36);o.set(b.slice(0,n));return o};
+  const blockKey=new Uint8Array([0x14,0x6e,0x0b,0xe7,0xab,0xac,0xd0,0xd6]);
+  const kek=fix(await H(h,blockKey),keyBits/8);
+  /* WebCrypto の AES-CBC は詰め物（PKCS#7）前提なので、最後に詰め物だけの暗号ブロックを足して外す */
+  const cbcRaw=async(keyBytes,iv,data)=>{
+    const key=await crypto.subtle.importKey('raw',keyBytes,{name:'AES-CBC'},false,['encrypt','decrypt']);
+    const last=data.slice(data.length-16);const pad=new Uint8Array(16).fill(16);for(let i=0;i<16;i++)pad[i]^=last[i];
+    const extra=new Uint8Array(await crypto.subtle.encrypt({name:'AES-CBC',iv:new Uint8Array(16)},key,pad)).slice(0,16);
+    const all=new Uint8Array(data.length+16);all.set(data);all.set(extra,data.length);
+    return new Uint8Array(await crypto.subtle.decrypt({name:'AES-CBC',iv},key,all));
+  };
+  let secret;
+  try{secret=(await cbcRaw(kek,fix(pSalt,blk),encKeyValue)).slice(0,kdBits/8)}catch(e){throw new Error('パスワードが違います')}
+  const pkg=new Uint8Array(ep.content);const size=Number(new DataView(pkg.buffer,pkg.byteOffset,8).getBigUint64(0,true));
+  const out=new Uint8Array(Math.ceil((pkg.length-8)/16)*16);let off=0;
+  for(let seg=0,pos=8;pos<pkg.length;seg++,pos+=4096){
+    const chunk=pkg.slice(pos,Math.min(pos+4096,pkg.length));const n=Math.floor(chunk.length/16)*16;if(!n)break;
+    const sb=new Uint8Array([seg&255,(seg>>8)&255,(seg>>16)&255,(seg>>>24)&255]);
+    const iv=fix(await H(kdSalt,sb),blk);
+    const plain=await cbcRaw(secret,iv,chunk.slice(0,n));out.set(plain,off);off+=plain.length;
+  }
+  const zip=out.slice(0,size);
+  if(!(zip[0]===0x50&&zip[1]===0x4b))throw new Error('パスワードが違います');
+  return zip;
+}
+function filePasswordOf(name){const m=String(name||'').match(/【([^】]+)】/);return m?m[1].trim():''}
 function readWb(file,opts){
   return new Promise((res,rej)=>{
     const rd=new FileReader();
-    rd.onload=e=>{try{res({buf:e.target.result,wb:XLSX.read(new Uint8Array(e.target.result),Object.assign({type:'array',cellDates:true},opts||{}))})}catch(ex){rej(ex)}};
+    rd.onload=e=>{const o=Object.assign({type:'array',cellDates:true},opts||{});
+      try{res({buf:e.target.result,wb:XLSX.read(new Uint8Array(e.target.result),o)})}
+      catch(ex){
+        /* パスワード付き: ファイル名の最初の【】の中をパスワードとして試す */
+        const pw=filePasswordOf(file.name);
+        if(!/password|encrypt|ECMA-376|CFB/i.test(String(ex&&ex.message||ex))){rej(ex);return}
+        if(!pw){rej(new Error('パスワード付きのファイルです（ファイル名に【パスワード】が無いため開けません）'));return}
+        officeDecrypt(new Uint8Array(e.target.result),pw).then(zip=>res({buf:zip.buffer,wb:XLSX.read(zip,o),decrypted:true}))
+          .catch(er=>rej(new Error('パスワード付きのファイルを開けませんでした（【'+pw+'】で試しました: '+(er&&er.message||er)+'）')));
+      }};
     rd.onerror=()=>rej(new Error('ファイルを読み込めませんでした'));
     rd.readAsArrayBuffer(file);
   });
@@ -9508,6 +9562,119 @@ const DETECT_HINTS={
   audit_brandnew:(wb,n)=>/LEF|月額PAY|ブランニュー|BrandNew|サブセレ/i.test(n)||wb.SheetNames.some(sn=>sheetHas(wb,sn,['会員ID'])),
   audit_looop:(wb,n)=>/Looop|マーカス|新電力/i.test(n)||wb.SheetNames.some(sn=>/新電力|^Looop$/.test(sn))
 };
+/* =========================================================
+   明細一覧に教わる商材（2026-10〜）: ユーネット書式（取次日・氏名・電話番号・商材・ショット手数料）の明細を、
+   電話番号で XRM と突き合わせてパートナー・アポ担当（トスアップパートナー）を出し、
+   単価は「明細一覧」の直近のタブから覚えた パートナー×アポ担当×商材 → 支払手数料 で当てる。
+   明細一覧で覚えていない組み合わせは要確認（パートナー×商材で聞いて覚える）。戻入は払った分を全額マイナス。
+========================================================= */
+const TAUGHT_MONTHS=3;
+const nameKey=v=>String(v||'').normalize('NFKC').replace(/[\s\u3000・.,]/g,'');
+function xrmNameMap(wb,sheets){
+  const map=new Map(),dup=new Set();
+  resolveXrmSheetList(wb,sheets,null).forEach(sn=>{const ws=wb.Sheets[sn];if(!ws)return;const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});const c=detectXrmCols(rows[0]);
+    for(let i=1;i<rows.length;i++){const r=rows[i];if(!r)continue;const k=nameKey(r[c.name]);if(!k)continue;const o=xrmRowObj(r,sn,c);
+      if(map.has(k)){const p=map.get(k);if((p.tel||'')!==(o.tel||''))dup.add(k)}else map.set(k,o)}});
+  dup.forEach(k=>map.delete(k));return map;
+}
+function taughtKey(p,t,item){return [reconNorm(p),reconNorm(t||'-'),String(item||'').replace(/\s/g,'')].join('|')}
+function taughtBaseItem(item){return String(item||'').replace(/戻入分?$/,'基本手数料').replace(/\s/g,'')}
+/* 明細一覧の直近のタブから単価を覚える（バッチ実行の前に1回。タブが変わっていなければ覚え直さない） */
+async function taughtPrepare(jobs){
+  const need=jobs.filter(j=>MODULES[j.key]&&MODULES[j.key].taughtTail);if(!need.length||!syncReady())return;
+  let lists;try{lists=await reconLists()}catch(e){progLine('明細一覧を読めないため、覚えた単価は前回のものを使います','err');return}
+  const mem=S.memory||(S.memory=emptyMem());mem.taught=mem.taught||{};
+  for(const j of need){
+    const m=MODULES[j.key];const tail=m.taughtTail;
+    const tabs=[];lists.forEach(b=>b.sheets.forEach(s=>{const mm=String(s.name).match(/^(\d{6})/);if(mm&&reconTail(s.name)===tail&&s.rows>1&&mm[1]<=(B.month||'999999'))tabs.push({book:b,name:s.name,ym:mm[1]})}));
+    tabs.sort((a,b)=>b.ym.localeCompare(a.ym));const use=tabs.slice(0,TAUGHT_MONTHS);
+    const prev=mem.taught[tail]||{map:{},loose:{},seen:[],n:0};prev.seen=prev.seen||[];
+    const fresh=use.filter(t=>!prev.seen.includes(t.book.name+':'+t.name));
+    if(!fresh.length&&Object.keys(prev.map||{}).length)continue;
+    const xmap=xrmPhoneMap(S.xrmWb,m.xrmSheets);const nmap=xrmNameMap(S.xrmWb,m.xrmSheets);const map=prev.map||{},loose=prev.loose||{};let n=0;
+    for(const t of fresh){
+      let d;try{d=await syncGet({action:'book',id:t.book.id,sheet:t.name,all:1})}catch(e){continue}
+      const h=(d.display&&d.display[0]||[]).map(x=>String(x||'').trim());
+      const iT=h.indexOf('電話番号'),iN=h.indexOf('氏名'),iI=h.indexOf('商材'),iF=h.indexOf('支払手数料'),iP=h.indexOf('パートナー名');if((iT<0&&iN<0)||iI<0||iF<0)continue;
+      (d.display||[]).slice(1).forEach(r=>{const tel=iT>=0?normPhone(r[iT]):'';const fee=reconYen(r[iF]);if(fee==null||fee<0)return;
+        const x=(tel&&xmap.get(tel))||(iN>=0?nmap.get(nameKey(r[iN])):null);if(!tel&&!x&&!r[iP])return;const partner=x?x.partner:String(r[iP]||'');const toss=x?x.toss:'';
+        if(!partner||/該当なし/.test(partner))return;
+        const k=taughtKey(partner,toss,r[iI]),k2=[reconNorm(partner),String(r[iI]||'').replace(/\s/g,'')].join('|');
+        (map[k]=map[k]||{})[fee]=(map[k][fee]||0)+1;(loose[k2]=loose[k2]||{})[fee]=(loose[k2][fee]||0)+1;n++});
+    }
+    mem.taught[tail]={map,loose,n:(prev.n||0)+n,seen:prev.seen.concat(fresh.map(t=>t.book.name+':'+t.name)).slice(-24),at:new Date().toISOString(),tabs:[...new Set((prev.tabs||[]).concat(fresh.map(t=>t.name)))].slice(-12)};
+    progLine(`明細一覧「${tail}」の ${fresh.map(t=>t.name.slice(0,6)).join('・')} から単価を覚えました（${n}件・合計 ${Object.keys(map).length}通り）`);
+  }
+  await saveMemory();
+}
+function taughtFee(tail,partner,toss,item){
+  const T=S.memory&&S.memory.taught&&S.memory.taught[tail];if(!T)return null;
+  const pick=o=>{if(!o)return null;const e=Object.entries(o).sort((a,b)=>b[1]-a[1]);const tot=e.reduce((a,[,c])=>a+c,0);return {fee:+e[0][0],n:e[0][1],tot,sure:e[0][1]/tot>=0.8}};
+  return pick(T.map[taughtKey(partner,toss,item)])||pick(T.map[taughtKey(partner,toss,taughtBaseItem(item))])
+    ||pick(T.loose[[reconNorm(partner),String(item||'').replace(/\s/g,'')].join('|')]);
+}
+function makeTaughtModule(cfg){
+  return {
+    title:cfg.title,src:cfg.src,wtProduct:cfg.wtProduct,taughtTail:cfg.tail,xrmSheets:cfg.xrmSheets,
+    desc:`電話番号でXRM「${cfg.xrmSheets.join('・')}」と突き合わせ、明細一覧「${cfg.tail}」の直近${TAUGHT_MONTHS}ヶ月から覚えた パートナー×アポ担当×商材 の支払手数料を当てます。覚えていない組み合わせは要確認。戻入は払った分を全額マイナス。`,
+    hint1:cfg.hint||'',amountLabel:'支払見込',alertLabel:'単価不明・要確認',prices:[],pmNote:'単価は明細一覧から自動で覚えます',
+    findSheet:wb=>wb.SheetNames.find(s=>cfg.sheetRe.test(s))||null,
+    xrmCheck:wb=>cfg.xrmSheets.some(n=>xrmSheetCandidates(wb,n).length)?null:`XRMに「${cfg.xrmSheets.join('・')}」シートが見つかりません`,
+    cols:['No','状態','取次日','氏名','電話番号','パートナー × アポ','判定根拠','支払手数料'],
+    pricePattern:r=>r.x&&r.x.partner?{key:[r.x.partner,taughtBaseItem(r.item)].join('|'),label:`${r.x.partner} × ${r.item}`,note:'明細一覧で覚えていない組み合わせ'}:null,
+    process(){
+      const raw=XLSX.utils.sheet_to_json(S.meisaiWb.Sheets[S.meisaiSheet],{header:1,defval:null});
+      const MSPEC={date:['取次日','申込日','受付日','開通日'],name:['氏名','顧客名','契約者','お客様'],tel:['電話番号','TEL','連絡先','携帯'],item:['商材','商品'],plan:['プラン','支払方法'],fee:['ショット手数料','手数料','金額']};
+      const {c:MC}=detectMeisaiCols(raw,MSPEC,{date:0,name:1,tel:2,item:3,plan:4,fee:5});
+      const xmap=xrmPhoneMap(S.xrmWb,cfg.xrmSheets);let nmap=null;
+      const T=S.memory&&S.memory.taught&&S.memory.taught[cfg.tail];
+      progLine(T?`明細一覧から覚えた単価 ${Object.keys(T.map).length}通り（${(T.tabs||[]).join('・')}）を使います`:'明細一覧から覚えた単価がまだありません（同期の設定と明細一覧のタブを確認）','err');
+      S.excluded=[];const rows=[];
+      /* 電話番号の列が空の明細（ユーネットの@niftyなど）は氏名で突き合わせる。列がずれていても商材・手数料を値から拾う */
+      for(let i=1;i<raw.length;i++){const r=raw[i];if(!r)continue;const tel=normPhone(r[MC.tel]);const name=clean(r[MC.name]);
+        if(!tel&&!name)continue;if(!tel&&!r.some(v=>typeof v==='number'&&Math.abs(v)>=100))continue;
+        let item=clean(r[MC.item]),fee=Number(r[MC.fee])||null;
+        if(!tel&&(!item||fee==null)){const vals=r.filter(v=>v!==null&&v!=='');item=item||clean(vals.find(v=>typeof v==='string'&&v!==name&&/光|電話|ネット|プラン|新規|転用/.test(v))||'');fee=fee??(vals.filter(v=>typeof v==='number'&&Math.abs(v)>=100&&Math.abs(v)<1000000).pop()??null)}
+        rows.push({i:rows.length+1,date:parseDate(r[MC.date]),name,tel,item,plan:clean(r[MC.plan]),fee,modo:/戻入|請求/.test(item)||(fee!=null&&fee<0)})}
+      S.rows=rows.map(m=>{
+        let x=m.tel?xmap.get(m.tel):null;if(!x&&!m.tel){nmap=nmap||xrmNameMap(S.xrmWb,cfg.xrmSheets);x=nmap.get(nameKey(m.name))||null;if(x){m.byName=true;m.tel=x.tel||''}}const row={...m,x,state:'ok',payTo:'',price:null,why:'',resolved:true};
+        if(!x){row.state='warn';row.why=m.tel?'XRMに該当する電話番号がありません':'電話番号が無く、XRMの氏名でも1件に決まりません';row.resolved=false;return row}
+        if(m.byName)row.why='（氏名でXRMと突き合わせ）';
+        const partner=x.partner||'',toss=x.toss||'';
+        row.payTo=partner+(toss&&toss!=='-'?' × '+toss:'');
+        if(/^Exploration/.test(partner)&&(!toss||toss==='-')){row.payTo='Exploration Holdings(自社)';row.price=0;row.why='自社獲得 / 支払なし';return row}
+        const t=taughtFee(cfg.tail,partner,toss,m.item);
+        if(!t){row.state='alert';row.resolved=false;row.why=`明細一覧で覚えていない組み合わせ（${partner}${toss?' × '+toss:''} × ${m.item}）`;return row}
+        row.price=m.modo?-t.fee:t.fee;row.taught=true;
+        row.why=(row.why||'')+`明細一覧の単価 ${t.fee.toLocaleString()}円（${t.n}/${t.tot}件）`+(t.sure?'':' ※ばらつきあり')+(m.modo?' / 戻入（全額マイナス）':'');
+        if(!t.sure&&!m.modo){row.state='warn'}
+        return row;
+      });
+      progLine(`${S.rows.length}件を判定（明細一覧の単価 ${S.rows.filter(r=>r.taught).length}件・要確認 ${S.rows.filter(r=>!r.resolved).length}件）`);
+    },
+    tableRow:r=>[r.i,(r.modo?'<span class="badge b-min">戻入</span> ':'')+badge(r.state),fmtDate(r.date),esc(r.name),r.tel,esc(r.payTo||'—'),esc(r.why),r.price!=null?yen(r.price):'（空欄）'],
+    total(){return S.rows.filter(r=>r.resolved&&!r.hold&&r.price!=null).reduce((a,r)=>a+r.price,0)},
+    approval(r){return {type:'newp',opts:[]}},
+    output(){
+      const ok=S.rows.filter(r=>r.resolved&&!r.hold&&r.price!=null);const by={};ok.forEach(r=>{const p=reconPartner(r.payTo)||'（不明）';(by[p]=by[p]||{n:0,a:0});by[p].n++;by[p].a+=r.price});
+      S.outPartners=Object.entries(by).map(([name,v])=>({name,count:v.n,amt:v.a}));
+      S.checks=[{ok:true,txt:`${S.rows.length}件中 ${ok.length}件を確定`},{ok:!S.rows.some(r=>!r.resolved),txt:S.rows.some(r=>!r.resolved)?`未確定 ${S.rows.filter(r=>!r.resolved).length}件`:'未確定なし'}];
+      return {sub:'明細一覧の単価で内訳を作りました。',dlNote:'全件一覧（パートナー・アポ担当・支払手数料・判定根拠）',fname:`AI作成中_${cfg.short}_内訳.xlsx`};
+    },
+    buildWb(){
+      const wb=XLSX.utils.book_new();
+      const all=[['No','取次日','氏名','電話番号','商材','上位店の手数料','パートナー','アポ担当','支払手数料','判定根拠']];
+      S.rows.filter(r=>!r.hold).forEach(r=>all.push([r.i,fmtDate(r.date),r.name,r.tel,r.item,r.fee,r.x?r.x.partner:'',r.x?r.x.toss:'',r.price??'',r.why]));
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(all),'全件');
+      return wb;
+    }
+  };
+}
+MODULES.unetNifty=makeTaughtModule({title:'@nifty光/ユーネット',short:'nifty光_ユーネット',src:'ユーネット明細「@niftyYYYYMM」× XRM「＠nifty光」',wtProduct:'@nifty光',
+  sheetRe:/^@nifty\d{6}$/i,xrmSheets:['＠nifty光','＠nifty光（D）','＠nifty光（R）','@nifty光（U）'],tail:'@nifty光【ユーネット株式会社】',hint:'ユーネットの御支払明細の「@niftyYYYYMM」シート'});
+MODULES.unetSonet=makeTaughtModule({title:'So-net光/ユーネット',short:'Sonet光_ユーネット',src:'ユーネット明細「so-netYYYYMM」× XRM「So-net光」',wtProduct:'So-net光',
+  sheetRe:/^so-net\d{4,6}$/i,xrmSheets:['So-net光','So-net光B','So-net光C'],tail:'So-net光【ユーネット株式会社】',hint:'ユーネットの御支払明細の「so-netYYYYMM」シート'});
+
 function detectJobs(wb,name){
   const out=[];
   Object.entries(MODULES).forEach(([key,m])=>{
@@ -9757,6 +9924,7 @@ async function runBatch(){
   if(!S.xrmWb){S.xrmWb=emptyWb();S.xrmName='（XRM未読込）';S.xrmStub=true;progLine('XRM契約一覧が未読込のため、記憶している案件情報だけで突合します','err')}
   else progLine(`XRM契約一覧を使用: ${S.xrmName}`);
   const todo=B.jobs.filter(j=>!j.done);
+  try{await taughtPrepare(todo)}catch(e){console.warn('taught',e)}
   for(const job of todo){
     await runJob(job);
     await tick();
