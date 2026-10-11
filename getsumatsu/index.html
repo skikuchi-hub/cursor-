@@ -84,6 +84,39 @@ header::after{
   border-radius:100px;padding:3px 12px;
 }
 .hd-right{margin-left:auto;font-size:11px;color:var(--txt-3);letter-spacing:.08em}
+/* タブ（今月の明細 / 入金漏れ / 支払漏れ） */
+.tabs{display:flex;gap:4px;flex:1;min-width:0}
+.tab{appearance:none;border:0;background:transparent;font:inherit;font-size:14px;font-weight:500;letter-spacing:.02em;color:var(--txt-2);
+  padding:8px 14px;border-radius:100px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:background .2s,color .2s}
+.tab:hover{color:var(--accent)}
+.tab.on{background:var(--accent-soft);color:var(--accent)}
+.tab-n{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--alert);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
+.tab-n:empty{display:none}
+.menu{position:relative}
+.menu-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:240px;display:flex;flex-direction:column;padding:6px;
+  background:var(--surface);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--sh-3)}
+.menu-pop[hidden]{display:none}
+.menu-pop button{appearance:none;border:0;background:transparent;text-align:left;font:inherit;font-size:14px;color:var(--txt);padding:10px 12px;border-radius:8px}
+.menu-pop button:hover{background:var(--accent-soft);color:var(--accent)}
+.step.future{opacity:.45}
+.strip3{grid-template-columns:repeat(3,1fr)}
+.mcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:12px;box-shadow:var(--sh)}
+.mcard-h{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.mcard-n{font-size:16px;font-weight:600}
+.mcard-s{font-size:12px;color:var(--txt-2);margin-top:4px;line-height:1.7}
+.mcard-c{font-size:26px;font-weight:300;font-variant-numeric:tabular-nums;white-space:nowrap}
+.mcard-c small{font-size:12px;color:var(--txt-3);margin-left:2px}
+.mcard-a{margin:10px 0 4px}
+table.mini{width:100%;font-size:12.5px}
+table.mini th,table.mini td{padding:6px 8px;text-align:left;border-bottom:1px solid var(--line)}
+.pitem{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--surface);margin-bottom:8px}
+.pitem-l{min-width:0;flex:1 1 280px}
+.pitem-t{font-weight:600;font-size:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pitem-s{font-size:12px;color:var(--txt-2);margin-top:4px;line-height:1.6}
+.pitem-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.pitem-r .price-in{width:120px}
+.payform{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;align-items:center}
+.payform input,.payform select{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--txt);min-width:0}
 
 /* ============ stepper : 計器レール ============ */
 .stepper{
@@ -642,10 +675,17 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 #apprSection .sub{margin-bottom:18px}
 @media(max-width:900px){.dz-rows{grid-template-columns:1fr}}
 @media(max-width:640px){
-  .hd-tools{width:100%;order:4;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
-  .hd-tools::-webkit-scrollbar{display:none}
+  .hd-tools{margin-left:auto;flex-wrap:nowrap}
   .hd-tools .boardbtn{flex:0 0 auto}
   .hd-right{display:none}
+  .tabs{order:5;width:100%;flex:1 1 100%;justify-content:space-between}
+  .tab{flex:1;justify-content:center;padding:8px 6px;font-size:13px}
+  .strip3{grid-template-columns:repeat(3,1fr);gap:6px}
+  .strip3 .kpi{padding:10px 10px 12px}
+  .strip3 .k-label{font-size:10px;letter-spacing:0}
+  .strip3 .k-num{font-size:22px}
+  .strip3 .k-note{display:none}
+  .step.future{display:none}
   .pg{gap:8px}
   .pg .prod{flex:1 1 calc(50% - 4px)}
   .actions,.footer-nav{position:sticky;bottom:0;z-index:30;background:rgba(239,243,248,.94);backdrop-filter:blur(12px);padding:12px 0;margin-top:18px}
@@ -752,24 +792,35 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 
 <header>
   <div class="logo">月末処理<em>クラウド</em></div>
-  <div class="hd-tag" id="hdProd">まとめて処理</div>
+  <div class="hd-tag" id="hdProd" hidden>まとめて処理</div>
+  <nav class="tabs" aria-label="メニュー">
+    <button class="tab on" id="tabMain" onclick="openMain()">今月の明細</button>
+    <button class="tab" id="tabMiss" onclick="openMiss()">入金漏れ<span class="tab-n" id="tabMissN"></span></button>
+    <button class="tab" id="tabPay" onclick="openPayMiss()">支払漏れ<span class="tab-n" id="tabPayN"></span></button>
+  </nav>
   <div class="hd-tools">
     <button class="boardbtn" id="syncBtn" onclick="openSync()" title="Drive と同期">同期</button>
-    <button class="boardbtn" id="boardBtn" onclick="openBoard()">未払いボード</button>
-    <button class="boardbtn" id="ratesBtn" onclick="openRates()">ルール台帳</button>
-    <button class="boardbtn" id="finBtn" onclick="openFin()">収支データ</button>
-    <button class="boardbtn" id="trendBtn" onclick="openTrend()">収支推移</button>
-    <button class="boardbtn" id="recovBtn" onclick="openRecov()">回収シミュ</button>
-    <button class="boardbtn" onclick="lockApp()" title="この端末の認証を解除します">ロック</button>
+    <div class="menu"><button class="boardbtn" onclick="toggleMenu(event)" aria-haspopup="true">その他 ▾</button>
+      <div class="menu-pop" id="hdMenu" hidden>
+        <button onclick="menuGo(openRates)">ルール台帳・覚えた答え</button>
+        <button onclick="menuGo(openFin)">収支データ（スプレッドシート）</button>
+        <button onclick="menuGo(openTrend)">収支推移</button>
+        <button onclick="menuGo(openRecov)">回収シミュレーション</button>
+        <button onclick="menuGo(openBoard)">未払いボード（旧）</button>
+        <button onclick="closeMenu();setSingle(true)">商材を1つだけ処理する（旧画面）</button>
+        <button onclick="closeMenu();lockApp()">ロック</button>
+      </div></div>
+    <span hidden><button id="boardBtn"></button><button id="ratesBtn"></button><button id="finBtn"></button><button id="trendBtn"></button><button id="recovBtn"></button></span>
   </div>
-  <div class="hd-right">Exploration Holdings株式会社</div>
 </header>
 
 <div class="stepper">
-  <div class="step" id="st1"><span class="num">1</span>入れる</div>
-  <div class="step" id="st2"><span class="num">2</span>見る</div>
+  <div class="step" id="st1"><span class="num">1</span>上位店の明細を入れる</div>
+  <div class="step" id="st2"><span class="num">2</span>内訳を確認</div>
   <div class="step" id="st3" style="display:none"><span class="num">3</span>要確認の承認</div>
-  <div class="step" id="st4"><span class="num">3</span>出す</div>
+  <div class="step" id="st4"><span class="num">3</span>内訳を受け取る</div>
+  <div class="step future" title="今後、ここも自動にします"><span class="num">4</span>支払明細書を仕上げる</div>
+  <div class="step future" title="今後、ここも自動にします"><span class="num">5</span>メールで送る</div>
 </div>
 
 <main>
@@ -951,6 +1002,37 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 
 
 <!-- ============ 未払いボード ============ -->
+<section class="screen" id="scMiss">
+  <h1>入金漏れ</h1>
+  <p class="sub">開通しているのに上位店から入金がない案件です。上位店の明細を入れるたびに自動で更新し、入金されたら「追って入金を確認」に移ります。</p>
+  <div class="strip strip3" id="missKpi"></div>
+  <h2 class="sec-h">上位店に確認する案件</h2>
+  <div id="missGroups"></div>
+  <h2 class="sec-h">追って入金を確認</h2>
+  <p class="sub">追って入金された案件は、パートナーから申告がなければ支払いません。申告があったものだけ「申告あり → 支払う」を押すと、支払漏れに載ります。</p>
+  <div id="missRecovered"></div>
+  <div class="pm-bar" style="margin-top:28px"><button class="btn-ghost btn-sm" onclick="exportBoard()">全件をエクセルで</button></div>
+</section>
+
+<section class="screen" id="scPay">
+  <h1>支払漏れ</h1>
+  <p class="sub">上位店から入金があるのに、パートナーへ払っていない案件です。「内訳に追加」にしたものは、次に作る内訳に「支払漏れ追加分」として入ります。</p>
+  <div class="strip strip3" id="payKpi"></div>
+  <h2 class="sec-h">確認してほしい候補</h2>
+  <div id="payCand"></div>
+  <h2 class="sec-h">次の内訳に追加するもの</h2>
+  <div id="payAdded"></div>
+  <h2 class="sec-h">手で追加する</h2>
+  <p class="sub">パートナーから「払われていない」と言われた案件など。</p>
+  <div class="payform">
+    <select id="payPartner"></select><input id="payPartnerNew" placeholder="一覧に無いパートナー名">
+    <input id="payProduct" placeholder="商材"><input id="payName" placeholder="顧客名">
+    <input id="payTel" placeholder="電話番号・申込番号"><input id="payPrice" type="number" inputmode="numeric" placeholder="単価（円）">
+    <input id="payNote" placeholder="メモ（例: 8月分の漏れ）"><button class="btn btn-sm" onclick="payManual()">追加する</button>
+  </div>
+  <details style="margin-top:28px"><summary class="note">追加済み（過去）</summary><div id="payDone" style="margin-top:8px"></div></details>
+</section>
+
 <section class="screen" id="scBoard">
   <h1>未払いボード</h1>
   <p class="sub">上位店からの入金と、パートナーへの支払を掛け合わせた4区分で管理します。入金は監査モードの実行で自動更新、支払は右端のボタンで切り替えます。</p>
@@ -1085,13 +1167,12 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 
 <!-- ============ まとめて処理: 1 入れる ============ -->
 <section class="screen on" id="scIn">
-  <h1>届いた明細と XRM を、全部まとめて入れる</h1>
-  <p class="sub">商材を選ぶ必要はありません。ファイルの中身（シート名・見出し）から、どの上位店のどの商材かをアプリが判別します。　対象月: <b id="inMonth">—</b></p>
-  <div class="privacy">🔒 ファイルはこのブラウザの中だけで処理されます。サーバーには一切送信されません。</div>
+  <h1>上位店の明細を入れる</h1>
+  <p class="sub">届いた明細をそのまま入れてください。どの上位店・どの商材かはアプリが判別し、パートナーごとの支払内訳を作ります。　対象月: <b id="inMonth">—</b></p>
   <div class="dropzone dz-all" id="dzIn">
     <div class="dz-icon">📥</div>
-    <div class="dz-title">ここにまとめてドロップ</div>
-    <div class="dz-hint">上位店明細・XRM契約一覧・前月の支払明細書（複数可）。あとから追加で入れれば、その分だけ処理します。</div>
+    <div class="dz-title">ここに明細を入れる</div>
+    <div class="dz-hint">Excel・CSV（複数可）。XRM・前月の支払明細書・条件表は Drive から自動で取り込みます。</div>
     <div class="in-btns">
       <button class="btn-ghost" onclick="document.getElementById('inIn').click()">ファイルを選ぶ（複数可）</button>
       <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
@@ -1106,44 +1187,34 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <p class="note" id="inMissing" style="margin-top:6px"></p>
   <div class="actions">
     <button class="btn" id="runAll" disabled>ファイルを入れると実行できます</button>
-    <span class="note">全商材の突合と未払い監査をまとめて実行します。XRMは一度入れれば保存されます。</span>
   </div>
   <div class="prog" id="inProg"></div>
-  <p class="note" style="margin-top:26px"><a href="#" onclick="setSingle(true);return false">商材を1つだけ選んで処理する（従来の画面）</a></p>
 </section>
 
 <!-- ============ まとめて処理: 2 見る ============ -->
 <section class="screen" id="scSee">
-  <h1>上位店ごとに見る</h1>
-  <p class="sub">商材をタップすると、全件の表と判定根拠が開きます。お金が動く判断は下の「要確認」に集めてあります。</p>
+  <h1>内訳を確認</h1>
+  <p class="sub">商材をタップすると全件と判定の理由が開きます。判断が必要なものは下の「要確認」にまとめてあり、答えは次の月から自動で使います。</p>
   <div class="strip" id="seeKpi"></div>
   <div id="seeVendors"></div>
-  <h2 class="sec-h">要確認（全商材まとめて）</h2>
-  <p class="sub">片付くと「出す」が押せます。パターンに答えると、同じパターンの案件にはまとめて反映されます。</p>
+  <h2 class="sec-h">要確認</h2>
   <div class="todo" id="todoList"></div>
   <div class="footer-nav">
     <button class="btn-ghost" onclick="go(1)">← 入れる</button>
-    <button class="btn" id="seeOut" disabled onclick="go(4)">出す →</button>
+    <button class="btn" id="seeOut" disabled onclick="go(4)">内訳を受け取る →</button>
   </div>
 </section>
 
 <!-- ============ まとめて処理: 3 出す ============ -->
 <section class="screen" id="scOut">
-  <h1><span id="outMonth">今月</span>の出力</h1>
-  <p class="sub">確定した内容から必要なファイルをまとめて作り、zip 1つでダウンロードします。前月の支払明細書を入れてあれば、同じフォーマットでパートナー支払明細書も出ます。</p>
+  <h1><span id="outMonth">今月</span>の内訳</h1>
+  <p class="sub">パートナーごとの支払内訳（前月の支払明細書がある相手は同じ形式の支払明細書も）を zip 1つでダウンロードします。支払漏れで「追加」にした案件も一緒に入ります。</p>
   <div class="dl-panel">
     <div class="outs" id="outPlan"></div>
     <button class="dl" id="outBtn" onclick="buildAll()" style="margin-top:18px">⬇ まとめてダウンロード（zip）</button>
     <div id="outResult" style="margin-top:14px"></div>
   </div>
-  <div class="dl-panel">
-    <h3>いつでも見るもの</h3>
-    <div class="side">
-      <button class="btn-ghost" onclick="openBoard()">未払いボード</button>
-      <button class="btn-ghost" onclick="openRates()">ルール台帳</button>
-      <button class="btn-ghost" onclick="openTrend()">収支推移</button>
-    </div>
-  </div>
+  <div class="dl-panel" id="outSide"></div>
   <div class="footer-nav">
     <button class="btn-ghost" onclick="go(2)">← 見る</button>
     <span></span>
@@ -5004,17 +5075,17 @@ async function upsertUnpaid(product,jouiten,rows){
   rows.filter(r=>r.state==='ok').forEach(r=>{
     const k=unpaidKey(product,r);
     const cur=mem.unpaid[k];
-    if(cur&&cur.status!=='入金済'){cur.status='入金済';cur.paidAt=today;cleared++}
+    if(cur&&cur.status!=='入金済'){cur.status='入金済';cur.paidAt=today;touch(cur);cleared++}
   });
   /* 未払いを登録（既存は最終確認日だけ更新） */
   rows.filter(r=>r.state==='alert'&&!r.skip).forEach(r=>{
     const k=unpaidKey(product,r);
     const cur=mem.unpaid[k];
-    if(cur){cur.lastSeen=today;cur.status='未入金';return}
+    if(cur){if(cur.status!=='未入金'||cur.lastSeen!==today){cur.lastSeen=today;cur.status='未入金';touch(cur)}return}
     mem.unpaid[k]={product,jouiten,no:r.no||'',name:r.name||'',tel:r.tel||'',
       open:r.open?fmtDate(r.open):'',key:(r.keys&&r.keys[0])||'',svc:r.svc||'',
       partner:r.partner||'',status:'未入金',pay:'未払い',payAt:'',
-      firstSeen:today,lastSeen:today,paidAt:''};
+      firstSeen:today,lastSeen:today,paidAt:'',at:new Date().toISOString()};
     added++;
   });
   await saveMemory();
@@ -5040,6 +5111,7 @@ async function togglePay(key){
   const x=mem.unpaid[key];
   if((x.pay||'未払い')==='支払済'){x.pay='未払い';x.payAt=''}
   else{x.pay='支払済';x.payAt=fmtDate(new Date())}
+  touch(x);
   await saveMemory();renderBoard();
 }
 /* 表示中のものをまとめて支払済にする */
@@ -5085,6 +5157,207 @@ function unpaidList(){
   const u=(S.memory&&S.memory.unpaid)||{};
   return Object.entries(u).map(([k,v])=>({k,...v,aging:agingMonths(v.open)}));
 }
+/* =========================================================
+   画面の整理（2026-10）: タブは「今月の明細」「入金漏れ」「支払漏れ」の3つ。それ以外は「その他」メニュー
+   ・入金漏れ: 開通しているのに上位店から入金がない案件（監査で自動更新）→ 上位店ごとに確認エクセル → 翌月以降の明細で入金を確認
+   ・支払漏れ: 上位店から入金があるのにパートナーへ払っていない案件（自動検出＋手で追加）→ 「追加」にしたものを内訳に載せる
+     ※上位店の入金漏れを追って回収した案件は、パートナーから申告が無ければ支払わない（入金漏れ画面で「申告あり」にした分だけ支払う）
+========================================================= */
+function setTab(id){
+  ['tabMain','tabMiss','tabPay'].forEach(t=>{const e=document.getElementById(t);if(e)e.classList.toggle('on',t===id)});
+  const sp=document.querySelector('.stepper');if(sp)sp.style.display=id==='tabMain'?'':'none';
+  closeMenu();
+}
+function toggleMenu(ev){if(ev)ev.stopPropagation();const m=document.getElementById('hdMenu');if(m)m.hidden=!m.hidden}
+function closeMenu(){const m=document.getElementById('hdMenu');if(m)m.hidden=true}
+document.addEventListener('click',e=>{const m=document.getElementById('hdMenu');if(m&&!m.hidden&&!e.target.closest('.menu'))m.hidden=true});
+function menuGo(fn){closeMenu();setTab(null);fn()}
+function openMain(){go(S.step||1)}
+function showOnly(id,tab){
+  go(S.step||1);                       /* 開いている他の画面（台帳・収支など）を閉じる */
+  document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));
+  setTab(tab);window.scrollTo({top:0});
+}
+function touch(x){if(x)x.at=new Date().toISOString();return x}
+function updateTabCounts(){
+  const u=unpaidList().filter(x=>x.status!=='入金済');
+  const pm=Object.values((S.memory&&S.memory.payMiss)||{}).filter(x=>x.status==='候補'||x.status==='追加');
+  const a=document.getElementById('tabMissN'),b=document.getElementById('tabPayN');
+  if(a)a.textContent=u.length?String(u.length):'';
+  if(b)b.textContent=pm.length?String(pm.length):'';
+}
+
+/* ---------------- 入金漏れ ---------------- */
+function openMiss(){showOnly('scMiss','tabMiss');renderMiss()}
+function renderMiss(){
+  const all=unpaidList();
+  const open=all.filter(x=>x.status!=='入金済'),rec=all.filter(x=>x.status==='入金済');
+  const sent=open.filter(x=>x.sentAt),recSent=rec.filter(x=>x.sentAt);
+  const thisMo=fmtDate(new Date()).slice(0,7);
+  const recNow=rec.filter(x=>String(x.paidAt||'').slice(0,7)===thisMo);
+  document.getElementById('missKpi').innerHTML=[
+    ['上位店に確認中',open.length,`うち確認エクセル送付済 ${sent.length}件`,open.length?'alert':''],
+    ['3ヶ月以上たっている',open.filter(x=>x.aging>=3).length,'早めに上位店へ確認',''],
+    ['追って入金を確認',rec.length,`今月 ${recNow.length}件・送付後の入金 ${recSent.length}件`,'ok']
+  ].map(([l,n,s,c])=>`<div class="kpi ${c}"><div class="k-label">${l}</div><div class="k-num">${n}<small>件</small></div><div class="k-note">${esc(s)}</div></div>`).join('');
+  const grp={};open.forEach(x=>{(grp[x.jouiten]=grp[x.jouiten]||[]).push(x)});
+  const row=x=>`<tr><td data-label="商材">${esc(String(x.product).split('/')[0])}</td><td data-label="開通日" class="mono">${esc(x.open||'—')}</td>
+    <td data-label="顧客名">${esc(x.name||'—')}</td><td data-label="電話番号" class="mono">${esc(x.tel||'—')}</td>
+    <td data-label="経過"><span class="badge ${x.aging>=3?'b-alert':x.aging>=1?'b-warn':'b-min'}">${agingLabel(x.aging)}</span></td>
+    <td data-label="確認">${x.sentAt?`送付 ${esc(x.sentAt.slice(5))}`:'未送付'}</td></tr>`;
+  document.getElementById('missGroups').innerHTML=Object.entries(grp).sort((a,b)=>b[1].length-a[1].length).map(([j,list])=>{
+    const prods={};list.forEach(x=>{const p=String(x.product).split('/')[0];prods[p]=(prods[p]||0)+1});
+    const ns=list.filter(x=>!x.sentAt).length;
+    return `<div class="mcard"><div class="mcard-h"><div><div class="mcard-n">${esc(j)}</div>
+      <div class="mcard-s">${Object.entries(prods).map(([p,c])=>`${esc(p)} ${c}`).join('・')}${list.some(x=>x.aging>=3)?`・<b style="color:var(--alert)">3ヶ月以上 ${list.filter(x=>x.aging>=3).length}件</b>`:''}</div></div>
+      <div class="mcard-c">${list.length}<small>件</small></div></div>
+      <div class="mcard-a"><button class="btn btn-sm" onclick="missExport(${JSON.stringify(j).replace(/"/g,'&quot;')})">確認エクセルを作る${ns&&ns<list.length?`（未送付 ${ns}件を含む）`:''}</button></div>
+      <details><summary class="note">案件を見る</summary><div class="tbl-wrap"><table class="mini"><thead><tr><th>商材</th><th>開通日</th><th>顧客名</th><th>電話番号</th><th>経過</th><th>確認</th></tr></thead>
+      <tbody>${list.sort((a,b)=>(b.aging??-1)-(a.aging??-1)).map(row).join('')}</tbody></table></div></details></div>`;
+  }).join('')||'<p class="note">入金漏れはありません。毎月、上位店の明細を入れると自動で確認します。</p>';
+  /* 追って入金された案件: パートナーから申告がなければ支払わない */
+  const recRows=rec.sort((a,b)=>String(b.paidAt||'').localeCompare(String(a.paidAt||''))).slice(0,200);
+  document.getElementById('missRecovered').innerHTML=recRows.length?`<div class="tbl-wrap"><table class="mini"><thead><tr><th>上位店</th><th>商材</th><th>顧客名</th><th>電話番号</th><th>入金を確認</th><th>パートナー</th><th>支払</th></tr></thead><tbody>
+    ${recRows.map(x=>`<tr><td data-label="上位店">${esc(x.jouiten)}</td><td data-label="商材">${esc(String(x.product).split('/')[0])}</td><td data-label="顧客名">${esc(x.name||'—')}</td>
+      <td data-label="電話番号" class="mono">${esc(x.tel||'—')}</td><td data-label="入金を確認" class="mono">${esc(x.paidAt||'—')}${x.sentAt?'<br><small>送付後</small>':''}</td><td data-label="パートナー">${esc(x.partner||'—')}</td>
+      <td data-label="支払">${x.claimed?'<span class="badge b-ok">申告あり → 支払漏れへ</span>':`<span class="note">申告なし（支払わない）</span><br><button class="btn-ghost btn-sm" onclick="missClaim(${JSON.stringify(x.k).replace(/"/g,'&quot;')})">申告あり → 支払う</button>`}</td></tr>`).join('')}
+    </tbody></table></div>`:'<p class="note">まだありません。</p>';
+  updateTabCounts();
+}
+function missExport(j){
+  const mem=S.memory;if(!mem||!mem.unpaid)return;
+  const today=fmtDate(new Date());
+  const list=unpaidList().filter(x=>x.status!=='入金済'&&x.jouiten===j).sort((a,b)=>String(a.open).localeCompare(String(b.open)));
+  if(!list.length)return;
+  const aoa=[[`${j} 御中`],['入金状況のご確認のお願い'],[`下記の案件は開通済みですが、${today} 時点で弊社の入金明細に記載がございません。入金予定・状況をご確認いただけますと幸いです。`],
+    ['Exploration Holdings株式会社'],[],
+    ['No','商材','顧客No','申込番号・お客様番号','お客様名','電話番号','開通日','経過','サービス名','ご回答（入金予定月・理由など）']];
+  list.forEach((x,i)=>aoa.push([i+1,String(x.product).split('/')[0],x.no||'',x.key||'',x.name||'',x.tel||'',x.open||'',agingLabel(x.aging),x.svc||'','']));
+  const wb=XLSX.utils.book_new();const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:5},{wch:14},{wch:10},{wch:20},{wch:16},{wch:14},{wch:12},{wch:9},{wch:22},{wch:34}];
+  XLSX.utils.book_append_sheet(wb,ws,'入金確認のお願い');
+  deliverXlsx(wb,`AI作成中_入金確認のお願い_${j.replace(/[\\/:*?"<>|]/g,'')}_${stamp()}.xlsx`);
+  list.forEach(x=>{const u=mem.unpaid[x.k];if(u&&!u.sentAt){u.sentAt=today;touch(u)}});
+  saveMemory().then(()=>{syncLedgerSoon();renderMiss()});
+  toast(`${j} への確認エクセルを作りました（${list.length}件）`);
+}
+async function missClaim(k){
+  const mem=S.memory;const u=mem&&mem.unpaid&&mem.unpaid[k];if(!u)return;
+  u.claimed=true;touch(u);
+  mem.payMiss=mem.payMiss||{};
+  if(!mem.payMiss[k]||mem.payMiss[k].status==='対象外')mem.payMiss[k]=touch({product:u.product,jouiten:u.jouiten,no:u.no,name:u.name,tel:u.tel,key:u.key,open:u.open,partner:u.partner,
+    src:'パートナー申告',status:'候補',foundAt:fmtDate(new Date())});
+  await saveMemory();syncLedgerSoon();renderMiss();
+  toast('支払漏れの候補に載せました。「支払漏れ」で単価を入れて追加してください');
+}
+
+/* ---------------- 支払漏れ ---------------- */
+function openPayMiss(){showOnly('scPay','tabPay');renderPay()}
+function payList(st){return Object.entries((S.memory&&S.memory.payMiss)||{}).filter(([,v])=>!st||v.status===st).map(([k,v])=>({k,...v}))}
+function payPricePreset(x){
+  /* 同じ案件・同じパートナーの過去の単価があれば、それを初期値に */
+  const cs=(S.memory&&S.memory.cases)||{};
+  for(const k of [x.tel,x.key]){if(k&&cs[k])return cs[k].a}
+  return '';
+}
+function renderPay(){
+  const cand=payList('候補'),add=payList('追加'),done=payList('追加済');
+  document.getElementById('payKpi').innerHTML=[
+    ['確認してほしい候補',cand.length,'上位店から入金あり・パートナー未払い',cand.length?'alert':''],
+    ['次の内訳に追加',add.length,`合計 ${yen(add.reduce((a,x)=>a+(Number(x.price)||0),0))}`,''],
+    ['追加済み',done.length,'過去に内訳へ載せたもの','ok']
+  ].map(([l,n,s,c])=>`<div class="kpi ${c}"><div class="k-label">${l}</div><div class="k-num">${n}<small>件</small></div><div class="k-note">${esc(s)}</div></div>`).join('');
+  const q=k=>JSON.stringify(k).replace(/"/g,'&quot;');
+  document.getElementById('payCand').innerHTML=cand.length?cand.map(x=>`<div class="pitem">
+    <div class="pitem-l"><div class="pitem-t">${esc(x.partner||'（パートナー不明）')} ・ ${esc(String(x.product).split('/')[0])}<span class="badge ${x.src==='パートナー申告'?'b-ok':'b-min'}">${esc(x.src||'自動検出')}</span></div>
+      <div class="pitem-s">${esc(x.name||'—')}　${esc(x.tel||'')}　開通 ${esc(x.open||'—')}　上位店 ${esc(x.jouiten||'—')}${x.why?`<br>${esc(x.why)}`:''}</div></div>
+    <div class="pitem-r"><input class="price-in" type="number" inputmode="numeric" id="pp_${esc(x.k)}" placeholder="単価（円）" value="${esc(String(payPricePreset(x)))}">
+      <button class="btn btn-sm" onclick="payAdd(${q(x.k)})">内訳に追加</button><button class="btn-ghost btn-sm" onclick="paySet(${q(x.k)},'対象外')">払わない</button></div></div>`).join('')
+    :'<p class="note">候補はありません。上位店の明細を入れて実行すると、入金があるのにパートナーへ払っていない案件をここに出します。</p>';
+  document.getElementById('payAdded').innerHTML=add.length?`<div class="tbl-wrap"><table class="mini"><thead><tr><th>パートナー</th><th>商材</th><th>顧客名</th><th>電話番号</th><th>単価</th><th>理由</th><th></th></tr></thead><tbody>
+    ${add.map(x=>`<tr><td data-label="パートナー">${esc(x.partner||'—')}</td><td data-label="商材">${esc(String(x.product).split('/')[0])}</td><td data-label="顧客名">${esc(x.name||'—')}</td><td data-label="電話番号" class="mono">${esc(x.tel||'—')}</td>
+      <td data-label="単価" class="mono">${yen(Number(x.price)||0)}</td><td data-label="理由">${esc(x.src||'')}${x.note?'・'+esc(x.note):''}</td><td><button class="btn-ghost btn-sm" onclick="paySet(${q(x.k)},'候補')">戻す</button></td></tr>`).join('')}
+    </tbody></table></div><div class="pm-bar" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sm" onclick="payDownload()">追加分をダウンロード（パートナー別）</button><button class="btn-ghost btn-sm" onclick="payMarkDone()">明細書に載せたので「追加済み」にする</button></div>`
+    :'<p class="note">まだありません。</p>';
+  document.getElementById('payDone').innerHTML=done.length?done.sort((a,b)=>String(b.at).localeCompare(String(a.at))).slice(0,100).map(x=>`<div class="pat-sub">✓ ${esc(x.doneYm?fmtYmJa(x.doneYm):'')} ${esc(x.partner||'')} ・ ${esc(String(x.product).split('/')[0])} ・ ${esc(x.name||x.tel||'')} ${yen(Number(x.price)||0)}</div>`).join(''):'<p class="note">まだありません。</p>';
+  const ps=document.getElementById('payPartner');
+  if(ps&&!ps.options.length){const names=new Set();Object.values((S.memory&&S.memory.byPhone)||{}).slice(0,0);
+    payList().forEach(x=>x.partner&&names.add(x.partner));unpaidList().forEach(x=>x.partner&&names.add(x.partner));
+    (S.memory&&S.memory.stockLs?Object.values(S.memory.stockLs.months||{}).flatMap(m=>Object.keys(m)):[]).forEach(n=>names.add(n));
+    ps.innerHTML='<option value="">パートナーを選ぶ</option>'+[...names].filter(n=>!/^Exploration/.test(n)).sort().map(n=>`<option>${esc(n)}</option>`).join('')}
+  updateTabCounts();
+}
+async function paySet(k,st){
+  const x=S.memory&&S.memory.payMiss&&S.memory.payMiss[k];if(!x)return;
+  x.status=st;touch(x);await saveMemory();syncLedgerSoon();renderPay();
+}
+async function payAdd(k){
+  const x=S.memory.payMiss[k];if(!x)return;
+  const el=document.getElementById('pp_'+k);const v=Number(el&&el.value);
+  if(!el||el.value===''||isNaN(v)){toast('単価を入れてください');return}
+  x.price=v;x.status='追加';x.addYm=B.month||thisYm();touch(x);
+  await saveMemory();syncLedgerSoon();renderPay();toast(`${x.partner||''} に ${yen(v)} を次の内訳で追加します`);
+}
+async function payManual(){
+  const g=id=>(document.getElementById(id)||{}).value||'';
+  const partner=g('payPartner')||g('payPartnerNew'),price=Number(g('payPrice'));
+  if(!partner){toast('パートナーを選んでください');return}
+  if(!g('payPrice')||isNaN(price)){toast('単価を入れてください');return}
+  const mem=S.memory||(S.memory=emptyMem());mem.payMiss=mem.payMiss||{};
+  const k='manual:'+Date.now();
+  mem.payMiss[k]=touch({partner,product:g('payProduct'),name:g('payName'),tel:normPhone(g('payTel'))||g('payTel'),price,note:g('payNote'),
+    src:'手で追加',status:'追加',addYm:B.month||thisYm(),foundAt:fmtDate(new Date())});
+  await saveMemory();syncLedgerSoon();
+  ['payProduct','payName','payTel','payPrice','payNote','payPartnerNew'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''});
+  renderPay();toast(`${partner} への追加を登録しました`);
+}
+function payWb(){
+  const add=payList('追加');if(!add.length)return null;
+  const wb=XLSX.utils.book_new();const by={};add.forEach(x=>{(by[x.partner||'（パートナー不明）']=by[x.partner||'（パートナー不明）']||[]).push(x)});
+  const sm=[['支払漏れ追加分（月末明細処理クラウド）'],['作成日',fmtDate(new Date())],[],['パートナー','件数','金額']];
+  Object.entries(by).forEach(([p,l])=>sm.push([p,l.length,l.reduce((a,x)=>a+(Number(x.price)||0),0)]));
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sm),'まとめ');
+  const used=new Set(['まとめ']);
+  Object.entries(by).forEach(([p,l])=>{let nm=stockShort(p).slice(0,28)||'不明';while(used.has(nm))nm=nm.slice(0,26)+'_'+used.size;used.add(nm);
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['商材','上位店','顧客名','電話番号','顧客No・申込番号','開通日','単価','理由','メモ'],
+      ...l.map(x=>[String(x.product||'').split('/')[0],x.jouiten||'',x.name||'',x.tel||'',x.no||x.key||'',x.open||'',Number(x.price)||0,x.src||'',x.note||''])]),nm)});
+  return wb;
+}
+function payDownload(){const wb=payWb();if(!wb){toast('追加する案件がありません');return}deliverXlsx(wb,`AI作成中_支払漏れ追加分_${B.month||thisYm()}_${stamp()}.xlsx`)}
+async function payMarkDone(){
+  const add=payList('追加');if(!add.length)return;
+  const ym=B.month||thisYm();add.forEach(x=>{const y=S.memory.payMiss[x.k];y.status='追加済';y.doneYm=ym;touch(y)});
+  await saveMemory();syncLedgerSoon();renderPay();toast(`${add.length}件を追加済みにしました`);
+}
+/* 上位店から入金があった案件（監査の入金確認）のうち、パートナーへ払った記録が無いもの → 支払漏れの候補
+   払った記録 = 過去の支払明細書（S.memory.cases）か、今月作った内訳（同じバッチの支払行）。自社獲得（Exploration）は対象外。
+   上位店の入金漏れを追って回収した案件は、パートナーから申告がない限り候補にしない */
+function detectPayMiss(){
+  const mem=S.memory||(S.memory=emptyMem());mem.payMiss=mem.payMiss||{};
+  const cases=mem.cases||{},paidNow=new Set();
+  const okProducts=new Set();
+  B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind!=='audit').forEach(j=>{okProducts.add(j.key);
+    (j.rows||[]).forEach(r=>{if(r.resolved&&!r.hold&&r.price!=null)[r.tel,r.key,r.x&&r.x.app].filter(Boolean).forEach(k=>paidNow.add(String(k)))})});
+  const inv={};Object.entries(AUTO_AUDIT).forEach(([mod,ak])=>{(inv[ak]=inv[ak]||[]).push(mod)});
+  let n=0;const today=fmtDate(new Date());
+  B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind==='audit').forEach(j=>{
+    const cfg=AUDITS[j.key];if(!cfg)return;
+    if(!(inv[j.key]||[]).some(mod=>okProducts.has(mod)))return;   /* 同じ商材の支払明細を今回処理していなければ判定しない */
+    (j.rows||[]).filter(r=>r.state==='ok').forEach(r=>{
+      if(!r.partner||/^Exploration/.test(r.partner))return;
+      const keys=[r.tel,r.app,...(r.keys||[])].filter(Boolean).map(String);
+      if(keys.some(k=>cases[k]||paidNow.has(k)))return;
+      const k=unpaidKey(cfg.title,r);
+      const u=mem.unpaid&&mem.unpaid[k];if(u&&!u.claimed)return;
+      if(mem.payMiss[k])return;
+      mem.payMiss[k]=touch({product:cfg.title,jouiten:cfg.jouiten,no:r.no||'',name:r.name||'',tel:r.tel||'',key:(r.keys&&r.keys[0])||'',open:r.open?fmtDate(r.open):'',
+        partner:r.partner,src:'自動検出',status:'候補',foundAt:today,why:`${fmtYmJa(B.month||'')||'今月'}の${cfg.jouiten}の明細で入金あり・パートナーへの支払記録なし`});
+      n++;
+    });
+  });
+  return n;
+}
+
 /* ---- 画面描画 ---- */
 S.boardFilter='all';
 function openBoard(){
@@ -6488,7 +6761,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夜版5';
+const APP_BUILD='2026-10-12 新画面';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6667,10 +6940,13 @@ function mergeLedger(remote){
     Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
   });
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
+  /* 入金漏れ・支払漏れの案件: 案件ごとに新しい方 */
+  if(remote.board){const mem=S.memory||(S.memory=emptyMem());
+    ['unpaid','payMiss'].forEach(f=>{mem[f]=mem[f]||{};Object.entries(remote.board[f]||{}).forEach(([k,r])=>{const cur=mem[f][k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mem[f][k]=r;n++}}})})}
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{}}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}}}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -7575,7 +7851,9 @@ function stockBuild(p){
   const tablePrice=(acq,kb,mc)=>{const t=OPL.table&&OPL.table[/Exploration/.test(acq||'')?'教育':'取次'];const c=t&&t[KN[String(kb)]];return c?c[mc==='card'?'クレカ':'キャリア']:null};
   const opPriceOf=pt=>{const t=top(opPrice[pt]);return t?+t.v:(OPL.opPrice||{})[pt]||0};
   const tableFrom=OPL.tableFrom||'2025-11';
-  const unknownLists={};
+  const unknownLists={},unknownInfo={};
+  const noteUnknown=(l,id)=>{unknownLists[l]=(unknownLists[l]||0)+1;const u=unknownInfo[l]||(unknownInfo[l]={samples:[]});
+    if(u.samples.length<3){const x=X&&X[id];u.samples.push({id,partner:x?x.partner:'',staff:x?x.staff:'',ym:x?x.ym:'',sheet:x?x.sheet:''})}};
   /* 出力 */
   const out={},check=[];
   const put=(pt,row,how,amt)=>{(out[pt]=out[pt]||{rows:[],how:{}}).rows.push({row,how,amt});out[pt].how[how]=(out[pt].how[how]||0)+1};
@@ -7590,7 +7868,7 @@ function stockBuild(p){
     if(hit&&X&&!X[id]){check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:'XRM に無い顧客（支払わない）'});return}
     if(hit){
       const x0=X&&X[id],li=listOf(id,hit),inf=listInfo(li.list);
-      if(li.list&&!inf)unknownLists[li.list]=(unknownLists[li.list]||0)+1;
+      if(li.list&&!inf)noteUnknown(li.list,id);
       const op=inf&&inf.co&&autoOp.has(inf.co)?inf.co:'';
       const curOp=Object.keys(hit).filter(pt=>autoOp.has(pt));
       const mcT=stockMclass(d.method);
@@ -7639,7 +7917,7 @@ function stockBuild(p){
         :k==='営業担当者名'?x.staff:k==='獲得日'?(telCol?x.tel:stockSerial(x.date)):k==='電話番号'?x.tel:k==='リストID'?(/^\d+$/.test(x.list)?+x.list:(x.list||'-')):/単価/.test(k)?(neg?-price:price):''});
       return row};
     const li=listOf(id,null),inf=listInfo(li.list);
-    if(li.list&&!inf)unknownLists[li.list]=(unknownLists[li.list]||0)+1;
+    if(li.list&&!inf)noteUnknown(li.list,id);
     const op=pt==='Wetopia株式会社'&&inf&&inf.co&&autoOp.has(inf.co)?inf.co:'';
     let prW=pr;
     if(op){const tp=tablePrice(x.partner,inf.kb,mc);if(tp&&tp<prW)prW=tp}
@@ -7651,7 +7929,7 @@ function stockBuild(p){
   const prevSum={};Object.entries(st.months[baseYm]||{}).forEach(([pt,g])=>{const s=g.PS;if(!s)return;const pi=s.hdr.findIndex(h=>/単価/.test(h));
     prevSum[pt]={n:s.rows.length,amt:s.rows.reduce((a,r)=>a+(Number(r[pi])||0),0)}});
   const partners=[...new Set([...Object.keys(out),...Object.keys(prevSum)])].sort((a,b)=>((out[b]||{rows:[]}).rows.length-(out[a]||{rows:[]}).rows.length));
-  const res={target,baseYm,period:`${p.summary.from}〜${p.summary.to}`,csvRows:tx.length,check,unknownLists,opReady:!!(OPL.table&&Object.keys(OPL.lists||{}).length),
+  const res={target,baseYm,period:`${p.summary.from}〜${p.summary.to}`,csvRows:tx.length,check,unknownLists,unknownInfo,opReady:!!(OPL.table&&Object.keys(OPL.lists||{}).length),
     partners:partners.map(pt=>{const o=out[pt]||{rows:[],how:{}};return {name:pt,n:o.rows.length,amt:o.rows.reduce((a,r)=>a+(Number(r.amt)||0),0),how:o.how,prev:prevSum[pt]||{n:0,amt:0},hdr:hdrOf[pt],rows:o.rows.map(r=>r.row)}})};
   res.total=res.partners.reduce((a,x)=>a+x.amt,0);
   return res;
@@ -7685,8 +7963,52 @@ const STOCK_OP_CHOICES=[['','OPなし'],['株式会社クラウドナイン','�
 function stockUnknownHtml(i,s){
   const e=Object.entries(s.unknownLists||{}).sort((a,b)=>b[1]-a[1]);
   if(!e.length)return '';
-  return `<details style="margin:6px 0"><summary><b style="color:var(--warn)">対応表に無いリスト ${e.length}件</b>（今は OP なしで作成。OP の会社を選ぶと覚えます）</summary>
+  return `<p style="margin:6px 0"><button class="btn-ghost btn-sm" onclick="stockListsXlsx(${i})">表に無いリスト ${e.length}件をエクセルで（社員に記入してもらう）</button></p>
+  <details style="margin:6px 0"><summary><b style="color:var(--warn)">対応表に無いリスト ${e.length}件</b>（今は OP なしで作成。ここで選ぶか、記入したエクセルを「入れる」に戻すと覚えます）</summary>
   <div style="display:grid;grid-template-columns:auto auto;gap:4px 10px;align-items:center;margin-top:6px">${e.slice(0,30).map(([l,n])=>`<span>リスト ${esc(l)}（${n}人）</span><select onchange="stockAnswer(${i},'${esc(l)}',this.value)">${STOCK_OP_CHOICES.map(([v,t])=>`<option value="${esc(v)}">${esc(t)}</option>`).join('')}</select>`).join('')}</div>${e.length>30?`<p class="note">ほか ${e.length-30}件（人数の少ないリスト）は OP なしで作成しています</p>`:''}</details>`;
+}
+/* 表に無いリスト番号の確認エクセル: 社員が「OPの会社」「区分」「リスト名」を記入 → 「入れる」に戻すと台帳に覚える */
+const LIST_SHEET='リスト番号の確認';
+function stockListsXlsx(i){
+  const f=B.files[i];const s=f&&f.stock;if(!s)return;
+  const e=Object.entries(s.unknownLists||{}).sort((a,b)=>b[1]-a[1]);if(!e.length)return;
+  const aoa=[['リスト番号の確認（月末明細処理クラウド）'],[`${fmtYmJa(s.target.replace('-',''))}度のライフサポートで、対応表に無かったリスト番号です。【記入】の列を埋めて、このファイルをアプリの「入れる」に戻してください。`],
+    ['OPの会社は「なし」「クラウドナイン」「last Bet」「Hitotech」「Owl Eye」のどれか。区分は 1（通常）/ 2 / 9 / 20 など。分からなければ空欄のまま。'],[],
+    ['リスト番号','今月の人数','顧客の例','獲得パートナー','営業担当','申込月','【記入】OPの会社','【記入】区分','【記入】リスト名','メモ']];
+  e.forEach(([l,n])=>{const sm=((s.unknownInfo||{})[l]||{}).samples||[];const x=sm[0]||{};
+    aoa.push([/^\d+$/.test(l)?+l:l,n,sm.map(v=>v.id).join(' / '),x.partner||'',x.staff||'',x.ym||'','','','',''])});
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols']=[{wch:10},{wch:8},{wch:40},{wch:24},{wch:12},{wch:9},{wch:16},{wch:10},{wch:24},{wch:20}];
+  const fill={patternType:'solid',fgColor:{rgb:'FFF4C2'}};
+  for(let r=4;r<aoa.length;r++)for(const c of [6,7,8]){const a=XLSX.utils.encode_cell({r,c});ws[a]=ws[a]||{t:'s',v:''};ws[a].s={fill}}
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,LIST_SHEET);
+  deliverXlsx(wb,`AI作成中_リスト番号の確認_${s.target.replace('-','')}.xlsx`);
+}
+function listCoOf(t){
+  t=String(t||'').replace(/\s/g,'');if(!t)return null;
+  if(/^(なし|無し|無|ー|-|通常|OPなし)$/.test(t))return '';
+  if(/クラウド|CN|ｸﾗｳﾄﾞ/i.test(t))return '株式会社クラウドナイン';
+  if(/last|ラスト/i.test(t))return '株式会社last Bet';
+  if(/hito|ヒト/i.test(t))return 'Hitotech株式会社';
+  if(/owl|オウル/i.test(t))return '株式会社Owl Eye';
+  return null;
+}
+/* 記入済みの確認エクセルを読む（入れる画面から） */
+async function importListSheet(wb){
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[LIST_SHEET],{header:1,defval:''});
+  const hi=rows.findIndex(r=>r.some(v=>String(v).trim()==='リスト番号'));if(hi<0)return {n:0,skip:0};
+  const h=rows[hi].map(v=>String(v));const ci=k=>h.findIndex(x=>x.includes(k));
+  const iL=ci('リスト番号'),iC=ci('OPの会社'),iK=ci('区分'),iN=ci('リスト名');
+  const lg=ledgerOf();let n=0,skip=0;const now=new Date().toISOString();
+  rows.slice(hi+1).forEach(r=>{
+    const l=String(r[iL]==null?'':r[iL]).trim().replace(/\.0$/,'');if(!l)return;
+    const co=listCoOf(r[iC]);const kb=String(r[iK]==null?'':r[iK]).trim().replace(/\.0$/,'');
+    if(co===null&&!kb){skip++;return}
+    lg.opLists[l]={op:co||'',kb:co?(kb||''):(kb||'1'),name:String(r[iN]||'').trim(),at:now,by:'社員確認エクセル'};n++;
+  });
+  if(n){await saveMemory();syncLedgerSoon();
+    B.files.forEach(f=>{if(f.stockSrc)f.stock=stockBuild(f.stockSrc)})}
+  return {n,skip};
 }
 async function stockAnswer(i,list,op){
   const lg=ledgerOf();lg.opLists[list]={op,at:new Date().toISOString(),by:'ライフサポート内訳'};
@@ -7836,6 +8158,7 @@ function go(n){
     s.classList.toggle('nav',i<=S.maxStep&&i!==n);
   }
   S.step=n;
+  setTab('tabMain');
   placePricePanel(n);
   /* 商材ごとの結果画面をまとめて処理から開いたときは、出力ボタンを隠してボードへ戻す */
   const to=document.getElementById('toOut'),bk=document.getElementById('back2');
@@ -8681,6 +9004,8 @@ async function batchRoute(files,opts){
           continue;
         }
         const {buf,wb}=await readWb(f);
+        if(wb.SheetNames.includes(LIST_SHEET)){const r=await importListSheet(wb);ent.kind='json';
+          ent.note=r.n?`リスト番号 ${r.n}件を覚えました${r.skip?`（未記入 ${r.skip}件はそのまま）`:''}。ライフサポートの内訳に反映します`:'記入されたリスト番号がありません';continue}
         /* XRM とみなすのは、ファイル名が「契約一覧」か、XRM の書き出しらしく多数のシートがあるときだけ。
            作業用ファイル（AI作成中_…）にも「パートナー企業」「顧客電話番号」の列があり、XRM を上書きしてしまうため */
         if(!opts.noXrm&&looksLikeXrm(wb,f.name)&&(/契約一覧/.test(f.name)||wb.SheetNames.length>=10)){ent.kind='xrm';ent.note=`${wb.SheetNames.length}シート。保存したので次回は不要です`;applyXrmWb(wb,buf,f.name);continue}
@@ -8878,6 +9203,14 @@ async function runBatch(){
   S.maxStep=Math.max(S.maxStep||1,2);
   const okN=todo.filter(j=>j.status==='ok').length;
   progLine(`完了: ${okN}商材を処理${todo.length>okN?`（${todo.length-okN}件は対象なし/エラー）`:''}`);
+  /* 入金漏れ（監査結果）と支払漏れの候補をこの場で更新 */
+  try{
+    let added=0,cleared=0;
+    for(const j of B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind==='audit')){const cfg=AUDITS[j.key];if(!cfg)continue;const r=await upsertUnpaid(cfg.title,cfg.jouiten,j.rows||[]);added+=r.added;cleared+=r.cleared}
+    const pm=detectPayMiss();await saveMemory();syncLedgerSoon();updateTabCounts();
+    if(added||cleared)progLine(`入金漏れ: 新しく ${added}件・入金を確認 ${cleared}件（「入金漏れ」タブ）`);
+    if(pm)progLine(`支払漏れの候補: ${pm}件（「支払漏れ」タブ）`,'err');
+  }catch(e){console.error('miss update',e)}
   renderIn();
   setTimeout(()=>go(2),500);
 }
@@ -9238,6 +9571,8 @@ async function buildAll(){
     const st=await makeAllStatements(payJobs);
     st.outs.forEach(o=>outs.push({name:uniqueName(o.name,used),data:o.data,desc:o.desc}));
     B.stmt=st;
+    const pwb=payWb();
+    if(pwb)outs.push({name:uniqueName(`AI作成中_支払漏れ追加分_${B.month||thisYm()}.xlsx`,used),data:new Uint8Array(XLSX.write(pwb,{type:'array',bookType:'xlsx'})),desc:'支払漏れで「追加」にした案件（パートナー別）'});
     const lgj=JSON.stringify(ledgerExportObj());
     outs.push({name:uniqueName(`ルール台帳_${B.month||stamp()}.json`,used),data:new TextEncoder().encode(lgj),desc:'ルール台帳（別端末では「ルール台帳 → 台帳を読み込む」）'});
     B.outs=outs;B.results=results;
@@ -9258,6 +9593,11 @@ function reDownloadZip(){
   deliverFile(`AI作成中_月末処理一式_${B.month||stamp()}.zip`,new Blob([buildZip(B.outs.map(o=>({name:o.name,data:o.data})))],{type:'application/zip'}));
 }
 function renderOut(){
+  const side=document.getElementById('outSide');
+  if(side){const u=unpaidList().filter(x=>x.status!=='入金済').length,pc=payList('候補').length,pa=payList('追加');
+    side.innerHTML=`<h3>あわせて確認</h3><div class="side">
+      <button class="btn-ghost" onclick="openMiss()">入金漏れ ${u}件</button>
+      <button class="btn-ghost" onclick="openPayMiss()">支払漏れ 候補 ${pc}件${pa.length?`・追加 ${pa.length}件（${yen(pa.reduce((a,x)=>a+(Number(x.price)||0),0))}）`:''}</button></div>`}
   const ym=B.month?fmtYmJa(B.month)+'度':'';
   const mo=document.getElementById('outMonth');if(mo)mo.textContent=ym||'今月';
   const jobs=B.jobs.filter(j=>j.status==='ok');
@@ -9310,6 +9650,9 @@ function renderOut(){
 /* 起動時はまとめて処理の「入れる」から */
 go(1);
 
+
+/* タブの件数（入金漏れ・支払漏れ）を起動時に出す */
+try{MEM_READY.then(()=>updateTabCounts())}catch(e){}
 </script>
 </body>
 </html>
