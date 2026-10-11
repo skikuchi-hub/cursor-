@@ -115,6 +115,14 @@ table.mini th,table.mini td{padding:6px 8px;text-align:left;border-bottom:1px so
 .pitem-s{font-size:12px;color:var(--txt-2);margin-top:4px;line-height:1.6}
 .pitem-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pitem-r .price-in{width:120px}
+.inq{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin-bottom:22px;box-shadow:var(--sh)}
+.inq-h{font-weight:600;font-size:15px;margin-bottom:10px}
+.inq-row{display:flex;gap:8px}
+.inq-row input{flex:1;min-width:0;font:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--txt)}
+.inq-card{margin-top:12px;padding:12px 14px;background:var(--surface-2);border-radius:8px}
+.inq-t{font-weight:700;font-size:15px}
+.inq-s{font-size:12.5px;color:var(--txt-2);margin-top:8px;line-height:1.7}
+.inq-a{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
 .payform{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px;align-items:center}
 .payform input,.payform select{font:inherit;font-size:14px;padding:9px 10px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--txt);min-width:0}
 
@@ -1017,6 +1025,11 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 <section class="screen" id="scPay">
   <h1>支払漏れ</h1>
   <p class="sub">上位店から入金があるのに、パートナーへ払っていない案件です。「内訳に追加」にしたものは、次に作る内訳に「支払漏れ追加分」として入ります。</p>
+  <div class="inq">
+    <div class="inq-h">パートナーから「払われていない」と言われたら</div>
+    <div class="inq-row"><input id="inqQ" placeholder="電話番号・申込番号・顧客名" onkeydown="if(event.key==='Enter')renderInquiry()"><button class="btn btn-sm" onclick="renderInquiry()">調べる</button></div>
+    <div id="inqResult"></div>
+  </div>
   <div class="strip strip3" id="payKpi"></div>
   <h2 class="sec-h">確認してほしい候補</h2>
   <div id="payCand"></div>
@@ -5358,6 +5371,115 @@ function detectPayMiss(){
   return n;
 }
 
+/* ---------------- パートナーから「払われていない」と言われたときの調査 ----------------
+   電話番号・申込番号・顧客名で、①上位店から入金あり＝当社の支払漏れ ②上位店からも入金なし＝上位店に入金漏れの確認 ③実はパートナーへ支払済み のどれかを調べる
+   調べる先: パートナーへの支払 = 過去の支払明細書（mem.cases）・ライフサポート内訳（stockLs）・今月の内訳・支払漏れで追加済み
+             上位店の入金 = 明細を入れた月の記録（mem.upPaid）・今月の上位店明細・入金漏れの記録（mem.unpaid）
+             案件の情報 = XRM（全シートから電話番号・申込番号・顧客名で探す） */
+const UP_KEEP_MONTHS=14;
+function inqNorm(v){const s=String(v==null?'':v).trim();const d=s.replace(/[^\d]/g,'');return /^[\d\-\s()（）]+$/.test(s)&&d.length>=9?d.replace(/^0*/,'0'):s.replace(/\s/g,'')}
+/* 上位店の入金の記録: バッチ実行のたびに、今月の上位店明細の案件と監査の入金確認を残す（端末内・14ヶ月） */
+function recordUpPaid(){
+  const mem=S.memory||(S.memory=emptyMem());const up=mem.upPaid||(mem.upPaid={});
+  const ym=B.month||thisYm();let n=0;
+  const put=(k,v)=>{k=inqNorm(k);if(!k)return;const cur=up[k];if(!cur||String(cur.m)<=ym){up[k]=Object.assign({m:ym},v);n++}};
+  B.jobs.filter(j=>j.status==='ok').forEach(j=>{const m=MODULES[j.key];
+    if(m.kind==='audit'){const cfg=AUDITS[j.key]||{};(j.rows||[]).filter(r=>r.state==='ok').forEach(r=>[r.tel,r.app,...(r.keys||[])].forEach(k=>put(k,{j:cfg.jouiten||'',p:cfg.title||'',src:'監査'})));return}
+    (j.rows||[]).forEach(r=>{if(r.modo)return;[r.tel,r.key,r.x&&r.x.app].forEach(k=>put(k,{j:vendorOf(m),p:productOf(m),src:'明細'}))});
+  });
+  const cut=(()=>{const d=new Date();d.setMonth(d.getMonth()-UP_KEEP_MONTHS);return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')})();
+  Object.keys(up).forEach(k=>{if(String(up[k].m)<cut)delete up[k]});
+  return n;
+}
+let _inqXrm=null;
+function inqXrmIndex(){
+  if(_inqXrm&&_inqXrm.wb===S.xrmWb)return _inqXrm;
+  const idx={by:{},names:[]};const wb=S.xrmWb;
+  if(wb&&!S.xrmStub)wb.SheetNames.forEach(n=>{
+    let rows;try{rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1})}catch(e){return}
+    const h=(rows[0]||[]).map(v=>String(v==null?'':v));const c=k=>h.indexOf(k);
+    const iT=c('顧客電話番号'),iA=c('申込番号'),iN=c('顧客氏名');if(iT<0&&iA<0)return;
+    const g=(r,k)=>{const i=c(k);return i>=0?r[i]:''};
+    for(let i=1;i<rows.length;i++){const r=rows[i];if(!r)continue;
+      const rec={sheet:n,app:iA>=0?String(r[iA]||''):'',tel:iT>=0?String(r[iT]||''):'',name:iN>=0?String(r[iN]||''):'',partner:g(r,'パートナー企業')||'',
+        upstream:g(r,'上位店名')||'',status:g(r,'ステータス')||'',open:g(r,'開通日')||'',apply:g(r,'申込日')||'',service:g(r,'サービス名')||'',list:g(r,'リストID')||''};
+      [rec.tel,rec.app].forEach(k=>{k=inqNorm(k);if(k&&k.length>=6){(idx.by[k]=idx.by[k]||[]);if(idx.by[k].length<8)idx.by[k].push(rec)}});
+      if(rec.name)idx.names.push(rec);
+    }
+  });
+  idx.wb=wb;_inqXrm=idx;return idx;
+}
+function inqSearch(q){
+  q=String(q||'').trim();if(!q)return null;
+  const key=inqNorm(q);const mem=S.memory||{};
+  /* XRM で案件を特定（電話番号・申込番号。名前なら部分一致） */
+  const X=inqXrmIndex();let recs=X.by[key]||[];
+  if(!recs.length&&!/^\d+$/.test(key)){const nq=q.replace(/\s/g,'');recs=X.names.filter(r=>r.name.replace(/\s/g,'').includes(nq)).slice(0,20)}
+  const keys=new Set([key]);recs.forEach(r=>{[r.tel,r.app].forEach(k=>{k=inqNorm(k);if(k)keys.add(k)})});
+  /* パートナーへの支払 */
+  const paid=[];
+  keys.forEach(k=>{const c=(mem.cases||{})[k];if(c)paid.push({how:'支払明細書',month:c.m,amount:c.a,product:c.p||''})});
+  const st=mem.stockLs&&mem.stockLs.months||{};
+  Object.entries(st).forEach(([ym,g])=>Object.entries(g).forEach(([pt,s])=>{const ps=s.PS;if(!ps)return;const ci=ps.hdr.indexOf('顧客ID'),ti=ps.hdr.indexOf('電話番号'),pi=ps.hdr.findIndex(h=>/単価/.test(h));
+    ps.rows.forEach(r=>{if(keys.has(inqNorm(r[ci]))||(ti>=0&&keys.has(inqNorm(r[ti]))))paid.push({how:'ライフサポート内訳',month:ym.replace('-',''),amount:r[pi],partner:pt,product:'ライフサポート'})})}));
+  B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind!=='audit').forEach(j=>(j.rows||[]).forEach(r=>{
+    if(r.resolved&&!r.hold&&r.price!=null&&[r.tel,r.key,r.x&&r.x.app].some(k=>keys.has(inqNorm(k))))paid.push({how:'今月の内訳',month:B.month||'',amount:r.price,partner:r.payTo||'',product:productOf(MODULES[j.key])})}));
+  Object.values(mem.payMiss||{}).forEach(x=>{if(x.status==='追加済'&&[x.tel,x.key].some(k=>keys.has(inqNorm(k))))paid.push({how:'支払漏れで追加済み',month:x.doneYm||'',amount:x.price,partner:x.partner,product:x.product})});
+  /* 上位店の入金 */
+  const up=[];
+  keys.forEach(k=>{const u=(mem.upPaid||{})[k];if(u)up.push({how:u.src==='監査'?'監査で入金を確認':'上位店明細に記載',month:u.m,jouiten:u.j,product:u.p})});
+  const miss=Object.entries(mem.unpaid||{}).filter(([,u])=>[u.tel,u.key,u.no].some(k=>keys.has(inqNorm(k)))).map(([k,u])=>({k,...u}));
+  miss.filter(u=>u.status==='入金済').forEach(u=>up.push({how:'追って入金（入金漏れから回収）',month:(u.paidAt||'').replace(/\//g,'').slice(0,6),jouiten:u.jouiten,product:u.product}));
+  let pattern,title;
+  if(paid.length){pattern=3;title='③ パートナーへ支払済みです'}
+  else if(up.length){pattern=1;title='① 上位店から入金あり → 当社の支払漏れです'}
+  else if(recs.length||miss.length){pattern=2;title='② 上位店からも入金がありません → 上位店に入金漏れを確認します'}
+  else {pattern=0;title='XRM にも記録にも見つかりません'}
+  return {q,key,recs,paid:paid.sort((a,b)=>String(b.month).localeCompare(String(a.month))),up,miss,pattern,title};
+}
+function renderInquiry(){
+  const el=document.getElementById('inqResult');if(!el)return;
+  const q=(document.getElementById('inqQ')||{}).value||'';
+  if(!q.trim()){el.innerHTML='';return}
+  if(!S.xrmWb||S.xrmStub){el.innerHTML='<p class="note" style="color:var(--warn)">XRM がまだありません。「同期」してから調べてください。</p>';return}
+  const r=inqSearch(q);S._inq=r;
+  const rec=r.recs[0]||{};const qs=s=>JSON.stringify(s).replace(/"/g,'&quot;');
+  const ymJa=m=>/^\d{6}$/.test(String(m))?fmtYmJa(String(m))+'度':esc(m||'');
+  const color={1:'var(--alert)',2:'var(--warn)',3:'var(--ok)',0:'var(--txt-2)'}[r.pattern];
+  el.innerHTML=`<div class="inq-card" style="border-left:4px solid ${color}">
+    <div class="inq-t" style="color:${color}">${esc(r.title)}</div>
+    ${r.recs.length?`<div class="inq-s">XRM: ${r.recs.slice(0,3).map(x=>`${esc(x.sheet)}・${esc(x.name||'')}・${esc(x.partner||'—')}・上位店 ${esc(x.upstream||'—')}・${esc(x.status||'')}${x.open?'・開通 '+esc(String(x.open).slice(0,10)):''}`).join('<br>')}${r.recs.length>3?`<br>ほか ${r.recs.length-3}件`:''}</div>`:''}
+    ${r.paid.length?`<div class="inq-s"><b>パートナーへの支払</b><br>${r.paid.slice(0,6).map(p=>`${ymJa(p.month)} ${esc(p.partner||'')} ${esc(p.product||'')} ${p.amount!=null&&p.amount!==''?yen(Number(p.amount)):''}（${esc(p.how)}）`).join('<br>')}</div>`:''}
+    ${r.up.length?`<div class="inq-s"><b>上位店からの入金</b><br>${r.up.slice(0,6).map(u=>`${ymJa(u.month)} ${esc(u.jouiten||'')} ${esc(u.product||'')}（${esc(u.how)}）`).join('<br>')}</div>`:''}
+    ${r.miss.filter(u=>u.status!=='入金済').length?`<div class="inq-s"><b>入金漏れとして上位店に確認中</b>（${esc(r.miss[0].jouiten||'')}・${r.miss[0].sentAt?'送付 '+esc(r.miss[0].sentAt):'未送付'}）</div>`:''}
+    <div class="inq-a">${r.pattern===1?`<button class="btn btn-sm" onclick="inqToPay()">支払漏れに追加する</button>`
+      :r.pattern===2?(r.miss.some(u=>u.status!=='入金済')?(r.miss.some(u=>u.claimed)?`<span class="note">入金漏れとして確認中・パートナー申告あり（入金されたら支払います）</span>`:`<button class="btn btn-sm" onclick="inqToMiss()">パートナー申告ありにする</button><span class="note">上位店から入金されたら支払います</span>`)
+        :`<button class="btn btn-sm" onclick="inqToMiss()">入金漏れに登録して上位店に確認する</button><span class="note">上位店から入金されたら、申告があった案件として支払います</span>`)
+      :r.pattern===3?`<span class="note">パートナーには「${esc(r.paid[0].month?ymJa(r.paid[0].month):'')}の明細でお支払い済みです」と伝えられます</span>`
+      :`<span class="note">電話番号・申込番号を確かめてください。XRM の書き出し前の新しい案件の可能性もあります</span>`}</div>
+    ${r.up.length===0&&r.pattern!==3?`<p class="note">※ 上位店の入金は、このアプリで明細を処理した月（${Object.keys((S.memory||{}).upPaid||{}).length?'記録あり':'まだ記録なし'}）と監査の結果から調べています。それより前の月は確認できません。</p>`:''}
+  </div>`;
+}
+async function inqToPay(){
+  const r=S._inq;if(!r)return;const rec=r.recs[0]||{};const u=r.up[0]||{};
+  const mem=S.memory||(S.memory=emptyMem());mem.payMiss=mem.payMiss||{};
+  const k='inq:'+(inqNorm(rec.tel)||r.key);
+  mem.payMiss[k]=touch({product:u.product||rec.service||rec.sheet||'',jouiten:u.jouiten||rec.upstream||'',name:rec.name||'',tel:inqNorm(rec.tel)||'',key:rec.app||'',open:rec.open?String(rec.open).slice(0,10):'',
+    partner:rec.partner||'',src:'パートナー申告',status:'候補',foundAt:fmtDate(new Date()),why:'パートナーから申告・上位店の入金を確認済み'});
+  await saveMemory();syncLedgerSoon();renderPay();toast('支払漏れの候補に載せました。単価を入れて「内訳に追加」してください');
+}
+async function inqToMiss(){
+  const r=S._inq;if(!r)return;const rec=r.recs[0]||{};
+  const mem=S.memory||(S.memory=emptyMem());mem.unpaid=mem.unpaid||{};
+  const product=rec.sheet||'';const k=[product,'',inqNorm(rec.tel)||r.key].join('|');
+  if(r.miss.some(u=>u.status!=='入金済')){r.miss.forEach(u=>{const x=mem.unpaid[u.k];if(x){x.claimed=true;touch(x)}});await saveMemory();syncLedgerSoon();toast('パートナー申告ありにしました。上位店から入金されたら支払漏れに載せます');renderInquiry();return}
+  if(!mem.unpaid[k])mem.unpaid[k]=touch({product,jouiten:rec.upstream||'（上位店不明）',no:'',name:rec.name||'',tel:inqNorm(rec.tel)||'',open:rec.open?String(rec.open).slice(0,10):'',
+    key:rec.app||'',svc:rec.service||'',partner:rec.partner||'',status:'未入金',pay:'未払い',payAt:'',firstSeen:fmtDate(new Date()),lastSeen:fmtDate(new Date()),paidAt:'',claimed:true,src:'パートナー申告'});
+  else{mem.unpaid[k].claimed=true;touch(mem.unpaid[k])}
+  r.miss.forEach(u=>{const x=mem.unpaid[u.k];if(x&&x.status!=='入金済'){x.claimed=true;touch(x)}});
+  await saveMemory();syncLedgerSoon();updateTabCounts();toast('入金漏れに登録しました（パートナー申告あり）。「入金漏れ」タブから上位店への確認エクセルを作れます');renderInquiry();
+}
+
 /* ---- 画面描画 ---- */
 S.boardFilter='all';
 function openBoard(){
@@ -6761,7 +6883,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面';
+const APP_BUILD='2026-10-12 新画面2';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9207,7 +9329,7 @@ async function runBatch(){
   try{
     let added=0,cleared=0;
     for(const j of B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind==='audit')){const cfg=AUDITS[j.key];if(!cfg)continue;const r=await upsertUnpaid(cfg.title,cfg.jouiten,j.rows||[]);added+=r.added;cleared+=r.cleared}
-    const pm=detectPayMiss();await saveMemory();syncLedgerSoon();updateTabCounts();
+    const pm=detectPayMiss();recordUpPaid();await saveMemory();syncLedgerSoon();updateTabCounts();
     if(added||cleared)progLine(`入金漏れ: 新しく ${added}件・入金を確認 ${cleared}件（「入金漏れ」タブ）`);
     if(pm)progLine(`支払漏れの候補: ${pm}件（「支払漏れ」タブ）`,'err');
   }catch(e){console.error('miss update',e)}
