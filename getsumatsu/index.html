@@ -6418,7 +6418,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夕方版5';
+const APP_BUILD='2026-10-11 夕方版6';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6721,6 +6721,16 @@ async function syncNow(opts){
       syncLog(`条件表 ${(j.items||[]).length}件を取り込みました（単価が読めたもの ${(j.items||[]).filter(x=>x.items&&x.items.length).length}件）`);
     }
     syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
+    /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
+    if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
+      try{
+        const r=await syncPost({action:'fillPayments'});
+        if(!r||!r.ok)throw new Error((r&&r.error)||'応答がありません');
+        c.paySig=man.payments.sig;saveSyncCfg(c);
+        const mem=S.memory||(S.memory=emptyMem());mem.payFill=r;await saveMemory();
+        syncLog(`支払高推移: 空欄に ${r.filled.length}件を書き込みました（明細と違う ${r.diffs.length}件・シートに無い支払先 ${r.missing.length}件は書き換えていません）`);
+      }catch(e){syncLog('支払高推移の自動入力: '+finErrText(e),'err')}
+    }
     try{if(await syncFin(c,false)){sum.fin=1;syncLog('収支データ（スプレッドシート）を更新しました')}}
     catch(e){syncLog('収支データ: '+finErrText(e),'err')}
     syncProg(96,98,1,'ルール台帳をまとめています');
@@ -7159,6 +7169,18 @@ function finChartSvg(d){
   const leg=d.series.map((sr,k)=>`<span><i style="background:${colors[k%3]}"></i>${esc(sr.name)}</span>`).join('');
   return `<div class="fin-chart"><div class="fin-leg">${leg}</div><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="推移のグラフ">${g}</svg></div>`;
 }
+/* 支払明細書からの自動入力の結果（支払高推移のタブに出す） */
+function finPayFillHtml(){
+  const r=S.memory&&S.memory.payFill;if(!r)return '';
+  const ym=x=>fmtYmJa(x.month)||x.month,yen=v=>Number(v).toLocaleString()+'円';
+  const li=(arr,f)=>arr.map(x=>`<div class="pat-sub">${f(x)}</div>`).join('');
+  const parts=[];
+  if(r.filled.length)parts.push(`<details><summary class="note" style="cursor:pointer">書き込んだ ${r.filled.length}件</summary>${li(r.filled,x=>`${esc(ym(x))} ${esc(x.partner)} ${yen(x.amount)}`)}</details>`);
+  if(r.diffs.length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">明細と違う ${r.diffs.length}件（シートの値はそのまま）</summary>${li(r.diffs,x=>`${esc(ym(x))} ${esc(x.partner)}　シート ${yen(x.sheet)} ／ 明細 ${yen(x.amount)}`)}</details>`);
+  if(r.missing.length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">シートに行が無い支払先 ${r.missing.length}件</summary>${li(r.missing,x=>`${esc(ym(x))} ${esc(x.partner)} ${yen(x.amount)}`)}</details>`);
+  if((r.noCover||[]).length)parts.push(`<details><summary class="note" style="cursor:pointer">表紙の合計が読めない明細 ${r.noCover.length}件（手入力のまま）</summary>${li(r.noCover,x=>esc(x))}</details>`);
+  return `<div class="pm" style="margin:0 0 14px"><h3>支払明細書からの自動入力</h3><div class="pm-note">表紙の合計金額で、空いているセルだけを埋めます。入力済みのセルは書き換えません（1円以内の差は同じとみなします）。最終 ${esc(fmtWhen(r.at))}</div>${parts.join('')||'<div class="pat-sub">変更はありません</div>'}</div>`;
+}
 function renderFin(){
   const fd=S.memory&&S.memory.finSheets;
   const tabs=document.getElementById('finTabs'),tb=document.getElementById('finTable'),ch=document.getElementById('finChart'),meta=document.getElementById('finMeta'),lk=document.getElementById('finLink');
@@ -7171,7 +7193,7 @@ function renderFin(){
   const sh=(fd.sheets||[]).find(x=>x.name===S.finTab);
   if(!sh){tb.innerHTML='<div class="pm-note" style="padding:14px">このシートが見つかりません</div>';ch.innerHTML='';return}
   const m=finTrim(sh.display);
-  ch.innerHTML=finChartSvg(finSeries(sh.name,m));
+  ch.innerHTML=finChartSvg(finSeries(sh.name,m))+(sh.name==='支払高推移'?finPayFillHtml():'');
   const hi=m.findIndex(r=>r.filter(finIsMonth).length>=3||(r.includes('売上高')&&r.includes('支出計')));
   const totRe=/合計|売上高|支払計|粗利|支出計|支払先会社名|前月比利益高/;
   const cell=(v,i,tag,sub)=>{const t=String(v);const num=finNum(t);
