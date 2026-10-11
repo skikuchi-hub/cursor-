@@ -3921,13 +3921,21 @@ function extractPayEntries(wb,fileName){
     if(/^表紙$|^請求書$|^御請求書$/.test(sn))return;
     if(excludeReason(sn))return;
     const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});
-    if(rows.length<2)return;
+    let got=paySheetStd(rows,sn,month,fileName);
+    if(!got.length)got=paySheetExt(rows,sn,month,fileName);   /* 従来の読み方で0件のシートだけ、広げた読み方で読む */
+    out.push(...got);
+  });
+  return out;
+}
+function paySheetStd(rows,sn,month,fileName){
+  const out=[];
+    if(rows.length<2)return out;
     /* 見出し行（支払手数料 or 取次手数料 を持つ行）を探す */
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,6);i++){
       if(findCol(rows[i]||[],['支払手数料','取次手数料','支払単価','支払い対象','支払対象','手数料'])>=0){hi=i;break}
     }
-    if(hi<0)return;
+    if(hi<0)return out;
     const h=rows[hi];
     let cAmt=findCol(h,['支払手数料']);
     if(cAmt<0)cAmt=findCol(h,['支払単価']);
@@ -3964,7 +3972,86 @@ function extractPayEntries(wb,fileName){
         fees:pickFees(h,r),
         name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
     }
-  });
+  return out;
+}
+/* 広げた読み方（Mac の sync/history.py _pay_sheet_ext と同じ規則） */
+const EXT_SKIP_HDR=/時給|稼働時間|実働時間|kWh|使用量/;
+const EXT_SKIP_SHEET=/相殺|通知書|請求書|領収|精算書/;
+const EXT_TOTAL_RE=/合計|小計|総計|消費税/;
+const EXT_FEE_NG=/郵送|アポ|後確|事務|振込/;
+const EXT_APP_HDR=['申込番号','受付番号','会員ID','管理番号','オーダーID','顧客ID','顧客コード','ISP契約番号','ユーザーID',
+  '契約番号','お客様番号','アクセスコード','システムID','受注番号','注文番号','会員番号','Serial'];
+const EXT_AMT_PREDS=[
+  h=>h.includes('支払手数料'),
+  h=>h.includes('支払単価')||h.includes('支払い単価'),
+  h=>h.includes('支払い対象')||h.includes('支払対象'),
+  h=>h.includes('取次手数料'),
+  h=>/支払い?$/.test(h)||h.includes('支払い手数料'),
+  h=>h.includes('委託費'),
+  h=>h.includes('支払額')||h.includes('支払金額'),
+  h=>h.includes('手数料')&&!EXT_FEE_NG.test(h),
+  h=>h.includes('インセンティブ金額'),
+  h=>h.startsWith('金額'),
+  h=>h.includes('単価')&&!h.includes('エリア単価'),
+];
+const extStr=x=>x==null?'':String(x);
+const hNorm=x=>toHalf(extStr(x)).replace(/\s+/g,'');
+function extAmountCol(h){
+  const hs=(h||[]).map(hNorm);
+  for(const pred of EXT_AMT_PREDS){for(let i=0;i<hs.length;i++){const t=hs[i];if(t&&!t.includes('合計')&&pred(t))return i}}
+  return -1;
+}
+function paySheetExt(rows,sn,month,fileName){
+  const out=[];
+  if(rows.length<2||EXT_SKIP_SHEET.test(sn))return out;
+  const top=rows.slice(0,3).map(r=>(r||[]).map(extStr).join('')).join('').replace(/\s+/g,'');
+  if(top.includes('支払明細書')||top.includes('請求書'))return out;
+  let hi=-1;
+  for(let i=0;i<Math.min(rows.length,30);i++){
+    const r=rows[i]||[];
+    if(r.filter(x=>extStr(x).trim()).length>=3&&extAmountCol(r)>=0){hi=i;break}
+  }
+  if(hi<0)return out;
+  const h=rows[hi];
+  if(h.some(x=>EXT_SKIP_HDR.test(hNorm(x))))return out;
+  let cAmt=extAmountCol(h);
+  /* 数量の列がある明細は金額が「単価×数量」なので単価の列を使う。無ければ金額÷数量 */
+  const hs=h.map(hNorm);
+  let cQty=hs.findIndex(t=>['数量','件数','個数','本数'].includes(t));
+  if(cQty>=0){const cu=hs.findIndex(t=>t.includes('単価')&&!t.includes('エリア単価')&&!t.includes('合計'));if(cu>=0){cAmt=cu;cQty=-1}}
+  let cTel=findCol(h,['電話番号','連絡先']);
+  if(cTel<0){const sc=scorePhoneCol(rows);cTel=sc.hits?sc.col:-1}
+  let cApp=-1;for(const pat of EXT_APP_HDR){cApp=findCol(h,[pat]);if(cApp>=0)break}
+  const cKubun=findCol(h,['支払区分','区分']);
+  const cItem=findCol(h,['商材']);
+  const cName=findCol(h,['氏名','顧客名','お客様名','契約者名']);
+  const cPar=findCol(h,['パートナー名','パートナー企業']);
+  let cTossHdr=-1;
+  for(const pat of TOSS_HDR){const t=findCol(h,[pat]);if(t>=0){cTossHdr=t;break}}
+  const prod=normProduct(sn);
+  for(let i=hi+1;i<rows.length;i++){
+    const r=rows[i];if(!r||!r.length)continue;
+    let amt=Number(r[cAmt]);
+    if(r[cAmt]==null||r[cAmt]===''||isNaN(amt))continue;
+    if(cQty>=0){const q=Number(r[cQty]);amt=(r[cQty]!=null&&r[cQty]!==''&&q>0)?amt/q:NaN}
+    if(isNaN(amt)||amt===0||!Number.isInteger(amt))continue;   /* 端数のある金額（按分計算など）は単価ではない */
+    if(r.some(x=>typeof x==='string'&&EXT_TOTAL_RE.test(x)))continue;
+    const tel=cTel>=0?normPhone(r[cTel]):'';
+    const av=cApp>=0?r[cApp]:null;
+    /* 桁が多すぎて数値として丸められた番号（1.01E+25 など）は照合に使えない */
+    const app=(av==null||(typeof av==='number'&&Math.abs(av)>=1e15))?'':clean(av);
+    /* 電話番号・申込番号が無い行も単価の学習には使う（案件の踏襲には使わない）。空行に近い行は除く */
+    if(!tel&&!app&&r.filter((x,j)=>j!==cAmt&&extStr(x).trim()).length<2)continue;
+    const kubun=cKubun>=0?String(r[cKubun]??''):'';
+    const item=cItem>=0?String(r[cItem]??''):'';
+    const modo=/請求/.test(kubun)||/戻入/.test(item)||/戻入/.test(sn);
+    let toss='';
+    if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;break}}}
+    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,
+      partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
+      fees:null,ext:true,
+      name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
+  }
   return out;
 }
 /* 案件単価を記憶に取り込む（戻入行は踏襲対象にしない） */
@@ -6232,13 +6319,18 @@ async function syncPost(body){
 }
 /* 大きいファイルは 6MB ずつ分割で届くのでつなぎ直す */
 async function syncFile(path,onPart){
-  let part=0,parts=1,size=0,name='';const chunks=[];
-  do{
-    const j=await syncGet({action:'file',path,part});
-    parts=j.parts||1;size=j.size||0;name=j.name||path.split('/').pop();
-    chunks.push(b64ToBytes(j.data||''));
-    part++;if(onPart)onPart(part,parts);
-  }while(part<parts);
+  // 1つ目で総数を知り、残りは並べて取る（Apps Script は1区切り約75秒。順番だと XRM で7分以上かかる）
+  const first=await syncGet({action:'file',path,part:0});
+  const parts=first.parts||1,size=first.size||0,name=first.name||path.split('/').pop();
+  const chunks=new Array(parts);chunks[0]=b64ToBytes(first.data||'');
+  let done=1;if(onPart)onPart(done,parts);
+  const rest=[];for(let i=1;i<parts;i++)rest.push(i);
+  await Promise.all(rest.map(async i=>{
+    let j,err;
+    for(let t=0;t<2;t++){try{j=await syncGet({action:'file',path,part:i});break}catch(e){err=e}}
+    if(!j)throw err;
+    chunks[i]=b64ToBytes(j.data||'');done++;if(onPart)onPart(done,parts);
+  }));
   const total=chunks.reduce((a,c)=>a+c.length,0);
   if(size&&total!==size)throw new Error(`${name} のサイズが合いません（${total}/${size}）`);
   const buf=new Uint8Array(total);let off=0;chunks.forEach(c=>{buf.set(c,off);off+=c.length});
