@@ -2678,6 +2678,44 @@ async function resetPrices(){
 
 
 /* ===== 単価不明パターンの記憶と一括適用 ===== */
+/* ===== 答えの台帳（全商材共通）=====
+   要確認で答えた内容（単価・支払先・リスト番号の持ち主など）をルール台帳の answers に残す。
+   台帳は Drive で端末間に共有され、翌月以降の同じパターン・同じ案件には自動で同じ答えを使う。
+   名前空間: 'pat:<商材>' = 単価パターン → {price} ／ 'row:<商材>' = 案件（電話番号・申込番号など）→ {payTo, price, label} */
+function ansNs(ns){const lg=ledgerOf();return lg.answers[ns]||(lg.answers[ns]={})}
+function ansGet(ns,key){const lg=ledgerOf();return key&&lg.answers[ns]?lg.answers[ns][key]||null:null}
+async function ansPut(ns,key,val){
+  if(!key)return;
+  ansNs(ns)[key]=Object.assign({},val,{at:new Date().toISOString(),ym:(typeof B!=='undefined'&&B.month)||thisYm()});
+  await saveMemory();syncLedgerSoon();
+}
+async function ansForget(ns,key){const lg=ledgerOf();if(lg.answers[ns]){delete lg.answers[ns][key];lg.answers[ns+'#del']=Object.assign(lg.answers[ns+'#del']||{},{[key]:new Date().toISOString()})}await saveMemory();syncLedgerSoon()}
+function rowIdOf(r){
+  if(!r)return '';
+  const v=r.tel||r.key||r.rawKey||r.appNo||r.orderNo||r.user||(r.acc&&r.name?r.acc+'|'+r.name:'');
+  return v?String(v).replace(/\s/g,''):'';
+}
+/* 前回の答えがある案件（同じ電話番号・申込番号など）は、同じ支払先・単価で確定する */
+function applyRowAnswers(){
+  const ns='row:'+S.prod,lg=ledgerOf();if(!lg.answers[ns])return 0;let n=0;
+  const m=MODULES[S.prod];
+  (S.rows||[]).forEach(r=>{
+    if(r.resolved)return;const a=ansGet(ns,rowIdOf(r));if(!a)return;
+    const tag=` → 前回の答え（${a.ym?fmtYmJa(a.ym):''}${a.label?'・'+a.label:''}）を使用`;
+    /* 前回選んだ選択肢が今回もあれば、それをそのまま選ぶ（支払先・単価・空欄で出力・外す など何でも） */
+    if(a.label&&m&&m.approval){
+      let o=null;try{const conf=m.approval(r);o=(conf.opts||[]).find(x=>x.label===a.label)}catch(e){}
+      if(o){if(o.hold){r.resolved=true;r.hold=true;r.price=null}else{if(o.apply)o.apply(r);r.resolved=true;r.state='ok'}
+        r.autoAns=true;r.why+=tag;n++;return}
+    }
+    if(a.payTo!=null&&a.payTo!=='')r.payTo=a.payTo;
+    if(a.price!=null)r.price=r.modo?-Math.abs(Number(a.price)):Number(a.price);
+    if(r.price==null)return;
+    r.resolved=true;r.state='ok';r.autoAns=true;
+    r.why+=tag;n++;
+  });
+  return n;
+}
 const PatKey=p=>'getsumatsu_patterns_'+p;
 async function loadPatterns(){
   S.savedPatterns=(await Store.get(PatKey(S.prod)))||{};
@@ -2696,7 +2734,9 @@ async function forgetPattern(key){
 function applySavedPatterns(){
   const m=MODULES[S.prod];
   if(!m.pricePattern)return 0;
-  const saved=S.savedPatterns||{};let n=0;
+  const saved=Object.assign({},S.savedPatterns||{});
+  Object.entries(ledgerOf().answers['pat:'+S.prod]||{}).forEach(([k,a])=>{if(a&&a.price!=null)saved[k]=a.price});
+  let n=0;
   S.rows.forEach(r=>{
     if(r.resolved||r.price!=null)return;
     const p=m.pricePattern(r);if(!p)return;
@@ -6137,6 +6177,8 @@ function ledgerOf(){
   if(!mem.ledger.rules)mem.ledger.rules={};
   if(!mem.ledger.changes)mem.ledger.changes=[];
   if(!mem.ledger.opLists)mem.ledger.opLists={};
+  if(!mem.ledger.answers)mem.ledger.answers={};
+  if(!mem.ledger.answered)mem.ledger.answered={};
   return mem.ledger;
 }
 function thisYm(){const d=new Date();return `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}`}
@@ -6316,17 +6358,19 @@ async function ledgerDecideAll(accept){
   await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
   toast(`${ids.length}件を${accept?'採用':'却下'}しました`);
 }
-async function ledgerAcceptStable(){
-  const lg=ledgerOf();const list=lg.changes.filter(ledgerIsStable);
-  if(!list.length){toast('まとめて採用できる候補はありません');return}
-  if(!confirm(`同じ単価が3ヶ月以上続いている ${list.length}件を台帳に採用します。よろしいですか？`))return;
+async function ledgerAcceptStable(opts){
+  opts=opts||{};
+  const lg=ledgerOf();const list=lg.changes.filter(c=>c.status==='pending'&&ledgerIsStable(c));
+  if(!list.length){if(!opts.silent)toast('まとめて採用できる候補はありません');return 0}
+  if(!opts.silent&&!confirm(`同じ単価が3ヶ月以上続いている ${list.length}件を台帳に採用します。よろしいですか？`))return 0;
   list.forEach(c=>{
     ledgerSet(c.key,c.new,c.src,c.month||thisYm(),c.note);
     const slot=S.memory.rates[c.key]||(S.memory.rates[c.key]={v:{},m:''});slot.fixed=Number(c.new);
     c.status='accepted';c.decidedAt=new Date().toISOString();c.bulk=true;
   });
   await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
-  toast(`${list.length}件を採用しました。残りは1件ずつ確認してください`);
+  if(!opts.silent)toast(`${list.length}件を採用しました。残りは1件ずつ確認してください`);
+  return list.length;
 }
 function renderLedgerChanges(){
   const host=document.getElementById('ledgerChanges');if(!host)return;
@@ -6335,7 +6379,8 @@ function renderLedgerChanges(){
   const pend=lg.changes.filter(c=>c.status==='pending').sort((a,b)=>(b.month||'').localeCompare(a.month||''));
   const stable=pend.filter(ledgerIsStable);
   const done=lg.changes.filter(c=>c.status!=='pending').slice(-8).reverse();
-  if(!pend.length&&!done.length){host.innerHTML='';return}
+  const ansHtml=ledgerAnswersHtml();
+  if(!pend.length&&!done.length){host.innerHTML=ansHtml;return}
   const typeLabel={new:'<span class="badge b-fill">新規</span>',changed:'<span class="badge b-warn">単価変更</span>',conflict:'<span class="badge b-alert">食い違い</span>'};
   const row=c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-row">
       <div class="pat-l"><div class="pat-label">${typeLabel[c.type]||''} ${esc(p)} / ${esc(pa)} / ${esc(t)}</div>
@@ -6350,7 +6395,28 @@ function renderLedgerChanges(){
     ${pend.length?pend.map(c=>ledgerIsStable(c)?row(c).replace('<div class="pat-label">','<div class="pat-label"><span class="badge b-ok">安定</span> '):row(c)).join(''):'<div class="pat-sub">確認待ちはありません。</div>'}
     ${pend.length>1?`<div class="pm-bar"><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(true)">すべて採用</button><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(false)">すべて却下</button></div>`:''}
     ${done.length?`<details style="margin-top:14px"><summary class="note" style="cursor:pointer">最近の判断 ${done.length}件</summary>${done.map(c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-sub">${c.status==='accepted'?'✓ 採用':'✕ 却下'}: ${esc(p)} / ${esc(pa)} / ${esc(t)} ${Number(c.new).toLocaleString()}円${c.month?`（${fmtYmJa(c.month)}）`:''}</div>`}).join('')}</details>`:''}
-  </div>`;
+  </div>${ansHtml}`;
+}
+/* 覚えた答え（要確認で答えたもの・リスト番号の持ち主）の一覧。間違えたものは「忘れる」 */
+function ledgerAnswersHtml(){
+  const lg=ledgerOf();const items=[];
+  Object.entries(lg.answers||{}).forEach(([ns,m])=>{if(/#del$/.test(ns))return;const [kind,mod]=ns.split(':');const md=MODULES[mod];
+    Object.entries(m||{}).forEach(([k,a])=>items.push({ns,k,a,what:(md?productOf(md):mod)+(kind==='pat'?'・単価パターン':'・案件')}))});
+  Object.entries(lg.opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)items.push({ns:'opLists',k,a,what:'ライフサポート・リスト番号'})});
+  if(!items.length)return '';
+  items.sort((x,y)=>String(y.a.at||'').localeCompare(String(x.a.at||'')));
+  const desc=it=>it.ns==='opLists'?`リスト ${esc(it.k)} → ${it.a.op?esc(stockShort(it.a.op)):'OPなし'}`
+    :`${esc(it.a.label||it.k)}${it.a.payTo?' → '+esc(it.a.payTo):''}${it.a.price!=null?' / '+Number(it.a.price).toLocaleString()+'円':''}`;
+  return `<div class="patbox"><details><summary class="pat-h" style="cursor:pointer">覚えた答え ${items.length}件</summary>
+    <div class="pat-n">要確認で答えた内容です。全端末で共有され、次の月から同じパターン・同じ案件に自動で使います。間違えたものは「忘れる」を押してください。</div>
+    ${items.slice(0,200).map(it=>`<div class="pat-row"><div class="pat-l"><div class="pat-label">${esc(it.what)}</div><div class="pat-sub">${desc(it)}${it.a.ym?`　${fmtYmJa(it.a.ym)}`:''}</div></div>
+      <div class="pat-r"><button class="btn-ghost btn-sm" onclick="forgetAnswer('${esc(it.ns)}','${esc(String(it.k).replace(/'/g,''))}')">忘れる</button></div></div>`).join('')}
+  </details></div>`;
+}
+async function forgetAnswer(ns,k){
+  if(ns==='opLists'){const lg=ledgerOf();lg.opLists[k]={forgot:true,at:new Date().toISOString()};await saveMemory();syncLedgerSoon()}
+  else{await ansForget(ns,k);if(/^pat:/.test(ns)){const mod=ns.slice(4);const sp=(await Store.get(PatKey(mod)))||{};delete sp[k];await Store.set(PatKey(mod),sp);if(S.prod===mod&&S.savedPatterns)delete S.savedPatterns[k]}}
+  renderLedgerChanges();toast('忘れました');
 }
 function ledgerBtnLabel(){
   const n=(S.memory&&S.memory.ledger&&S.memory.ledger.changes||[]).filter(c=>c.status==='pending').length;
@@ -6422,7 +6488,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夜版4';
+const APP_BUILD='2026-10-11 夜版5';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6594,10 +6660,17 @@ function mergeLedger(remote){
   if(remote.seed&&!lg.seed)lg.seed=remote.seed;
   /* リスト番号 → OP の答え（ライフサポート内訳の要確認で選んだもの）: 新しい方 */
   Object.entries(remote.opLists||{}).forEach(([k,r])=>{const cur=lg.opLists[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.opLists[k]=r;n++}}});
+  /* 要確認の答え（全商材）: 名前空間ごとに新しい方。'#del' は忘れた記録（その時刻より古い答えは戻さない） */
+  Object.entries(remote.answers||{}).forEach(([ns,m])=>{
+    if(/#del$/.test(ns)){lg.answers[ns]=Object.assign({},m,lg.answers[ns]||{});return}
+    const mine=lg.answers[ns]||(lg.answers[ns]={}),del=Object.assign({},m&&remote.answers[ns+'#del']||{},lg.answers[ns+'#del']||{});
+    Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
+  });
+  Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{}}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{}}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -6678,6 +6751,8 @@ async function syncNow(opts){
       c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
       syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
     }
+    /* 毎月の明細から学習: 同じ単価が3ヶ月以上・8割以上続いている変更点は自動で台帳に採用（食い違い・入れ替わりは人が判断） */
+    try{const na=await ledgerAcceptStable({silent:true});if(na)syncLog(`明細から覚えた単価 ${na}件を台帳に採用しました（3ヶ月以上同じ単価のもの）`)}catch(e){console.warn(e)}
     syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
     SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
@@ -7472,7 +7547,7 @@ function stockBuild(p){
   /* ---- リスト番号 → OP パートナー（2026-10 菊地さん指示: リスト番号で判別して OP 3社に払い、WT は条件表の区分の単価に下げる） ----
      判定の順: 台帳の答え（要確認で選んだもの）→ OPリスト番号一覧（Mac が data/op_lists.json に置く）→ 毎月の支払明細書から覚えたもの */
   const OPL=(S.memory&&S.memory.opLists)||{lists:{},phones:{},table:null,opPrice:{}};
-  const ans=(ledgerOf().opLists)||{};
+  const ans={};Object.entries(ledgerOf().opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)ans[k]=a});
   const autoOp=new Set(Object.keys(OPL.opPrice||{}).filter(pt=>hdrOf[pt]&&!/EN\./.test(pt)));
   const digits=v=>String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,'');
   const phones=Object.assign({},OPL.phones||{});
@@ -7807,6 +7882,7 @@ function recalcWithPrices(){
     applyCaseRates();
     applyLearnedRates();
     const auto=applySavedPatterns();
+    applyRowAnswers();
     renderResults();
     placePricePanel(2);
     toast('現在の単価で再計算しました'+(auto?`（記憶済み単価を${auto}件に適用）`:''));
@@ -8191,6 +8267,8 @@ function runMatch(){
       if(learned)progLine(`過去WT明細から学習した単価を ${learned}件に自動適用`);
       const auto=applySavedPatterns();
       if(auto)progLine(`記憶済みの単価を ${auto}件に自動適用`);
+      const ra=applyRowAnswers();
+      if(ra)progLine(`前回の要確認の答えを ${ra}件に自動適用`);
     }
     progLine('判定完了');
     setTimeout(()=>{renderResults();go(2)},350);
@@ -8388,7 +8466,7 @@ async function applyPattern(key){
     r.why+=` → 単価${v.toLocaleString()}円を適用`;
   });
   S.manualCount=(S.manualCount||0)+g.rows.length;
-  if(mem&&mem.checked)await savePattern(key,v);
+  if(mem&&mem.checked){await savePattern(key,v);await ansPut('pat:'+S.prod,key,{price:v,label:g.label})}
   toast(`${g.label}：${g.rows.length}件に ${yen(v)} を適用しました${mem&&mem.checked?'（記憶しました）':''}`);
   buildApproval();
 }
@@ -8407,6 +8485,7 @@ function markResolved(i,label){
   card.querySelector('.ac-row').innerHTML=`<span class="resolved-tag">✓ 確定：${esc(label)}</span>`;
   S.pending--;S.manualCount=(S.manualCount||0)+1;
   const rr=S.rows.find(x=>x.i===i);if(rr&&rr.tel&&rr.x)rememberDecision(rr);
+  if(rr&&!rr.hold)ansPut('row:'+S.prod,rowIdOf(rr),{payTo:rr.payTo||'',price:rr.price!=null?Math.abs(Number(rr.price)):null,label});
   updateCnt(true);
 }
 function resolveSel(i){
@@ -8422,7 +8501,7 @@ function resolveNew(i){
   const p=Number(document.getElementById('np'+i).value);
   if(!p&&p!==0){toast('単価を入力してください');return}
   r.price=p;r.resolved=true;r.state='ok';r.newPartner=true;
-  r.why+=` → 単価${p.toLocaleString()}円で今回のみ登録`;
+  r.why+=` → 単価${p.toLocaleString()}円で登録（覚えました）`;
   markResolved(i,`${r.payTo||r.acc||''} / ${yen(p)}（新規登録）`);
 }
 function resolveHold(i){
@@ -8824,6 +8903,7 @@ async function runJob(job){
       const cs=applyCaseRates();if(cs)progLine(`前月の支払明細から同一案件の単価を ${cs}件に踏襲`);
       const learned=applyLearnedRates();if(learned)progLine(`台帳・学習単価を ${learned}件に自動適用`);
       const auto=applySavedPatterns();if(auto)progLine(`記憶済みの単価を ${auto}件に自動適用`);
+      const ra=applyRowAnswers();if(ra)progLine(`前回の要確認の答えを ${ra}件に自動適用`);
     }
     if(!S.rows.length){job.status='empty';job.err='対象行がありません（別商材のファイルの可能性）';progLine(`${label}: 対象行なし → スキップ`,'err')}
     else if(m.kind==='audit'&&S.rows.length>=3&&!S.rows.some(r=>r.state==='ok')){
@@ -9007,7 +9087,7 @@ async function todoPattern(idx){
   const mem=document.getElementById('tpm_'+idx);
   withJob(it.job,()=>{it.g.rows.forEach(r=>{r.price=r.modo?-Math.abs(v):v;r.resolved=true;r.state='ok';r.newPartner=true;r.why+=` → 単価${v.toLocaleString()}円を適用`})});
   S.manualCount=(S.manualCount||0)+it.g.rows.length;
-  if(mem&&mem.checked){activateJob(it.job);await savePattern(it.g.key,v)}
+  if(mem&&mem.checked){activateJob(it.job);await savePattern(it.g.key,v);await ansPut('pat:'+it.job.key,it.g.key,{price:v,label:it.g.label})}
   afterAnswer(it.job,`${it.g.label}: ${it.g.rows.length}件に ${yen(v)} を適用${mem&&mem.checked?'（記憶しました）':''}`);
 }
 function todoPatternHold(idx){
@@ -9027,6 +9107,8 @@ function todoRow(idx,oi){
   });
   S.manualCount=(S.manualCount||0)+1;
   if(r.tel&&r.x)rememberDecision(r);
+  /* 保留以外は、同じ案件が次の月に来たら同じ答えを使う */
+  ansPut('row:'+it.job.key,rowIdOf(r),{payTo:r.payTo||'',price:r.price!=null?Math.abs(Number(r.price)):null,label,hold:!!r.hold});
   afterAnswer(it.job,label?'確定: '+label:'');
 }
 function todoNew(idx){
@@ -9034,8 +9116,9 @@ function todoNew(idx){
   const el=document.getElementById('tn_'+idx);const p=Number(el&&el.value);
   if(!el||el.value===''||isNaN(p)){toast('単価を入力してください');return}
   const r=it.r;
-  withJob(it.job,()=>{r.price=p;r.resolved=true;r.state='ok';r.newPartner=true;r.why+=` → 単価${p.toLocaleString()}円で今回のみ登録`});
+  withJob(it.job,()=>{r.price=p;r.resolved=true;r.state='ok';r.newPartner=true;r.why+=` → 単価${p.toLocaleString()}円で登録（覚えました）`});
   S.manualCount=(S.manualCount||0)+1;
+  ansPut('row:'+it.job.key,rowIdOf(r),{payTo:r.payTo||'',price:Math.abs(p),label:'新規登録'});
   afterAnswer(it.job,`${r.payTo||r.acc||''} / ${yen(p)}（新規登録）`);
 }
 function todoHold(idx){
