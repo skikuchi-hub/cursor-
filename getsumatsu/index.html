@@ -1118,9 +1118,11 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
     <input class="rate-new" id="syncToken" type="password" autocomplete="off" placeholder="Mac の sync/.token の中身">
     <div class="sync-acts">
       <button class="btn" id="syncRun" onclick="saveSyncForm(true)">保存して今すぐ同期</button>
+      <button class="btn-ghost btn-sm" id="syncStop" onclick="syncCancel()" style="display:none">中止</button>
       <button class="btn-ghost btn-sm" onclick="testSync()">接続テスト</button>
       <button class="btn-ghost btn-sm" onclick="forgetSync()">この端末の設定を消す</button>
     </div>
+    <div class="pm-note" id="syncState" style="display:none;font-weight:600"></div>
     <div class="diag sync-status" id="syncStatus" style="display:block"></div>
     <div class="sync-acts" id="syncSales"></div>
     <div class="prog on sync-log" id="syncLog"></div>
@@ -6372,7 +6374,8 @@ function importLedger(file){
 ========================================================= */
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
-let SYNC_BUSY=false,_syncPushTimer=null;
+let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
+const APP_BUILD='2026-10-11 夕方版';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6385,7 +6388,18 @@ async function syncGet(params){
   const u=new URL(c.url);
   u.searchParams.set('token',c.token);
   Object.entries(params||{}).forEach(([k,v])=>u.searchParams.set(k,String(v)));
-  const r=await fetch(u.toString(),{redirect:'follow',cache:'no-store'});
+  /* 中止ボタンと時間切れ（1回 4分）で止められるようにする */
+  const ac=new AbortController();let timedOut=false;
+  const tm=setTimeout(()=>{timedOut=true;ac.abort()},240000);
+  const outer=SYNC_CTRL;const onAbort=()=>ac.abort();
+  if(outer){if(outer.signal.aborted)ac.abort();else outer.signal.addEventListener('abort',onAbort)}
+  let r;
+  try{r=await fetch(u.toString(),{redirect:'follow',cache:'no-store',signal:ac.signal})}
+  catch(e){
+    if(outer&&outer.signal.aborted)throw new Error('中止しました');
+    if(timedOut)throw new Error('時間切れです。電波の良いところでもう一度押してください');
+    throw new Error('通信が切れました（電波が弱い・画面がロックされた・アプリを切り替えた、などで止まります）。もう一度押してください');
+  }finally{clearTimeout(tm);if(outer)outer.signal.removeEventListener('abort',onAbort)}
   if(!r.ok)throw new Error('通信エラー（HTTP '+r.status+'）');
   let j;try{j=await r.json()}catch(e){throw new Error('応答を読めませんでした。URL が「ウェブアプリ」のものか確認してください')}
   if(j&&j.error)throw new Error(j.error==='unauthorized'?'合言葉が違います':j.error);
@@ -6429,6 +6443,16 @@ function syncSetBusy(on,label){
   const b=document.getElementById('syncBtn');
   if(b){b.classList.toggle('busy',on);b.textContent=on?(label||'同期中…'):'同期'}
   const run=document.getElementById('syncRun');if(run)run.disabled=on;
+  const st=document.getElementById('syncStop');if(st)st.style.display=on?'':'none';
+  const sv=document.getElementById('syncState');
+  if(sv){sv.style.display=on?'block':'none';sv.textContent=on?`同期しています: ${label||'同期中…'}（止めるときは「中止」）`:''}
+}
+/* 同期を止める。通信中なら打ち切り、固まっていても押せる状態に戻す */
+function syncCancel(){
+  if(SYNC_CTRL)SYNC_CTRL.abort();
+  syncSetBusy(false);
+  syncLog('中止しました','err');
+  toast('同期を中止しました');
 }
 /* 請求書の「リスト」シート（リスト取引日・アライアンス先・件数・単価・金額）を読む */
 function invoicePartner(name){const m=String(name||'').match(/【\s*(.+?)\s*御中\s*】/);return m?m[1].trim():''}
@@ -6483,10 +6507,11 @@ async function syncNow(opts){
   opts=opts||{};
   if(SYNC_BUSY)return;
   if(!syncReady()){if(!opts.silent)openSync();return}
+  const ctrl=SYNC_CTRL=new AbortController();
   syncSetBusy(true,'準備中…');
   const ready=await Promise.race([MEM_READY.then(()=>true),new Promise(r=>setTimeout(()=>r(false),20000))]);
   if(!ready){
-    syncSetBusy(false);
+    SYNC_CTRL=null;syncSetBusy(false);
     if(!opts.silent)toast('保存データの読み込みが終わらないため同期を中止しました。ページを開き直してください');
     return;
   }
@@ -6604,7 +6629,8 @@ async function syncNow(opts){
     syncLog(e.message,'err');
     if(!opts.silent)toast('同期できませんでした: '+e.message);
   }finally{
-    syncSetBusy(false);renderSyncPanel();
+    if(SYNC_CTRL===ctrl){SYNC_CTRL=null;syncSetBusy(false)}
+    renderSyncPanel();
   }
 }
 /* ---- 設定パネル ---- */
@@ -6648,6 +6674,7 @@ function renderSyncPanel(){
     ['条件表', mem.conditions?`${(mem.conditions.items||[]).length}件`:'—'],
     ['台帳の共有', esc(fmtWhen(c.ledgerPushedAt))],
   ];
+  rows.push(['アプリの版',esc(APP_BUILD)]);
   if(c.lastError)rows.push(['前回のエラー',`<span style="color:var(--alert)">${esc(c.lastError)}</span>`]);
   el.innerHTML=rows.map(([k,v])=>`<div class="diag-r"><span>${k}</span><b>${v}</b></div>`).join('');
   const b=document.getElementById('syncBtn');
