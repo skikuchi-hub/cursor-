@@ -5541,9 +5541,17 @@ async function reconLists(){
   for(const b of RECON_BOOKS){try{const d=await syncGet({action:'book',id:b.id,list:1});if(d&&d.sheets)list.push({...b,sheets:d.sheets})}catch(e){console.warn('book list',b.name,e)}}
   S._bookLists={at:Date.now(),list};return list;
 }
+const reconTail=n=>String(n||'').replace(/^\d{6}/,'').trim();
 function reconFindTabs(job,lists){
   const m=MODULES[job.key];const p=reconNorm(productOf(m)),v=reconNorm(vendorOf(m));const ym=B.month||'';
   const out=[];
+  /* 一度選んだ対応（商材 → 明細一覧のタブ名）があればそれを使う。その月のタブが無ければ、それより前の一番新しい月 */
+  const a=ansGet('recon','tab:'+job.key);
+  if(a&&a.tail){
+    lists.forEach(b=>{const cand=b.sheets.filter(s=>reconTail(s.name)===a.tail&&s.rows>1).map(s=>({s,ym:(String(s.name).match(/^(\d{6})/)||[])[1]||''})).filter(x=>x.ym&&x.ym<=ym).sort((x,y)=>y.ym.localeCompare(x.ym));
+      if(cand.length)out.push({book:b,name:cand[0].s.name,rows:cand[0].s.rows,other:cand[0].ym!==ym?cand[0].ym:''})});
+    if(out.length)return out;
+  }
   lists.forEach(b=>b.sheets.forEach(s=>{
     const mm=String(s.name).match(/^(\d{6})(.+?)【(.+?)】/);if(!mm||mm[1]!==ym||s.rows<2)return;
     const tp=reconNorm(mm[2]),tv=reconNorm(mm[3]);
@@ -5592,9 +5600,12 @@ async function runRecon(){
   el.innerHTML='<p class="note">明細一覧を読んでいます…</p>';
   let lists;try{lists=await reconLists()}catch(e){el.innerHTML=`<p class="note" style="color:var(--alert)">明細一覧を読めませんでした: ${esc(e.message)}</p>`;return}
   const results=[];
-  for(const job of jobs){
+  const byKey={};jobs.forEach(j=>{(byKey[j.key]=byKey[j.key]||[]).push(j)});
+  for(const group of Object.values(byKey)){
+    const job=group.length===1?group[0]:{...group[0],rows:group.flatMap(j=>j.rows||[]),name:group.map(j=>j.name).join(' ＋ ')};
+    const na=ansGet('recon','tab:'+job.key);if(na&&na.none)continue;
     const tabs=reconFindTabs(job,lists);
-    if(!tabs.length){results.push({job,err:`${fmtYmJa(B.month)}の「${productOf(MODULES[job.key])}【${vendorOf(MODULES[job.key])}】」タブが明細一覧に見つかりません`});continue}
+    if(!tabs.length){results.push({job,pick:true,err:`${fmtYmJa(B.month)}の「${productOf(MODULES[job.key])}【${vendorOf(MODULES[job.key])}】」にあたるタブが見つかりません。下で選ぶと次の月から自動で使います`});continue}
     for(const t of tabs){
       try{const d=await syncGet({action:'book',id:t.book.id,sheet:t.name,all:1});
         if(d.error)throw new Error(d.error);
@@ -5612,7 +5623,13 @@ async function runRecon(){
 function renderRecon(){
   const el=document.getElementById('reconOut');const results=S._recon||[];if(!el)return;
   el.innerHTML=results.map((x,i)=>{
-    const m=MODULES[x.job.key];const head=`<b>${esc(productOf(m))}</b>（${esc(vendorOf(m))}）${x.tab?` ↔ ${esc(x.tab.book.name)}「${esc(x.tab.name)}」`:''}`;
+    const m=MODULES[x.job.key];const head=`<b>${esc(productOf(m))}</b>（${esc(vendorOf(m))}）${x.tab?` ↔ ${esc(x.tab.book.name)}「${esc(x.tab.name)}」${x.tab.other?`<span class="note">（${esc(fmtYmJa(x.tab.other))}のタブ）</span>`:''}`:''}`;
+    if(x.err&&x.pick){
+      const tails=[];const seen=new Set();(S._bookLists?S._bookLists.list:[]).forEach(b=>b.sheets.slice().sort((p,q)=>String(q.name).localeCompare(String(p.name))).forEach(s=>{if(!/^\d{6}.+【.+】/.test(s.name))return;const t=reconTail(s.name);if(seen.has(t))return;seen.add(t);tails.push(t)}));
+      return `<div class="rc"><div>${head}</div><div class="note" style="color:var(--warn)">${esc(x.err)}</div>
+        <div class="pm-bar" style="gap:8px;flex-wrap:wrap"><select id="rcPick${i}"><option value="">明細一覧のタブを選ぶ</option>${tails.map(t=>`<option>${esc(t)}</option>`).join('')}</select>
+        <button class="btn btn-sm" onclick="reconPick(${i})">このタブと付け合わせる</button><button class="btn-ghost btn-sm" onclick="reconPick(${i},true)">明細一覧には無い商材</button></div></div>`;
+    }
     if(x.err)return `<div class="rc"><div>${head}</div><div class="note" style="color:var(--warn)">${esc(x.err)}</div></div>`;
     const r=x.r;if(r.err)return `<div class="rc"><div>${head}</div><div class="note" style="color:var(--warn)">${esc(r.err)}</div></div>`;
     const bad=r.partnerDiff.length+r.feeDiff.length+r.appOnly.length+r.sheetOnly.length;
@@ -5626,6 +5643,13 @@ function renderRecon(){
       ${list('明細一覧にだけある',r.sheetOnly,d=>`${esc(d.k)} ${esc(d.partner||'')} ${d.fee!=null?yen(d.fee):''}`)}
     </div>`;
   }).join('')+(results.some(x=>x.r)?`<div class="pm-bar"><button class="btn-ghost btn-sm" onclick="reconXlsx()">付け合わせ結果をエクセルで</button></div>`:'');
+}
+async function reconPick(i,none){
+  const x=(S._recon||[])[i];if(!x)return;
+  if(none){await ansPut('recon','tab:'+x.job.key,{none:true,label:productOf(MODULES[x.job.key])});x.err='明細一覧には無い商材として覚えました（付け合わせの対象外）';x.pick=false;renderRecon();return}
+  const v=(document.getElementById('rcPick'+i)||{}).value;if(!v){toast('タブを選んでください');return}
+  await ansPut('recon','tab:'+x.job.key,{tail:v,label:productOf(MODULES[x.job.key])+' → '+v});
+  toast('覚えました。付け合わせ直します');runRecon();
 }
 function reconWb(){
   const results=(S._recon||[]).filter(x=>x.r&&!x.r.err);if(!results.length)return null;
@@ -6962,7 +6986,7 @@ function renderLedgerChanges(){
 function ledgerAnswersHtml(){
   const lg=ledgerOf();const items=[];
   Object.entries(lg.answers||{}).forEach(([ns,m])=>{if(/#del$/.test(ns))return;const [kind,mod]=ns.split(':');const md=MODULES[mod];
-    Object.entries(m||{}).forEach(([k,a])=>items.push({ns,k,a,what:(md?productOf(md):mod)+(kind==='pat'?'・単価パターン':'・案件')}))});
+    Object.entries(m||{}).forEach(([k,a])=>items.push({ns,k,a,what:ns==='recon'?'明細一覧との付け合わせ・タブの対応':(md?productOf(md):mod)+(kind==='pat'?'・単価パターン':'・案件')}))});
   Object.entries(lg.opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)items.push({ns:'opLists',k,a,what:'ライフサポート・リスト番号'})});
   if(!items.length)return '';
   items.sort((x,y)=>String(y.a.at||'').localeCompare(String(x.a.at||'')));
@@ -7049,7 +7073,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面5';
+const APP_BUILD='2026-10-12 新画面6';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9332,7 +9356,13 @@ function rebuildJobs(){
   B.files.filter(f=>f.kind==='meisai').forEach(f=>f.jobs.forEach(j=>{(byKey[j.key]=byKey[j.key]||[]).push({...j,file:f})}));
   const jobs=[];
   const fixRe=/修正|訂正|再送|差替|差し替え|rev/i;
-  Object.entries(byKey).forEach(([key,list])=>{
+  /* 「追加分」は差し替えではなく足し込み: 本明細とは別のジョブとして両方処理する（2026-10 ユーネット auでんきの本明細を捨てていた不具合） */
+  const addRe=/追加/;
+  Object.entries(byKey).forEach(([key0,list0])=>{
+    const m0=MODULES[key0];
+    const adds=m0.kind==='audit'?[]:list0.filter(x=>addRe.test(x.file.name)&&!fixRe.test(x.file.name));
+    const groups=[list0.filter(x=>!adds.includes(x))].concat(adds.map(x=>[x])).filter(g=>g.length);
+    groups.forEach(list=>{const key=key0;
     const m=MODULES[key];
     const sorted=list.slice().sort((a,b)=>((fixRe.test(b.file.name)?1:0)-(fixRe.test(a.file.name)?1:0))||(b.file.order-a.file.order));
     const main=sorted[0];
@@ -9349,6 +9379,7 @@ function rebuildJobs(){
         rangeLabel:prev.rangeLabel,rangeYm:prev.rangeYm,stats:prev.stats,status:prev.status,err:prev.err,done:prev.done,claim:prev.claim});
     }
     jobs.push(job);
+    });
   });
   jobs.sort((a,b)=>vendorRank(vendorOf(MODULES[a.key]))-vendorRank(vendorOf(MODULES[b.key]))
     ||((MODULES[a.key].kind==='audit')-(MODULES[b.key].kind==='audit'))
