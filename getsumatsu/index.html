@@ -115,6 +115,9 @@ table.mini th,table.mini td{padding:6px 8px;text-align:left;border-bottom:1px so
 .pitem-s{font-size:12px;color:var(--txt-2);margin-top:4px;line-height:1.6}
 .pitem-r{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 .pitem-r .price-in{width:120px}
+.rc{padding:12px 14px;border:1px solid var(--line);border-left:4px solid var(--alert);border-radius:8px;background:var(--surface);margin:8px 0;font-size:13px;line-height:1.7}
+.rc.ok{border-left-color:var(--ok)}
+.rc-n{font-size:12.5px;color:var(--txt-2)}
 .inq{background:var(--surface);border:1px solid var(--line-2);border-radius:12px;padding:16px 18px;margin-bottom:22px;box-shadow:var(--sh)}
 .inq-h{font-weight:600;font-size:15px;margin-bottom:10px}
 .inq-row{display:flex;gap:8px}
@@ -1212,6 +1215,10 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <div id="seeVendors"></div>
   <h2 class="sec-h">要確認</h2>
   <div class="todo" id="todoList"></div>
+  <h2 class="sec-h">明細一覧と付け合わせ</h2>
+  <p class="sub">移行するまでは、社員が作る「明細一覧」とアプリの2本立てです。当月タブと1件ずつ突き合わせて、パートナー名と支払手数料の違いを出します。</p>
+  <div class="pm-bar"><button class="btn btn-sm" onclick="runRecon()">明細一覧と付け合わせる</button></div>
+  <div id="reconOut"></div>
   <div class="footer-nav">
     <button class="btn-ghost" onclick="go(1)">← 入れる</button>
     <button class="btn" id="seeOut" disabled onclick="go(4)">内訳を受け取る →</button>
@@ -1787,9 +1794,10 @@ const MODULES = {
         if(S.diag.samples.length<3)S.diag.samples.push(String(r[MC.tel]));
         meisai.push({i:meisai.length+1,date:parseDate(r[MC.date]),name:clean(r[MC.name]),tel,
           item:clean(r[MC.item]),plan:clean(r[MC.plan]),fee:Number(r[MC.fee])||null,
-          modo:/戻入/.test(String(r[MC.item]??''))});
+          /* 戻入・代理店請求（上位店からの差し引き。金額がマイナス）は同額マイナス。2026-10 明細一覧との付け合わせで「代理店請求」の取りこぼしが判明 */
+          modo:/戻入|請求/.test(String(r[MC.item]??''))||Number(r[MC.fee])<0});
       }
-      progLine(`「${S.meisaiSheet}」を読み込み（${meisai.length}件、うち戻入 ${meisai.filter(m=>m.modo).length}件）`);
+      progLine(`「${S.meisaiSheet}」を読み込み（${meisai.length}件、うち戻入・代理店請求 ${meisai.filter(m=>m.modo).length}件）`);
       const xmap=xrmPhoneMap(S.xrmWb,['NP WiMAX']);
       S.diag.xrm=xmap.info;
       progLine(`XRM「NP WiMAX」を突合準備（電話番号 ${xmap.size}件 / ${colName(xmap.info.sheets[0]?.telCol)}列を使用）※NP MobileシートはXRMでは空のため使いません`);
@@ -5480,6 +5488,122 @@ async function inqToMiss(){
   await saveMemory();syncLedgerSoon();updateTabCounts();toast('入金漏れに登録しました（パートナー申告あり）。「入金漏れ」タブから上位店への確認エクセルを作れます');renderInquiry();
 }
 
+/* ---------------- 明細一覧（スプレッドシート）との付け合わせ ----------------
+   移行期間は「明細一覧」（社員が手で作る）とアプリの2本立て。毎月、商材ごとに当月タブとアプリの内訳を
+   電話番号・申込番号で1件ずつ突き合わせ、パートナー名と支払手数料の違いを出す。結果は月ごとに残す（mem.recon） */
+const RECON_BOOKS=[{id:'1lBsskR3KUt5IDlxN3q7DEJds0RnBJ3FXC-yZkd66vTw',name:'明細一覧2'},{id:'1mL38YcGJZHn4f8PWN6-DgAdbXj0S9v0ZhbNBJDWIReg',name:'明細一覧'}];
+function reconNorm(s){return String(s||'').normalize('NFKC').replace(/株式会社|合同会社|有限会社|\(株\)|㈱|\s|[【】()（）\/・\-_.,、。]/g,'').toLowerCase()}
+function reconYen(v){const s=String(v==null?'':v).replace(/[¥,円\s]/g,'');if(s===''||isNaN(Number(s)))return null;return Number(s)}
+function reconPartner(p){return String(p||'').split('×')[0].replace(/（.*?）|\(.*?\)/g,'').trim()}
+async function reconLists(){
+  if(S._bookLists&&Date.now()-S._bookLists.at<10*60000)return S._bookLists.list;
+  const list=[];
+  for(const b of RECON_BOOKS){try{const d=await syncGet({action:'book',id:b.id,list:1});if(d&&d.sheets)list.push({...b,sheets:d.sheets})}catch(e){console.warn('book list',b.name,e)}}
+  S._bookLists={at:Date.now(),list};return list;
+}
+function reconFindTabs(job,lists){
+  const m=MODULES[job.key];const p=reconNorm(productOf(m)),v=reconNorm(vendorOf(m));const ym=B.month||'';
+  const out=[];
+  lists.forEach(b=>b.sheets.forEach(s=>{
+    const mm=String(s.name).match(/^(\d{6})(.+?)【(.+?)】/);if(!mm||mm[1]!==ym||s.rows<2)return;
+    const tp=reconNorm(mm[2]),tv=reconNorm(mm[3]);
+    const pOk=tp&&p&&(tp.includes(p)||p.includes(tp)),vOk=tv&&v&&(tv.includes(v)||v.includes(tv));
+    if(pOk&&vOk)out.push({book:b,name:s.name,rows:s.rows});
+  }));
+  return out;
+}
+function reconCompare(job,disp){
+  const h=(disp[0]||[]).map(x=>String(x||'').trim());
+  const ci=(names)=>{for(const n of names){const i=h.indexOf(n);if(i>=0)return i}return -1};
+  const iT=ci(['電話番号','顧客電話番号','お客様電話番号']),iA=ci(['申込番号','受付番号','お客様番号','会員ID']),iP=ci(['パートナー名','パートナー']),iF=ci(['支払手数料']);
+  if(iP<0||iF<0)return {err:'明細一覧のタブに「パートナー名」「支払手数料」の列が見つかりません'};
+  const sheet=new Map();let sheetN=0;
+  disp.slice(1).forEach(r=>{const tel=iT>=0?inqNorm(r[iT]):'',app=iA>=0?String(r[iA]||'').trim():'';const k=tel||app;if(!k)return;
+    sheetN++;const e={k,tel,app,partner:String(r[iP]||'').trim(),fee:reconYen(r[iF])};
+    (sheet.get(k)||sheet.set(k,[]).get(k)).push(e)});
+  const app=new Map();let appN=0;
+  (job.rows||[]).filter(r=>!r.hold&&!r.skip).forEach(r=>{const k=inqNorm(r.tel)||String(r.key||'').trim();if(!k)return;appN++;
+    (app.get(k)||app.set(k,[]).get(k)).push({k,partner:reconPartner(r.payTo||(r.x&&r.x.partner)),fee:r.price!=null?Number(r.price):null,name:r.name||r.user||''})});
+  const res={same:0,partnerDiff:[],feeDiff:[],appOnly:[],sheetOnly:[],sheetN,appN,byPartner:{}};
+  const bp=(p,side,fee)=>{const k=p||'（なし）';const x=res.byPartner[k]||(res.byPartner[k]={app:0,sheet:0,appN:0,sheetN:0});x[side]+=fee||0;x[side+'N']++};
+  const keys=new Set([...sheet.keys(),...app.keys()]);
+  keys.forEach(k=>{
+    const ss=(sheet.get(k)||[]).slice(),aa=(app.get(k)||[]).slice();
+    ss.forEach(e=>bp(e.partner==='該当なし'?'':e.partner,'sheet',e.fee));aa.forEach(e=>bp(e.partner,'app',e.fee));
+    /* 同じ案件に複数行（戻入など）があれば、金額の近いもの同士で組む */
+    while(aa.length&&ss.length){
+      const a=aa.shift();let bi=ss.findIndex(e=>e.fee===a.fee);if(bi<0)bi=0;const s=ss.splice(bi,1)[0];
+      const pn=x=>{const n=reconNorm(x);return /^(該当なし|explorationholdings)$/.test(n)?'':n};
+      const pSame=pn(a.partner)===pn(s.partner),fSame=(a.fee||0)===(s.fee||0);
+      if(pSame&&fSame)res.same++;
+      else if(!pSame)res.partnerDiff.push({k,appP:a.partner,sheetP:s.partner,appF:a.fee,sheetF:s.fee,name:a.name});
+      else res.feeDiff.push({k,partner:a.partner,appF:a.fee,sheetF:s.fee,name:a.name});
+    }
+    aa.forEach(a=>res.appOnly.push({k,partner:a.partner,fee:a.fee,name:a.name}));
+    ss.forEach(s=>res.sheetOnly.push({k,partner:s.partner,fee:s.fee}));
+  });
+  return res;
+}
+async function runRecon(){
+  const el=document.getElementById('reconOut');if(!el)return;
+  if(!syncReady()){el.innerHTML='<p class="note">先に「同期」の設定をしてください。</p>';return}
+  const jobs=B.jobs.filter(j=>j.status==='ok'&&MODULES[j.key].kind!=='audit');
+  if(!jobs.length){el.innerHTML='<p class="note">付け合わせる内訳がありません。先に明細を入れて実行してください。</p>';return}
+  el.innerHTML='<p class="note">明細一覧を読んでいます…</p>';
+  let lists;try{lists=await reconLists()}catch(e){el.innerHTML=`<p class="note" style="color:var(--alert)">明細一覧を読めませんでした: ${esc(e.message)}</p>`;return}
+  const results=[];
+  for(const job of jobs){
+    const tabs=reconFindTabs(job,lists);
+    if(!tabs.length){results.push({job,err:`${fmtYmJa(B.month)}の「${productOf(MODULES[job.key])}【${vendorOf(MODULES[job.key])}】」タブが明細一覧に見つかりません`});continue}
+    for(const t of tabs){
+      try{const d=await syncGet({action:'book',id:t.book.id,sheet:t.name,all:1});
+        if(d.error)throw new Error(d.error);
+        results.push({job,tab:t,r:reconCompare(job,d.display||[])})}
+      catch(e){results.push({job,tab:t,err:e.message})}
+    }
+  }
+  S._recon=results;
+  /* 月ごとの付け合わせの記録（件数だけ） */
+  const mem=S.memory||(S.memory=emptyMem());mem.recon=mem.recon||{};const ym=B.month||thisYm();mem.recon[ym]=mem.recon[ym]||{};
+  results.forEach(x=>{if(x.r)mem.recon[ym][x.job.key+'|'+x.tab.book.name]={same:x.r.same,pd:x.r.partnerDiff.length,fd:x.r.feeDiff.length,ao:x.r.appOnly.length,so:x.r.sheetOnly.length,at:new Date().toISOString()}});
+  await saveMemory();
+  renderRecon();
+}
+function renderRecon(){
+  const el=document.getElementById('reconOut');const results=S._recon||[];if(!el)return;
+  el.innerHTML=results.map((x,i)=>{
+    const m=MODULES[x.job.key];const head=`<b>${esc(productOf(m))}</b>（${esc(vendorOf(m))}）${x.tab?` ↔ ${esc(x.tab.book.name)}「${esc(x.tab.name)}」`:''}`;
+    if(x.err)return `<div class="rc"><div>${head}</div><div class="note" style="color:var(--warn)">${esc(x.err)}</div></div>`;
+    const r=x.r;if(r.err)return `<div class="rc"><div>${head}</div><div class="note" style="color:var(--warn)">${esc(r.err)}</div></div>`;
+    const bad=r.partnerDiff.length+r.feeDiff.length+r.appOnly.length+r.sheetOnly.length;
+    const tot=Object.values(r.byPartner).reduce((a,v)=>({app:a.app+v.app,sheet:a.sheet+v.sheet}),{app:0,sheet:0});
+    const list=(t,arr,fmt)=>arr.length?`<details><summary class="note">${t} ${arr.length}件</summary><div class="pat-sub">${arr.slice(0,60).map(fmt).join('<br>')}${arr.length>60?`<br>ほか ${arr.length-60}件`:''}</div></details>`:'';
+    return `<div class="rc ${bad?'':'ok'}"><div>${head}</div>
+      <div class="rc-n">${bad?`<span style="color:var(--alert)">違い ${bad}件</span>`:'<span style="color:var(--ok)">すべて一致</span>'}　一致 ${r.same}件 ／ アプリ ${r.appN}件・${yen(tot.app)} ／ 明細一覧 ${r.sheetN}件・${yen(tot.sheet)}</div>
+      ${list('パートナーが違う',r.partnerDiff,d=>`${esc(d.k)} ${esc(d.name||'')}: アプリ ${esc(d.appP||'—')} ${d.appF!=null?yen(d.appF):''} ／ 明細一覧 ${esc(d.sheetP||'—')} ${d.sheetF!=null?yen(d.sheetF):''}`)}
+      ${list('金額が違う',r.feeDiff,d=>`${esc(d.k)} ${esc(d.partner||'')}: アプリ ${d.appF!=null?yen(d.appF):'—'} ／ 明細一覧 ${d.sheetF!=null?yen(d.sheetF):'—'}`)}
+      ${list('アプリにだけある',r.appOnly,d=>`${esc(d.k)} ${esc(d.partner||'')} ${d.fee!=null?yen(d.fee):''}`)}
+      ${list('明細一覧にだけある',r.sheetOnly,d=>`${esc(d.k)} ${esc(d.partner||'')} ${d.fee!=null?yen(d.fee):''}`)}
+    </div>`;
+  }).join('')+(results.some(x=>x.r)?`<div class="pm-bar"><button class="btn-ghost btn-sm" onclick="reconXlsx()">付け合わせ結果をエクセルで</button></div>`:'');
+}
+function reconWb(){
+  const results=(S._recon||[]).filter(x=>x.r&&!x.r.err);if(!results.length)return null;
+  const wb=XLSX.utils.book_new();
+  const sm=[['明細一覧との付け合わせ（月末明細処理クラウド）'],['対象月',fmtYmJa(B.month||'')],[],['商材','上位店','明細一覧','タブ','一致','パートナー違い','金額違い','アプリだけ','明細一覧だけ']];
+  results.forEach(x=>{const m=MODULES[x.job.key];sm.push([productOf(m),vendorOf(m),x.tab.book.name,x.tab.name,x.r.same,x.r.partnerDiff.length,x.r.feeDiff.length,x.r.appOnly.length,x.r.sheetOnly.length])});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sm),'まとめ');
+  const d=[['商材','明細一覧','種類','電話番号・申込番号','顧客','アプリのパートナー','アプリの金額','明細一覧のパートナー','明細一覧の金額']];
+  results.forEach(x=>{const p=productOf(MODULES[x.job.key]),b=x.tab.book.name;
+    x.r.partnerDiff.forEach(e=>d.push([p,b,'パートナー違い',e.k,e.name||'',e.appP,e.appF,e.sheetP,e.sheetF]));
+    x.r.feeDiff.forEach(e=>d.push([p,b,'金額違い',e.k,e.name||'',e.partner,e.appF,e.partner,e.sheetF]));
+    x.r.appOnly.forEach(e=>d.push([p,b,'アプリだけ',e.k,e.name||'',e.partner,e.fee,'','']));
+    x.r.sheetOnly.forEach(e=>d.push([p,b,'明細一覧だけ',e.k,'','','',e.partner,e.fee]))});
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(d),'違い');
+  return wb;
+}
+function reconXlsx(){const wb=reconWb();if(wb)deliverXlsx(wb,`AI作成中_明細一覧との付け合わせ_${B.month||thisYm()}.xlsx`)}
+
 /* ---- 画面描画 ---- */
 S.boardFilter='all';
 function openBoard(){
@@ -6883,7 +7007,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面2';
+const APP_BUILD='2026-10-12 新画面3';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
