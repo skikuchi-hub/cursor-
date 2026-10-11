@@ -820,7 +820,6 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
         <button onclick="menuGo(openRecov)">回収シミュレーション</button>
         <button onclick="menuGo(openBoard)">未払いボード（旧）</button>
         <button onclick="closeMenu();setSingle(true)">商材を1つだけ処理する（旧画面）</button>
-        <button onclick="closeMenu();lockApp()">ロック</button>
       </div></div>
     <span hidden><button id="boardBtn"></button><button id="ratesBtn"></button><button id="finBtn"></button><button id="trendBtn"></button><button id="recovBtn"></button></span>
   </div>
@@ -1134,7 +1133,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 <!-- ============ 収支推移 ============ -->
 <section class="screen" id="scFin">
   <h1>収支データ</h1>
-  <p class="sub">スプレッドシート「明細作成用管理元帳」の売上高推移・ストック利益推移・支払高推移です。スプレッドシートが更新されると、次の同期で自動で入れ替わります。</p>
+  <p class="sub">スプレッドシート「明細作成用管理元帳」の売上高推移・ストック利益推移・支払高推移と、ショット先出OPの計画と実績です。</p>
   <div class="fin-bar"><span class="note" id="finMeta"></span>
     <button class="btn-ghost btn-sm" id="finRefresh" onclick="refreshFin()">最新にする</button>
     <a class="btn-ghost btn-sm" id="finLink" target="_blank" rel="noopener" style="display:none">スプレッドシートを開く</a></div>
@@ -7029,7 +7028,7 @@ function renderLedgerChanges(){
 function ledgerAnswersHtml(){
   const lg=ledgerOf();const items=[];
   Object.entries(lg.answers||{}).forEach(([ns,m])=>{if(/#del$/.test(ns))return;const [kind,mod]=ns.split(':');const md=MODULES[mod];
-    Object.entries(m||{}).forEach(([k,a])=>items.push({ns,k,a,what:ns==='recon'?'明細一覧との付け合わせ・タブの対応':(md?productOf(md):mod)+(kind==='pat'?'・単価パターン':'・案件')}))});
+    Object.entries(m||{}).forEach(([k,a])=>items.push({ns,k,a,what:ns==='recon'?'明細一覧との付け合わせ・タブの対応':ns==='shot'?'ショット先出OP・MatoPass の店舗':(md?productOf(md):mod)+(kind==='pat'?'・単価パターン':'・案件')}))});
   Object.entries(lg.opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)items.push({ns:'opLists',k,a,what:'ライフサポート・リスト番号'})});
   if(!items.length)return '';
   items.sort((x,y)=>String(y.a.at||'').localeCompare(String(x.a.at||'')));
@@ -7116,7 +7115,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面8';
+const APP_BUILD='2026-10-12 新画面10';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7295,13 +7294,17 @@ function mergeLedger(remote){
     Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
   });
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
+  /* ショット先出OP: 計画は会社ごと、実績は月×会社ごとに新しい方 */
+  if(remote.shot){const m=shotMem();
+    Object.entries(remote.shot.plan||{}).forEach(([c,p])=>{const cur=m.plan[c];if(!cur||(p.at||'')>(cur.at||'')){m.plan[c]=p;n++}});
+    Object.entries(remote.shot.actual||{}).forEach(([y,byCo])=>{const t=m.actual[y]||(m.actual[y]={});Object.entries(byCo||{}).forEach(([c,a])=>{const cur=t[c];if(!cur||(a.at||'')>(cur.at||'')){t[c]=a;n++}})})}
   /* 入金漏れ・支払漏れの案件: 案件ごとに新しい方 */
   if(remote.board){const mem=S.memory||(S.memory=emptyMem());
     ['unpaid','payMiss'].forEach(f=>{mem[f]=mem[f]||{};Object.entries(remote.board[f]||{}).forEach(([k,r])=>{const cur=mem[f][k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mem[f][k]=r;n++}}})})}
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}}}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -7854,7 +7857,189 @@ function trendTotals(mo){
   return {rev,pay,gross:rev-pay,rate:rev?(rev-pay)/rev:0};
 }
 /* ===== 収支データ（スプレッドシート「明細作成用管理元帳」の3シートを表示） ===== */
-const FIN_TABS=['売上高推移','ストック利益推移','支払高推移'];
+const FIN_TABS=['売上高推移','ストック利益推移','支払高推移','ショット先出OP'];
+/* =========================================================
+   ショット先出OP（パートナーへ初回課金時にショット手数料を先に払い、毎月のサブスク取り分で回収するモデル）
+   計画 = 会社別の「36ヶ月シミュレーション」ファイル（入れる画面に入れると覚える）
+   実績 = 毎月の実績リスト（店舗コード・ユーザーID・契約月・課金月・入金済み…）を入れると月×会社で集計
+   定義（シミュレーションと同じ）:
+     新規獲得 = 契約月がその月の件数 ／ 支払対象 = その月に初回課金が成功した件数（入金済み かつ 1回目）
+     ショット支払 = 支払対象 × ショット単価 ／ 課金会員 = その月に入金済みの件数
+     売上 = 課金会員ごとの取り分（クレカ・キャリア別。シミュレーションの前提の単価）／ 当月ネット = 売上 − ショット支払
+========================================================= */
+const SHOT_COS=['Liberte','ブランニュー','ラストワンマイル','GeNNeo'];
+/* 支払い方の決定（2026-10 菊地さん）: ラストワンマイルは 2,700円・獲得ベース（獲得した月に全件へ支払い）・戻入なし。他の支払案は入れない */
+const SHOT_RULES={'ラストワンマイル':{basis:'acq',shot:2700,note:'2,700円・獲得ベース・戻入なし'}};
+function shotCoOf(t){t=String(t||'');return SHOT_COS.find(c=>t.includes(c))||''}
+function shotMem(){const mem=S.memory||(S.memory=emptyMem());return mem.shot||(mem.shot={plan:{},actual:{}})}
+const shotYm=v=>{const m=String(v||'').match(/(20\d{2})[\/\-年.]\s*(\d{1,2})/);return m?m[1]+m[2].padStart(2,'0'):''};
+/* 36ヶ月シミュレーションのファイル → 計画 */
+function shotIsPlan(wb){return wb.SheetNames.includes('36ヶ月シミュレーション')&&wb.SheetNames.includes('前提・パラメータ')}
+function shotReadPlan(wb){
+  const sim=XLSX.utils.sheet_to_json(wb.Sheets['36ヶ月シミュレーション'],{header:1,defval:''});
+  const pre=XLSX.utils.sheet_to_json(wb.Sheets['前提・パラメータ'],{header:1,defval:''});
+  const title=String((sim[0]||[])[0]||'')+' '+String((pre[0]||[])[0]||'');
+  if(/比較用|推奨案|3案/.test(title))return {err:'比較・提案用のシミュレーションなので計画には使いません'};
+  const co=shotCoOf(title);if(!co)return {err:'会社名が読めません'};
+  const num=v=>{const n=Number(String(v).replace(/[¥,円\s]/g,''));return isNaN(n)?null:n};
+  const p={};pre.forEach(r=>{const k=String(r[0]||'');const v=num(r[1]);if(v==null)return;
+    /* 「損益分岐ショット単価」「生涯〜」の行は単価ではないので読まない。各項目は最初に出てきた行だけ使う */
+    if(/損益分岐|生涯|平均|感応度/.test(k))return;
+    if(/ショット単価/.test(k)){if(p.shot==null)p.shot=v}
+    else if(/月次売上|取り分|手数料/.test(k)&&/ブレンド/.test(k)){if(p.blend==null)p.blend=v}
+    else if(/クレカ/.test(k)&&/売上|取り分|手数料/.test(k)&&!/比率/.test(k)){if(p.card==null)p.card=v}
+    else if(/キャリア/.test(k)&&/売上|取り分|手数料/.test(k)){if(p.carrier==null)p.carrier=v}
+    else if(/ブレンド/.test(k)&&p.blend==null)p.blend=v;else if(/原資/.test(k)&&p.budget==null)p.budget=v});
+  if(p.card==null)p.card=p.blend;if(p.carrier==null)p.carrier=p.blend;
+  const hi=sim.findIndex(r=>r.some(x=>String(x).trim()==='年月'));if(hi<0)return {err:'36ヶ月シミュレーションの見出しが読めません'};
+  const h=sim[hi].map(x=>String(x).replace(/\s/g,''));const ci=re=>h.findIndex(x=>re.test(x));
+  const c={ym:ci(/^年月$/),nw:ci(/新規獲得/),pt:ci(/課金開始/),shot:ci(/ショット支払$/),act:ci(/アクティブ/),gross:ci(/粗利/),net:ci(/当月ネット/),cum:ci(/^累計ネット/)};
+  const rows={};sim.slice(hi+1).forEach(r=>{const ym=shotYm(r[c.ym]);if(!ym)return;
+    const g=k=>c[k]>=0?num(r[c[k]]):null;rows[ym]={nw:g('nw'),pt:g('pt'),shot:g('shot'),act:g('act'),rev:g('gross'),net:g('net'),cum:g('cum')}});
+  const rule=SHOT_RULES[co];
+  if(rule&&rule.basis==='acq'){
+    /* 獲得ベース: 毎月 原資÷単価 件を獲得し、獲得した月に全件へ支払う。課金は翌月から、残存率は前提シートの累計生存率（獲得比） */
+    const surv={};pre.forEach(r=>{const k=num(r[4]),v=num(r[6]);if(k!=null&&k>=1&&k<=36&&Number.isInteger(k)&&v!=null)surv[k]=v});
+    const blend=p.blend!=null?p.blend:((p.card||0)+(p.carrier||0))/2;
+    p.shot=rule.shot;p.basis='acq';if(p.card==null)p.card=blend;if(p.carrier==null)p.carrier=blend;
+    const acq=(p.budget||5000000)/rule.shot;const yms=Object.keys(rows).sort();let cum=0;
+    yms.forEach((ym,i)=>{let sig=0;for(let j=1;j<=i;j++)sig+=surv[j]||0;
+      const act=acq*sig,rev=act*blend,shot=acq*rule.shot,net=rev-shot;cum+=net;
+      rows[ym]={nw:acq,pt:acq,shot,act,rev,net,cum}});
+    return {co,params:p,rows,title:`${co}（${rule.note}・毎月${Math.round(acq).toLocaleString()}件獲得＝原資${(p.budget||5000000).toLocaleString()}円）`};
+  }
+  return {co,params:p,rows,title:String((sim[0]||[])[0]||'').slice(0,80)};
+}
+/* 実績リストのファイル → 月×会社の実績 */
+function shotHead(ws){
+  if(!ws)return [];if(ws['!lite'])return [];
+  const rg=ws['!ref']?XLSX.utils.decode_range(ws['!ref']):null;if(!rg)return [];
+  const out=[];for(let c=rg.s.c;c<=Math.min(rg.e.c,40);c++){const cell=ws[XLSX.utils.encode_cell({r:rg.s.r,c})];out.push(cell?String(cell.v):'')}return out;
+}
+function shotIsActual(wb){return wb.SheetNames.length<=12&&wb.SheetNames.some(n=>{const r=shotHead(wb.Sheets[n]);return r.includes('ユーザーID')&&r.includes('契約月')&&r.some(x=>/入金済み/.test(x))})}
+function shotReadActual(wb,name){
+  const out={};let ym=(String(name||'').match(/(20\d{2})(0[1-9]|1[0-2])/)||[]).slice(1).join('');
+  wb.SheetNames.forEach(n=>{
+    const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:''});const h=(rows[0]||[]).map(x=>String(x).trim());
+    if(!h.includes('ユーザーID'))return;
+    const ref=/^参考/.test(n);const co=ref?n.replace(/^参考_?/,''):(shotCoOf(n)||n);
+    const ix=k=>h.findIndex(x=>x===k||x.startsWith(k));const iC=ix('契約月'),iP=ix('入金済み'),iN=ix('n回目'),iK=ix('決済'),iU=ix('ユーザーID'),iB=ix('課金月');
+    const data=rows.slice(1).filter(r=>r[iU]!==''&&r[iU]!=null);
+    if(!ym){const ms=data.map(r=>shotYm(r[iC])).filter(Boolean).sort();ym=ms[ms.length-1]||''}
+    out[co]={ref,data,iC,iP,iN,iK,iB};
+  });
+  if(!ym)return {err:'対象月が読めません（ファイル名に YYYYMM を入れてください）'};
+  const plan=shotMem().plan;const res={};
+  Object.entries(out).forEach(([co,o])=>{
+    const prm=(plan[co]&&plan[co].params)||{};
+    const paid=o.iP>=0?o.data.filter(r=>/〇|○|済|1|true/i.test(String(r[o.iP]))):[];
+    const first=paid.filter(r=>o.iN<0?shotYm(r[o.iB])===ym:String(r[o.iN]).trim()==='1');
+    const card=paid.filter(r=>/クレジット|カード/.test(String(r[o.iK]))).length;
+    const rev=prm.card!=null?card*prm.card+(paid.length-card)*(prm.carrier??prm.card):null;
+    const nwCount=o.data.filter(r=>shotYm(r[o.iC])===ym).length;
+    /* 獲得ベースの会社は、その月の獲得件数に払う（戻入なし）。他は初回課金が成功した件数に払う */
+    const shot=prm.shot!=null&&!o.ref?(prm.basis==='acq'?nwCount:first.length)*prm.shot:(o.ref?0:null);
+    res[co]={ref:o.ref,nw:o.data.filter(r=>shotYm(r[o.iC])===ym).length,pt:first.length,shot,act:paid.length,card,rev,
+      net:rev!=null&&shot!=null?rev-shot:null,missing:!prm.shot&&!o.ref?'計画（ショット単価・取り分）が未登録':'',at:new Date().toISOString()};
+  });
+  return {ym,res};
+}
+/* MatoPass 課金明細（WST の売上明細書・Alt）から直接集計する。1ユーザー＝6コンテンツの行をユーザーにまとめる
+   店舗名 → 会社: 8月の実績リストとユーザーIDで突き合わせて確認済み（Life365 1・6・9・10=Liberte／4=ブランニュー／2=自社・3=Wetopia は参考）。
+   知らない店舗が出たら「収支データ → ショット先出OP」で会社を選ぶと覚える（ledger.answers['shot']） */
+const SHOT_STORE_SEED={'Life365 1':'Liberte','Life365 6':'Liberte','Life365 9':'Liberte','Life365 10':'Liberte','Life365 4':'ブランニュー','Life365 2':'参考_EX自社','Life365 3':'参考_Wetopia','Life365テスト店舗':'対象外'};
+function shotStoreCo(store){const a=ansGet('shot','store:'+store);return a&&a.co?a.co:SHOT_STORE_SEED[store]||''}
+function shotIsMatoPass(wb){return wb.SheetNames.length<=6&&wb.SheetNames.some(n=>{const r=shotHead(wb.Sheets[n]).map(x=>x.replace(/[－ー-]/g,'-'));return r.includes('ユ-ザ-ID')&&r.includes('入金済み')&&r.includes('店舗名')&&r.includes('契約日')})}
+function shotReadMatoPass(wb){
+  const sn=wb.SheetNames.find(n=>shotHead(wb.Sheets[n]).includes('店舗名'));
+  const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});const h=rows[0].map(x=>String(x).replace(/[－ー-]/g,'-').trim());
+  const ix=k=>h.indexOf(k);const iU=ix('ユ-ザ-ID'),iS=ix('店舗名'),iP=ix('入金済み'),iC=ix('契約日'),iK=ix('決済'),iT=ix('テスト');
+  const toYm=v=>{if(v instanceof Date)return v.getFullYear()+String(v.getMonth()+1).padStart(2,'0');if(typeof v==='number'){const d=liteNumDate(v);return d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')}return shotYm(v)};
+  const users=new Map();
+  rows.slice(1).forEach(r=>{const u=String(r[iU]||'').trim();if(!u)return;if(iT>=0&&String(r[iT])==='テスト')return;
+    const x=users.get(u)||{store:String(r[iS]||'').trim(),c:toYm(r[iC]),card:/クレジット|カード/.test(String(r[iK]||'')),paid:false};
+    if(/〇|○/.test(String(r[iP])))x.paid=true;users.set(u,x)});
+  const ym=[...users.values()].map(x=>x.c).filter(Boolean).sort().pop()||'';
+  if(!ym)return {err:'契約日が読めません'};
+  const plan=shotMem().plan;const res={},unknown={};
+  const monthsBetween=(a,b)=>(+b.slice(0,4)-+a.slice(0,4))*12+(+b.slice(4)-+a.slice(4));
+  users.forEach(x=>{
+    const co=shotStoreCo(x.store);if(!co){unknown[x.store]=(unknown[x.store]||0)+1;return}if(co==='対象外')return;
+    const ref=/^参考/.test(co);const key=ref?co.replace(/^参考_?/,''):co;
+    const t=res[key]||(res[key]={ref,nw:0,pt:0,act:0,card:0});
+    if(x.c===ym)t.nw++;
+    if(x.paid){t.act++;if(x.card)t.card++;if(x.c&&monthsBetween(x.c,ym)===1)t.pt++}
+  });
+  Object.entries(res).forEach(([co,t])=>{const prm=(plan[co]&&plan[co].params)||{};
+    t.rev=prm.card!=null?t.card*prm.card+(t.act-t.card)*(prm.carrier??prm.card):null;
+    t.shot=t.ref?0:(prm.shot!=null?(prm.basis==='acq'?t.nw:t.pt)*prm.shot:null);
+    t.net=t.rev!=null&&t.shot!=null?t.rev-t.shot:null;t.missing=!t.ref&&prm.shot==null?'計画（ショット単価・取り分）が未登録':'';t.at=new Date().toISOString();t.src='MatoPass'});
+  return {ym,res,unknown};
+}
+async function shotIngest(wb,name){
+  const m=shotMem();
+  if(shotIsMatoPass(wb)){const a=shotReadMatoPass(wb);if(a.err)return {kind:'error',note:a.err};
+    m.actual[a.ym]=Object.assign(m.actual[a.ym]||{},a.res);if(Object.keys(a.unknown).length)m.unknownStores=Object.assign(m.unknownStores||{},a.unknown);
+    await saveMemory();syncLedgerSoon();
+    const main=Object.entries(a.res).filter(([,v])=>!v.ref);
+    return {kind:'json',note:`ショット先出OP：MatoPass ${fmtYmJa(a.ym)}の実績（${main.map(([c,v])=>`${c} 支払対象${v.pt}件・課金${v.act}件`).join('・')}）を収支データに入れました${Object.keys(a.unknown).length?`。会社が分からない店舗 ${Object.keys(a.unknown).join('・')} があります（収支データで選んでください）`:''}`}}
+  if(wb.SheetNames.some(n=>/3社合算|3案比較|推奨案|感応度|損益分岐単価/.test(n))&&!shotIsActual(wb)&&!(shotIsPlan(wb)&&!wb.SheetNames.some(n=>/推奨案|3案比較/.test(n))))
+    return {kind:'skip',note:'ショット先出OPの比較・提案用の資料なので、収支データには使いません'};
+  if(shotIsPlan(wb)){const p=shotReadPlan(wb);if(p.err)return {kind:'skip',note:p.err};
+    m.plan[p.co]={params:p.params,rows:p.rows,title:p.title,file:name,at:new Date().toISOString()};
+    /* 計画が後から来たときは、覚えている実績の売上・ショットを計算し直す */
+    Object.values(m.actual).forEach(byCo=>{const a=byCo[p.co];if(a&&!a.ref){a.shot=(p.params.basis==='acq'?a.nw:a.pt)*p.params.shot;a.rev=a.card*p.params.card+(a.act-a.card)*(p.params.carrier??p.params.card);a.net=a.rev-a.shot;a.missing=''}});
+    await saveMemory();syncLedgerSoon();
+    return {kind:'json',note:`ショット先出OP：${p.co}の計画（ショット${(p.params.shot||0).toLocaleString()}円・36ヶ月）を覚えました`}}
+  if(shotIsActual(wb)){const a=shotReadActual(wb,name);if(a.err)return {kind:'error',note:a.err};
+    m.actual[a.ym]=Object.assign(m.actual[a.ym]||{},a.res);await saveMemory();syncLedgerSoon();
+    const main=Object.entries(a.res).filter(([,v])=>!v.ref);
+    return {kind:'json',note:`ショット先出OP：${fmtYmJa(a.ym)}の実績（${main.map(([c,v])=>`${c} 支払対象${v.pt}件・課金${v.act}件`).join('・')}）を収支データに入れました${main.some(([,v])=>v.missing)?'（計画が無い会社は金額を出せません）':''}`}}
+  return null;
+}
+async function shotSetStore(st){const v=(document.getElementById('shotSt_'+st)||{}).value;if(!v){toast('会社を選んでください');return}
+  await ansPut('shot','store:'+st,{co:v,label:'MatoPass 店舗 '+st+' → '+v});renderFin();toast(`${st} を ${v} として覚えました`)}
+/* 収支データ「ショット先出OP」タブ */
+function shotView(){
+  const m=shotMem();const order=c=>{const i=SHOT_COS.indexOf(c);return i<0?99:i};
+  const cos=[...new Set([...Object.keys(m.plan),...Object.values(m.actual).flatMap(x=>Object.entries(x).filter(([,v])=>!v.ref).map(([c])=>c))])].sort((a,b)=>order(a)-order(b));
+  if(!cos.length)return '<div class="pm-note" style="padding:14px">まだデータがありません。会社別の「36ヶ月シミュレーション」と、毎月の実績リスト（店舗コード・ユーザーID・契約月・入金済み…）を「入れる」に入れてください。</div>';
+  const actYms=Object.keys(m.actual).sort();
+  const lastAct=actYms[actYms.length-1]||'';
+  const ymsAll=[...new Set([...actYms,...Object.values(m.plan).flatMap(p=>Object.keys(p.rows))])].sort();
+  /* 表示する月: 実績の最初の月の前後から、実績の最後の月の3ヶ月後まで */
+  const startYm=actYms[0]||ymsAll[0];const endIdx=Math.min(ymsAll.length-1,Math.max(ymsAll.indexOf(lastAct),0)+3);
+  const yms=ymsAll.filter((y,i)=>y>=startYm&&i<=endIdx);
+  const yen0=v=>v==null?'—':Math.round(v).toLocaleString();const cnt=v=>v==null?'—':(Math.round(v*10)/10).toLocaleString();
+  const metrics=[['nw','新規獲得',cnt],['pt','支払対象（初回課金）',cnt],['shot','ショット支払',yen0],['act','課金会員',cnt],['rev','売上（取り分）',yen0],['net','当月ネット',yen0],['cum','累計ネット',yen0]];
+  const actOf=(co,ym)=>(m.actual[ym]||{})[co];
+  const cumAct=co=>{let s=0;const o={};ymsAll.forEach(y=>{const a=actOf(co,y);if(a&&a.net!=null){s+=a.net;o[y]=s}else if(y<=lastAct&&y>=startYm&&o[y]==null&&s)o[y]=s});return o};
+  const card=co=>{const p=m.plan[co];const ca=cumAct(co);
+    const head=`<tr><th class="lbl">${esc(co)}</th>${yms.map(y=>`<th>${esc(fmtYmJa(y).replace(/^20(\d\d)年/,'$1/').replace('月',''))}${y<=lastAct?'':'<small class="fin-sub">計画</small>'}</th>`).join('')}</tr>`;
+    const body=metrics.map(([k,l,f])=>`<tr class="${k==='cum'||k==='net'?'tot':''}"><td class="lbl">${l}</td>${yms.map(y=>{
+      const a=actOf(co,y),pl=p&&p.rows[y];const av=k==='cum'?ca[y]:a&&a[k];const pv=pl?pl[k]:null;
+      const actTxt=av!=null?f(av):'';const planTxt=pv!=null?f(pv):'';
+      const neg=(av!=null?av:pv)<0;
+      return `<td class="${neg?'neg':''}">${actTxt?`<b>${actTxt}</b>`:''}${planTxt?`<small class="fin-sub">計画 ${planTxt}</small>`:''}</td>`}).join('')}</tr>`).join('');
+    const miss=actYms.map(y=>actOf(co,y)).find(a=>a&&a.missing);
+    return `<div class="fin-wrap" style="margin-top:14px;max-height:none"><table class="fin">${head}<tbody>${body}</tbody></table></div>${p?`<p class="note">計画: ${esc(p.title||'')}（ショット ${(p.params.shot||0).toLocaleString()}円／取り分 クレカ ${(p.params.card||0).toLocaleString()}円・キャリア ${(p.params.carrier||0).toLocaleString()}円）</p>`:'<p class="note" style="color:var(--warn)">この会社の計画（36ヶ月シミュレーション）がまだありません</p>'}${miss?`<p class="note" style="color:var(--warn)">${esc(miss.missing)}</p>`:''}`};
+  /* 合計の累計ネット: 実績と、実績がある会社の計画の合計 */
+  const withAct=cos.filter(c=>actYms.some(y=>actOf(c,y)));
+  const tot={act:[],plan:[]};const gy=ymsAll.filter(y=>y>=startYm&&y<=(ymsAll[endIdx]||lastAct));
+  let sAct=0;gy.forEach(y=>{let has=false;withAct.forEach(c=>{const a=actOf(c,y);if(a&&a.net!=null){sAct+=a.net;has=true}});tot.act.push(y<=lastAct?sAct:null);
+    tot.plan.push(withAct.reduce((s,c)=>{const pl=m.plan[c]&&m.plan[c].rows[y];return s+(pl&&pl.cum!=null?pl.cum:0)},0))});
+  const chart=withAct.length?finChartSvg({months:gy.map(y=>fmtYmJa(y).replace(/年/,'/').replace('月','')),series:[{name:'累計ネット（実績）',v:tot.act},{name:'累計ネット（計画）',v:tot.plan}]}):'';
+  const refs=[...new Set(Object.values(m.actual).flatMap(x=>Object.entries(x).filter(([,v])=>v.ref).map(([c])=>c)))];
+  const unk=Object.entries(m.unknownStores||{}).filter(([st])=>!shotStoreCo(st));
+  const unkHtml=unk.length?`<div class="rc"><b style="color:var(--warn)">会社が分からない店舗があります</b><div class="note">MatoPass の店舗名をどの会社の分として数えるか選んでください。次から自動で使います。</div>
+    ${unk.map(([st,n])=>`<div class="pm-bar" style="gap:8px;flex-wrap:wrap"><span>${esc(st)}（${n}人）</span><select id="shotSt_${esc(st)}">${['','Liberte','ブランニュー','ラストワンマイル','GeNNeo','参考_EX自社','参考_Wetopia','対象外'].map(c=>`<option value="${esc(c)}">${c?esc(c):'会社を選ぶ'}</option>`).join('')}</select><button class="btn btn-sm" onclick="shotSetStore('${esc(st).replace(/'/g,'')}')">覚える</button></div>`).join('')}
+    <p class="note">選んだあと、その月の MatoPass 課金明細をもう一度入れると数字に反映されます。</p></div>`:'';
+  return `${unkHtml}${chart}<p class="note">${withAct.map(esc).join('・')||'—'} の合計。太字が実績、小さい字が計画（36ヶ月シミュレーション）です。売上はシミュレーションの取り分の単価（クレカ・キャリア別）で計算しています。</p>
+    ${cos.map(card).join('')}
+    ${refs.length?`<p class="note" style="margin-top:12px">参考（ショットの対象外）: ${refs.map(c=>{const r=actYms.map(y=>[y,actOf(c,y)]).filter(([,a])=>a);return `${esc(c)} ${r.map(([y,a])=>`${fmtYmJa(y)} 課金${a.act}件`).join('・')}`}).join(' ／ ')}</p>`:''}
+    <details style="margin-top:12px"><summary class="note">数字の決め方</summary><div class="pat-sub">新規獲得＝契約月がその月の件数。支払対象＝その月に初回課金が成功した件数（入金済み かつ 1回目）。ショット支払＝支払対象×ショット単価。課金会員＝その月に入金済みの件数。売上＝課金会員×取り分（クレカ・キャリア別）。当月ネット＝売上−ショット支払。累計ネット＝当月ネットの積み上げ。</div></details>`;
+}
+
 function resetFinBtn(){S.finOpen=false;const b=document.getElementById('finBtn');if(b){b.classList.remove('on');b.textContent='収支データ'}}
 function openFin(){
   if(S.finOpen){closeFin();return}
@@ -7959,6 +8144,7 @@ function renderFin(){
   if(!tabs)return;
   if(!S.finTab)S.finTab=FIN_TABS[0];
   tabs.innerHTML=FIN_TABS.map(t=>`<button class="chip ${t===S.finTab?'on':''}" onclick="S.finTab='${t}';renderFin()">${t}</button>`).join('');
+  if(S.finTab==='ショット先出OP'){ch.innerHTML=shotView();tb.innerHTML='';meta.textContent='ショット先出OP: 計画（36ヶ月シミュレーション）と毎月の実績リストから';lk.style.display='none';return}
   if(!fd){meta.textContent=syncReady()?'まだ取り込んでいません。「最新にする」を押してください。':'先に「同期」で接続先を設定してください。';tb.innerHTML='';ch.innerHTML='';lk.style.display='none';return}
   meta.textContent=`スプレッドシートの更新: ${fmtWhen(fd.updated)}　取り込み: ${fmtWhen(fd.at)}`;
   if(fd.url){lk.href=fd.url;lk.style.display=''}
@@ -9373,6 +9559,7 @@ async function batchRoute(files,opts){
           continue;
         }
         const {buf,wb}=await readWb(f);
+        if(wb.SheetNames.length<=12){const sr=await shotIngest(wb,f.name);if(sr){ent.kind=sr.kind;ent.note=sr.note;continue}}
         if(wb.SheetNames.includes(LIST_SHEET)){const r=await importListSheet(wb);ent.kind='json';
           ent.note=r.n?`リスト番号 ${r.n}件を覚えました${r.skip?`（未記入 ${r.skip}件はそのまま）`:''}。ライフサポートの内訳に反映します`:'記入されたリスト番号がありません';continue}
         /* XRM とみなすのは、ファイル名が「契約一覧」か、XRM の書き出しらしく多数のシートがあるときだけ。
