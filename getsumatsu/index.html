@@ -1770,7 +1770,10 @@ const MODULES = {
   npmobile:{
     wtTab:'NP Mobile',
     title:'NP Mobile/ユーネット', src:'ユーネット明細 × XRM「NP WiMAX」', pastToss:true, wtProduct:'NP Mobile',
-    desc:'電話番号突合→パートナー×トス会社で単価マトリクス適用（WT×WT=35,000／WT×他社=24,000）。戻入は同額マイナス。単価不明は空欄のまま残す。',
+    desc:'電話番号突合→パートナー×トス会社で単価マトリクス適用（WT×WT=35,000／WT×他社=24,000）。戻入は払った手数料を全額マイナス（郵送費は戻さない）。単価不明は空欄のまま残す。',
+    mailFee:1000,                                   /* Wetopia の単価は取次手数料から郵送費 1,000円を引いた額 */
+    modoPassThrough:r=>/代理店請求/.test(r.item||''),   /* 代理店請求は上位店の差し引き額をそのまま（解約戻入・未納戻入は払った手数料を全額） */
+    netUnits(){return [num('p_wtwt'),num('p_wtother')]},
     hint1:'「Exploration Holdings株式会社御中 _NP Mobile明細.xlsx」<br>「NP Mobile明細」タブを自動検出',
     amountLabel:'Wetopia支払見込（確定分）', alertLabel:'単価不明・要報告',
     prices:[['p_wtwt','Wetopia × Wetopia（支払）',35000],['p_wtother','Wetopia × 他社トス（支払）',24000],
@@ -2786,6 +2789,38 @@ function rowIdOf(r){
   if(!r)return '';
   const v=r.tel||r.key||r.rawKey||r.appNo||r.orderNo||r.user||(r.acc&&r.name?r.acc+'|'+r.name:'');
   return v?String(v).replace(/\s/g,''):'';
+}
+/* 戻入（解約などで上位店から差し引かれた案件）は、そのパートナーに払った手数料を全額マイナスにする（2026-10 菊地さん）
+   郵送費は戻さず手数料の満額を引く。半端な額も、昔の単価の案件も「払った額」をそのまま引く。
+   払った額 = 過去の支払明細書（Mac が history.json に商材ごとに集計）。見つからなければ今の取次手数料（郵送費を引く前） */
+function applyModoFull(){
+  const m=MODULES[S.prod];if(!m||m.kind==='audit')return 0;
+  const ph=S.memory&&S.memory.paidHist;let n=0;
+  const names=[m.wtProduct,productOf(m)].filter(Boolean).map(reconNorm);
+  const nets=typeof m.netUnits==='function'?m.netUnits():[];
+  (S.rows||[]).forEach(r=>{
+    if(!r.modo||r.hold||r.skip)return;
+    let hit=null;
+    if(ph&&ph.by)for(const k of [r.tel,r.key,r.x&&r.x.app].filter(Boolean)){
+      const arr=ph.by[inqNorm(k)]||ph.by[String(k)];if(!arr)continue;
+      arr.forEach(e=>{const pn=reconNorm(ph.products[e[0]]||'');if(names.some(p=>pn&&(pn.includes(p)||p.includes(pn)))&&(!hit||e[1]>hit.a))hit={a:Number(e[1]),m:e[2],partner:e[3]}});
+      if(hit)break;
+    }
+    const wt=/Wetopia/.test(r.payTo||'');
+    let gross=null,how='';
+    /* 上位店が額を決めて差し引く行（NP Mobile の「代理店請求」など）は、その額をそのまま引く（明細一覧と同じ） */
+    if(typeof m.modoPassThrough==='function'&&m.modoPassThrough(r)&&Number(r.fee)<0){
+      gross=Math.abs(Number(r.fee));how='上位店に差し引かれた額をそのまま';hit=null;
+    }
+    else if(hit){gross=hit.a;if(m.mailFee&&wt&&nets.includes(gross))gross+=m.mailFee;how=`${fmtYmJa(String(hit.m))}に払った ${gross.toLocaleString()}円`}
+    else if(r.price!=null&&m.mailFee&&wt&&nets.includes(Math.abs(r.price))){gross=Math.abs(r.price)+m.mailFee;how='元の支払が見つからないため今の取次手数料'}
+    if(gross==null||!(gross>0))return;
+    if(!r.payTo&&hit&&hit.partner)r.payTo=hit.partner;
+    if(r.price!=null&&Math.abs(r.price)===gross)return;
+    r.price=-gross;r.resolved=true;if(r.state!=='alert')r.state='ok';r.modoFull=true;
+    r.why+=` → 戻入は払った手数料を全額（${how}）`;n++;
+  });
+  return n;
 }
 /* 前回の答えがある案件（同じ電話番号・申込番号など）は、同じ支払先・単価で確定する */
 function applyRowAnswers(){
@@ -6814,6 +6849,8 @@ function applyHistory(h){
     const cur=mem.cases[k];const val={a:v[0],m:v[1],p:prods[v[2]]||''};
     if(!cur||String(val.m)>=String(cur.m||'')){mem.cases[k]=val;nc++}
   });
+  /* 案件×商材ごとに払った額（戻入で「払った分を全額」引くのに使う） */
+  if(h.paid)mem.paidHist={products:prods,by:h.paid};
   (h.months||[]).forEach(m=>{if(!mem.months.includes(m))mem.months.push(m)});mem.months.sort();
   /* 請求書のリスト単価（history.json の期間分） */
   if(Array.isArray(h.invoices)&&h.invoices.length){
@@ -7007,7 +7044,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面3';
+const APP_BUILD='2026-10-12 新画面4';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -8452,6 +8489,7 @@ function recalcWithPrices(){
     applyLearnedRates();
     const auto=applySavedPatterns();
     applyRowAnswers();
+    applyModoFull();
     renderResults();
     placePricePanel(2);
     toast('現在の単価で再計算しました'+(auto?`（記憶済み単価を${auto}件に適用）`:''));
@@ -8838,6 +8876,8 @@ function runMatch(){
       if(auto)progLine(`記憶済みの単価を ${auto}件に自動適用`);
       const ra=applyRowAnswers();
       if(ra)progLine(`前回の要確認の答えを ${ra}件に自動適用`);
+      const mf=applyModoFull();
+      if(mf)progLine(`戻入 ${mf}件を「払った手数料を全額」に直しました`);
     }
     progLine('判定完了');
     setTimeout(()=>{renderResults();go(2)},350);
@@ -9483,6 +9523,7 @@ async function runJob(job){
       const learned=applyLearnedRates();if(learned)progLine(`台帳・学習単価を ${learned}件に自動適用`);
       const auto=applySavedPatterns();if(auto)progLine(`記憶済みの単価を ${auto}件に自動適用`);
       const ra=applyRowAnswers();if(ra)progLine(`前回の要確認の答えを ${ra}件に自動適用`);
+      const mf=applyModoFull();if(mf)progLine(`戻入 ${mf}件を「払った手数料を全額」に直しました`);
     }
     if(!S.rows.length){job.status='empty';job.err='対象行がありません（別商材のファイルの可能性）';progLine(`${label}: 対象行なし → スキップ`,'err')}
     else if(m.kind==='audit'&&S.rows.length>=3&&!S.rows.some(r=>r.state==='ok')){
