@@ -6421,7 +6421,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夜版2';
+const APP_BUILD='2026-10-11 夜版3';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7438,7 +7438,7 @@ function stockBuild(p){
       if(!m[pt]||m[pt].r[ki]!=='売上')m[pt]={r,hdr:s.hdr}})});return o};
   const base=idxOf(baseYm),olderIdx=older.map(idxOf);
   /* 学習: 支払先ごとの見出し、XRM シート → 主な支払先、リストID → OP、単価 */
-  const hdrOf={},sheetPay={},opList={},listCust={},learn={},opPrice={};
+  const hdrOf={},sheetPay={},opList={},listCust={},learn={},learnAll={},opPrice={};
   const bump=(o,k,v)=>{const m=o[k]||(o[k]={});m[v]=(m[v]||0)+1};
   const top=m=>{if(!m)return null;let b=null,n=-1,t=0;Object.entries(m).forEach(([k,v])=>{t+=v;if(v>n){n=v;b=k}});return {v:b,n,t}};
   const learnFrom=stockYmAdd(target,-STOCK_LEARN_MONTHS);
@@ -7449,8 +7449,9 @@ function stockBuild(p){
       if(ym===baseYm)bump(opPrice,pt,r[pi]);
       if(!x)return;
       if(ym===baseYm){bump(sheetPay,x.sheet,pt);if(x.list){bump(opList,x.list,pt);bump(listCust,x.list,stockId(r[ci]))}}
-      if(x.ym&&x.ym>=learnFrom){const mc=stockMclass(r[mi]);
-        bump(learn,[pt,x.sheet,x.partner,mc,x.list].join('|'),r[pi]);bump(learn,[pt,x.sheet,x.partner,mc].join('|'),r[pi])}
+      const mc=stockMclass(r[mi]);
+      if(x.ym&&x.ym>=learnFrom){bump(learn,[pt,x.sheet,x.partner,mc,x.list].join('|'),r[pi]);bump(learn,[pt,x.sheet,x.partner,mc].join('|'),r[pi])}
+      bump(learnAll,[pt,x.sheet,x.partner,mc].join('|'),r[pi]);
     })}));
   const mainPay={};Object.keys(sheetPay).forEach(sh=>{mainPay[sh]=top(sheetPay[sh]).v});
   const mains=new Set(Object.values(mainPay));
@@ -7467,6 +7468,8 @@ function stockBuild(p){
     const neg=d.kubunName==='返金'||(d.kubunName!=='売上'&&d.amount<0);
     let hit=base[id],how='前月';
     if(!hit){const k=olderIdx.findIndex(o=>o[id]);if(k>=0){hit=olderIdx[k][id];how='過去'}}
+    /* XRM に見つからない顧客は、前月に払っていても支払わない（2026-10 菊地さん指示） */
+    if(hit&&X&&!X[id]){check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:'XRM に無い顧客（支払わない）'});return}
     if(hit){
       Object.entries(hit).forEach(([pt,src])=>{
         /* 月によって列の並びが違うことがあるので、見出し名で今月の並びに直す */
@@ -7482,12 +7485,13 @@ function stockBuild(p){
     const x=X&&X[id];
     const ck=(why,extra)=>check.push(Object.assign({id,kind:d.kubunName,method:d.method,amount:d.amount,why},x?{sheet:x.sheet,partner:x.partner,ym:x.ym,list:x.list}:{},extra||{}));
     if(!X){ck('XRM が未読込のため新規か判定できません');return}
-    if(!x){ck('XRM に無い顧客');return}
-    if(!x.ym||x.ym<stockYmAdd(target,-STOCK_NEW_MONTHS)){ck(`前月まで支払いが無い古い顧客（申込 ${x.ym||'不明'}）`);return}
+    if(!x){ck('XRM に無い顧客（支払わない）');return}
+    /* 申込が古く前月まで支払いが無かった顧客も支払う（9月度の漏れはそのまま、10月度から。2026-10 菊地さん指示） */
+    const old=!x.ym||x.ym<stockYmAdd(target,-STOCK_NEW_MONTHS);
     const pt=mainPay[x.sheet];
     if(!pt){ck(`XRM「${x.sheet}」の支払先が過去の明細から判定できません`);return}
     const mc=stockMclass(d.method);
-    const t=top(learn[[pt,x.sheet,x.partner,mc,x.list].join('|')])||top(learn[[pt,x.sheet,x.partner,mc].join('|')]);
+    const t=(old?null:top(learn[[pt,x.sheet,x.partner,mc,x.list].join('|')])||top(learn[[pt,x.sheet,x.partner,mc].join('|')]))||top(learnAll[[pt,x.sheet,x.partner,mc].join('|')]);
     if(!t){ck(`単価が決められません（${pt}・${x.partner}・${d.method}）`);return}
     const pr=+t.v;
     const mk=(pt2,price)=>{const h=hdrOf[pt2];const row=new Array(h.length).fill('');
@@ -7495,8 +7499,8 @@ function stockBuild(p){
       h.forEach((k,i)=>{row[i]=k==='顧客ID'?id:k==='支払い方法'?d.method:k==='売上返金区分名称'?d.kubunName:k==='獲得パートナー'?x.partner
         :k==='営業担当者名'?x.staff:k==='獲得日'?(telCol?x.tel:stockSerial(x.date)):k==='電話番号'?x.tel:k==='リストID'?(/^\d+$/.test(x.list)?+x.list:(x.list||'-')):/単価/.test(k)?(neg?-price:price):''});
       return row};
-    put(pt,mk(pt,pr),neg?'返金・CB':'新規',neg?-pr:pr);
-    if(t.n<0.8*t.t)ck(`新規の単価候補が複数（${pr}円で作成）`,{payee:pt,price:pr,soft:1});
+    put(pt,mk(pt,pr),neg?'返金・CB':old?'再開':'新規',neg?-pr:pr);
+    if(t.n<0.8*t.t)ck(`${old?'再開':'新規'}の単価候補が複数（${pr}円で作成）`,{payee:pt,price:pr,soft:1});
     const op=x.list&&opOfList(x.list);
     if(op&&hdrOf[op]){const p2=+top(opPrice[op]).v;put(op,mk(op,p2),neg?'返金・CB':'新規OP',neg?-p2:p2)}
   });
@@ -7514,10 +7518,10 @@ function stockWb(res){
   const wb=XLSX.utils.book_new();
   const ymJa=fmtYmJa(res.target.replace('-',''))+'度',baseJa=fmtYmJa(res.baseYm.replace('-',''))+'度';
   const sm=[[`ライフサポート（SBPS）支払内訳 ${ymJa}（月末明細処理クラウド生成）`],['売上明細内訳 CSV の期間',res.period],['前月として使った内訳',baseJa],[],
-    ['支払先',`${ymJa} 件数`,`${ymJa} 金額`,`${baseJa} 件数`,`${baseJa} 金額`,'差額','前月踏襲','過去から再開','新規','新規(OP)','返金・CB']];
-  res.partners.forEach(x=>sm.push([x.name,x.n,x.amt,x.prev.n,x.prev.amt,x.amt-x.prev.amt,x.how['前月']||0,x.how['過去']||0,x.how['新規']||0,x.how['新規OP']||0,x.how['返金・CB']||0]));
+    ['支払先',`${ymJa} 件数`,`${ymJa} 金額`,`${baseJa} 件数`,`${baseJa} 金額`,'差額','前月踏襲','2〜4ヶ月前から再開','古い顧客の再開','新規','新規(OP)','返金・CB']];
+  res.partners.forEach(x=>sm.push([x.name,x.n,x.amt,x.prev.n,x.prev.amt,x.amt-x.prev.amt,x.how['前月']||0,x.how['過去']||0,x.how['再開']||0,x.how['新規']||0,x.how['新規OP']||0,x.how['返金・CB']||0]));
   sm.push(['合計',res.partners.reduce((a,x)=>a+x.n,0),res.total,res.partners.reduce((a,x)=>a+x.prev.n,0),res.partners.reduce((a,x)=>a+x.prev.amt,0),res.total-res.partners.reduce((a,x)=>a+x.prev.amt,0)]);
-  sm.push([],['※ 前月の内訳にある顧客は同じ支払先・同じ単価で踏襲。返金・チャージバックはマイナス。与信は対象外。'],['※ 内訳に入れなかった顧客は「要確認」シートにあります。']);
+  sm.push([],['※ 前月の内訳にある顧客は同じ支払先・同じ単価で踏襲。返金・チャージバックはマイナス。与信は対象外。XRM に無い顧客は支払わない。'],['※ 内訳に入れなかった顧客は「要確認」シートにあります。']);
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(sm),'まとめ');
   const ck=[['顧客ID','区分','決済手段','決済金額','理由','XRMシート','獲得パートナー','申込月','リストID']];
   res.check.forEach(c=>ck.push([c.id,c.kind,c.method,c.amount,c.why,c.sheet||'',c.partner||'',c.ym||'',c.list||'']));
