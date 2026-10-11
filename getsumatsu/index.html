@@ -1021,6 +1021,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <h3 class="trend-h">商材別の内訳</h3>
   <div class="filters" id="trendTabs"></div>
   <div id="trendDetail"></div>
+  <div id="salesRef"></div>
 
   <div class="pm" style="margin-top:24px">
     <h3>商材を追加する</h3>
@@ -1052,6 +1053,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <button class="btn-ghost" onclick="document.getElementById('inIn').click()">ファイルを選ぶ（複数可）</button>
       <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
     </div>
+    <div class="in-btns" id="inDrive" hidden></div>
     <input type="file" id="inIn" accept=".xlsx,.xls,.csv,.json" multiple style="display:none">
     <input type="file" id="inDir" webkitdirectory multiple style="display:none">
   </div>
@@ -1120,6 +1122,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <button class="btn-ghost btn-sm" onclick="forgetSync()">この端末の設定を消す</button>
     </div>
     <div class="diag sync-status" id="syncStatus" style="display:block"></div>
+    <div class="sync-acts" id="syncSales"></div>
     <div class="prog on sync-log" id="syncLog"></div>
   </div>
 </div>
@@ -6362,6 +6365,18 @@ async function syncNow(opts){
       c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
       syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
     }
+    /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
+    SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
+    if(SALES_LIST.length){const sm=salesMonths()[0];syncLog(`売上明細書: ${fmtYmJa(sm.month)}分 ${sm.files.length}件ほか（「入れる」画面のボタンから取り込めます）`)}
+    /* 2d) 売上明細書の3年分の集計（上位店×月の入金） */
+    if(man.salesHistory&&man.salesHistory.path&&man.salesHistory.mtime!==c.salesHistMtime){
+      const f=await syncFile(man.salesHistory.path,(p,n)=>syncSetBusy(true,`売上推移 ${p}/${n}`));
+      const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+      const mem=S.memory||(S.memory=emptyMem());
+      mem.salesHistory={months:h.months||[],upstreams:h.upstreams||{},at:h.generatedAt||''};
+      await saveMemory();c.salesHistMtime=man.salesHistory.mtime;saveSyncCfg(c);
+      syncLog(`売上明細書 ${(h.months||[]).length}ヶ月分の入金を集計しました（上位店 ${Object.keys(h.upstreams||{}).length}社。「収支推移」に表示）`);
+    }
     /* 3) 請求書: 「リスト」シートのアライアンス先×単価を参考として保存 */
     const iv=(man.invoices||[]).filter(x=>c.seen[x.path]!==x.mtime);
     if(iv.length){
@@ -6499,6 +6514,58 @@ function ledgerTimeline(key){
   /* 長くなりすぎないよう直近4区間だけ */
   const show=seg.slice(-4);
   return '推移: '+(seg.length>4?'… → ':'')+show.map((x,i)=>{const last=i===show.length-1;const rng=x.from===x.to&&!last?fmtYmJa(x.from):`${fmtYmJa(x.from)}〜${last?'':fmtYmJa(x.to)}`;return `${rng} ${x.price.toLocaleString()}円`}).join(' → ');
+}
+
+/* ---- 売上明細書（上位店からの入金明細）: Drive にある月の分をまとめて「入れる」へ ---- */
+let SALES_LIST=[];
+function salesMonths(){
+  const by={};SALES_LIST.forEach(x=>{(by[x.month]=by[x.month]||[]).push(x)});
+  return Object.keys(by).sort().reverse().map(m=>({month:m,files:by[m],size:by[m].reduce((a,x)=>a+(x.size||0),0)}));
+}
+function renderSalesButtons(){
+  const ms=salesMonths().slice(0,3);
+  const btn=m=>`<button class="btn-ghost btn-sm" onclick="loadSalesMonth('${m.month}')">☁ ${esc(fmtYmJa(m.month))}の売上明細書（${m.files.length}件・${Math.max(1,Math.round(m.size/1048576))}MB）を入れる</button>`;
+  const a=document.getElementById('syncSales');if(a)a.innerHTML=ms.map(btn).join('');
+  const b=document.getElementById('inDrive');
+  if(b){b.hidden=!ms.length;b.innerHTML=ms.slice(0,2).map(btn).join('')}
+}
+async function loadSalesMonth(ym){
+  if(!syncReady()){openSync();return}
+  const list=SALES_LIST.filter(x=>x.month===ym);if(!list.length){toast('この月の売上明細書は Drive にありません');return}
+  if(SYNC_BUSY){toast('同期中です。終わってからもう一度押してください');return}
+  syncSetBusy(true,`売上 0/${list.length}`);
+  const files=[];let done=0,err=0;
+  try{
+    /* 3件ずつ並べて取得 */
+    const q=list.slice();
+    const worker=async()=>{while(q.length){const x=q.shift();
+      try{const f=await syncFile(x.path);files.push(new File([f.buf],f.name))}catch(e){err++;console.warn(x.path,e)}
+      done++;syncSetBusy(true,`売上 ${done}/${list.length}`)}};
+    await Promise.all([worker(),worker(),worker()]);
+  }finally{syncSetBusy(false)}
+  closeSync();
+  if(S.single&&typeof setSingle==='function')setSingle(false);
+  go(1);
+  toast(`${fmtYmJa(ym)}の売上明細書 ${files.length}件を入れました${err?`（取得できなかった ${err}件）`:''}。判別結果を確認してください`);
+  await batchRoute(files,{noXrm:true});
+}
+/* ---- 収支推移: 売上明細書から集計した上位店別の入金（参考） ---- */
+function renderSalesRef(){
+  const host=document.getElementById('salesRef');if(!host)return;
+  const sh=S.memory&&S.memory.salesHistory;
+  if(!sh||!sh.upstreams){host.innerHTML='';return}
+  const months=(sh.months||[]).slice(-12);
+  const ups=Object.entries(sh.upstreams).map(([u,d])=>({u,d,t:months.reduce((a,m)=>a+((d[m]&&d[m].total)||0),0)}))
+    .filter(x=>x.t>0).sort((a,b)=>b.t-a.t);
+  const top=ups.slice(0,15);
+  const sumM=m=>ups.reduce((a,x)=>a+((x.d[m]&&x.d[m].total)||0),0);
+  const yenK=v=>v?Math.round(v/1000).toLocaleString():'';
+  host.innerHTML=`<h3 class="trend-h">売上明細書からの入金（参考・千円）</h3>
+    <p class="note" style="margin:-4px 0 10px">上位店の売上明細書のうち、お客様を特定できる明細行の金額を足したものです（合計行・PDF・古い .xls は含みません）。会計の数字とは一致しないことがあります。${esc(fmtYmJa(sh.months[0])||'')}〜${esc(fmtYmJa(sh.months[sh.months.length-1])||'')}・上位店 ${ups.length}社</p>
+    <div class="tbl-wrap"><table><thead><tr><th>上位店</th>${months.map(m=>`<th class="amt">${esc(m.slice(2,4)+'/'+m.slice(4))}</th>`).join('')}</tr></thead><tbody>
+    ${top.map(x=>`<tr><td data-label="上位店">${esc(x.u)}</td>${months.map(m=>`<td class="amt" data-label="${esc(m.slice(2,4)+'/'+m.slice(4))}">${yenK(x.d[m]&&x.d[m].total)}</td>`).join('')}</tr>`).join('')}
+    <tr class="trend-total"><td data-label="上位店">合計（全${ups.length}社）</td>${months.map(m=>`<td class="amt" data-label="${esc(m.slice(2,4)+'/'+m.slice(4))}">${yenK(sumM(m))}</td>`).join('')}</tr>
+    </tbody></table></div>`;
 }
 function rateRows(){
   const mem=S.memory||{};
@@ -6722,6 +6789,7 @@ function closeTrend(){go(S.trendReturn||S.maxStep||1)}
 function setTrendMonth(mo){S.trendMonth=mo;renderTrend()}
 function fmtMo(mo){return mo?`${mo.slice(0,4)}/${mo.slice(4)}`:''}
 function renderTrend(){
+  try{renderSalesRef()}catch(e){console.error('salesRef',e)}
   const months=trendMonths(),prods=trendProducts();
   /* 月次サマリー */
   const sum=document.getElementById('trendSummary');
@@ -7730,7 +7798,8 @@ function detectJobs(wb,name){
 }
 
 /* ---- まとめて投入: 中身で XRM / 支払明細書 / 上位店明細 に振り分け、商材を判定 ---- */
-async function batchRoute(files){
+async function batchRoute(files,opts){
+  opts=opts||{};
   const list=Array.from(files||[]).filter(f=>f&&f.name&&!/^\./.test(f.name));
   if(!list.length)return;
   B.busy++;renderIn();
@@ -7755,7 +7824,9 @@ async function batchRoute(files){
           continue;
         }
         const {buf,wb}=await readWb(f);
-        if(looksLikeXrm(wb,f.name)){ent.kind='xrm';ent.note=`${wb.SheetNames.length}シート。保存したので次回は不要です`;applyXrmWb(wb,buf,f.name);continue}
+        /* XRM とみなすのは、ファイル名が「契約一覧」か、XRM の書き出しらしく多数のシートがあるときだけ。
+           作業用ファイル（AI作成中_…）にも「パートナー企業」「顧客電話番号」の列があり、XRM を上書きしてしまうため */
+        if(!opts.noXrm&&looksLikeXrm(wb,f.name)&&(/契約一覧/.test(f.name)||wb.SheetNames.length>=10)){ent.kind='xrm';ent.note=`${wb.SheetNames.length}シート。保存したので次回は不要です`;applyXrmWb(wb,buf,f.name);continue}
         ent.kind='meisai';ent.wb=wb;
         const jobs=detectJobs(wb,f.name);
         if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
