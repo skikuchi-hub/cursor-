@@ -6077,8 +6077,25 @@ function ledgerSeen(k,price,m){
    月ごとの代表単価を「同じ単価が続く期間」にまとめ、いまの単価だけを適用開始月つきで提案する */
 /* 明細書由来の確認待ちは、商材×パートナー×トス会社ごとに一番新しい1件だけ残す
    （端末間の合流や月ごとの学習で、古い月の提案が並ぶのを防ぐ） */
+/* 半年以上どの明細にも出ていない組み合わせ（取引が終わったもの）は確認待ちに積まない。推移（lg.history）には残る */
+const LEDGER_STALE_MONTHS=6;
+const ym2n=s=>Number(String(s).slice(0,4))*12+Number(String(s).slice(4,6));
+function ledgerLastSeenYm(c){const m=String(c.src||'').replace(/^statement:/,'');return /^\d{6}$/.test(m)?m:(c.month||'')}
+function ledgerIsStale(c){
+  if(c.type==='conflict'||!/^statement:/.test(c.src||''))return false;
+  const m=ledgerLastSeenYm(c);return /^\d{6}$/.test(m)&&ym2n(thisYm())-ym2n(m)>LEDGER_STALE_MONTHS;
+}
+/* まとめて採用してよい候補: 直近も出ていて、同じ単価が3ヶ月以上続き、8割以上がその単価、入れ替わり警告・食い違いなし */
+function ledgerIsStable(c){
+  if(c.status!=='pending'||c.type==='conflict'||/^⚠/.test(c.note||''))return false;
+  const to=ledgerLastSeenYm(c);
+  if(!/^\d{6}$/.test(to)||!/^\d{6}$/.test(c.month||'')||ledgerIsStale(c))return false;
+  if(ym2n(to)-ym2n(c.month)<2)return false;
+  return !!(c.total&&c.count>=3&&c.count/c.total>=0.8);
+}
 function normalizePending(){
   const lg=ledgerOf();const best={};
+  lg.changes=lg.changes.filter(c=>!(c.status==='pending'&&ledgerIsStale(c)));
   const mon=c=>String(c.src||'').replace(/^statement:/,'')+'|'+(c.month||'');
   lg.changes.forEach(c=>{
     if(c.status!=='pending'||!/^statement:/.test(c.src||'')||c.type==='conflict')return;
@@ -6112,6 +6129,7 @@ function learnFromHistory(rates){
     const note=(flip?'⚠ 月によって単価が入れ替わっています（プランや区分ごとに単価が違う可能性。採用前に明細で確認） ':'')
       +(prev?`${fmtYmJa(prev.from)}〜${fmtYmJa(prev.to)} は ${prev.price.toLocaleString()}円`:'');
     const rule=lg.rules[k];
+    if(ym2n(thisYm())-ym2n(cur.to)>LEDGER_STALE_MONTHS)return;   /* 取引が終わった組み合わせは推移だけ残す */
     if(!rule){
       const [p0,pa0]=k.split('|');const alt=lg.rules[rateKey(p0,pa0,'')];
       if(alt&&Number(alt.price)===cur.price)return;
@@ -6199,10 +6217,24 @@ async function ledgerDecideAll(accept){
   await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
   toast(`${ids.length}件を${accept?'採用':'却下'}しました`);
 }
+async function ledgerAcceptStable(){
+  const lg=ledgerOf();const list=lg.changes.filter(ledgerIsStable);
+  if(!list.length){toast('まとめて採用できる候補はありません');return}
+  if(!confirm(`同じ単価が3ヶ月以上続いている ${list.length}件を台帳に採用します。よろしいですか？`))return;
+  list.forEach(c=>{
+    ledgerSet(c.key,c.new,c.src,c.month||thisYm(),c.note);
+    const slot=S.memory.rates[c.key]||(S.memory.rates[c.key]={v:{},m:''});slot.fixed=Number(c.new);
+    c.status='accepted';c.decidedAt=new Date().toISOString();c.bulk=true;
+  });
+  await saveMemory();renderRates();renderLedgerBadge();syncLedgerSoon();
+  toast(`${list.length}件を採用しました。残りは1件ずつ確認してください`);
+}
 function renderLedgerChanges(){
   const host=document.getElementById('ledgerChanges');if(!host)return;
+  if(normalizePending())syncLedgerSoon();
   const lg=ledgerOf();
   const pend=lg.changes.filter(c=>c.status==='pending').sort((a,b)=>(b.month||'').localeCompare(a.month||''));
+  const stable=pend.filter(ledgerIsStable);
   const done=lg.changes.filter(c=>c.status!=='pending').slice(-8).reverse();
   if(!pend.length&&!done.length){host.innerHTML='';return}
   const typeLabel={new:'<span class="badge b-fill">新規</span>',changed:'<span class="badge b-warn">単価変更</span>',conflict:'<span class="badge b-alert">食い違い</span>'};
@@ -6215,7 +6247,8 @@ function renderLedgerChanges(){
   host.innerHTML=`<div class="patbox">
     <div class="pat-h">今月の変更点（確認待ち ${pend.length}件）</div>
     <div class="pat-n">支払明細書・WT明細を読み込んだ結果、台帳と違う単価や新しい組み合わせが見つかったものです。採用すると台帳に反映され、次回の突合から自動で使われます。</div>
-    ${pend.length?pend.map(row).join(''):'<div class="pat-sub">確認待ちはありません。</div>'}
+    ${stable.length?`<div class="pm-bar" style="flex-wrap:wrap;gap:8px;align-items:center"><button class="btn btn-sm" onclick="ledgerAcceptStable()">安定している ${stable.length}件をまとめて採用</button><span class="note">同じ単価が3ヶ月以上続き、8割以上がその単価のもの（入れ替わり・食い違いは除く）</span></div>`:''}
+    ${pend.length?pend.map(c=>ledgerIsStable(c)?row(c).replace('<div class="pat-label">','<div class="pat-label"><span class="badge b-ok">安定</span> '):row(c)).join(''):'<div class="pat-sub">確認待ちはありません。</div>'}
     ${pend.length>1?`<div class="pm-bar"><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(true)">すべて採用</button><button class="btn-ghost btn-sm" onclick="ledgerDecideAll(false)">すべて却下</button></div>`:''}
     ${done.length?`<details style="margin-top:14px"><summary class="note" style="cursor:pointer">最近の判断 ${done.length}件</summary>${done.map(c=>{const [p,pa,t]=c.key.split('|');return `<div class="pat-sub">${c.status==='accepted'?'✓ 採用':'✕ 却下'}: ${esc(p)} / ${esc(pa)} / ${esc(t)} ${Number(c.new).toLocaleString()}円${c.month?`（${fmtYmJa(c.month)}）`:''}</div>`}).join('')}</details>`:''}
   </div>`;
@@ -7214,7 +7247,7 @@ renderProdGrid();
   await loadBnData();
   renderStmtNeed();renderPayStatus();
   /* ルール台帳: 記憶を読み、スキル由来の初期値（rules.json）を取り込む */
-  try{await loadMemory();await applyRulesSeed();}catch(e){console.error('ledger seed',e)}
+  try{await loadMemory();await applyRulesSeed();if(normalizePending())await saveMemory();}catch(e){console.error('ledger seed',e)}
   finally{if(typeof _memReadyResolve==='function')_memReadyResolve()}
   renderLedgerBadge();
   /* Drive 同期（設定済みの端末だけ） */
