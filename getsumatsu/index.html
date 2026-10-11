@@ -3167,7 +3167,7 @@ function lineVariant(text){
    軸は ①条件一覧にある分を初期値 ②同じ パートナー×トス で単価が割れたら、割れ方を説明できる列を自動で足す（学習）
    ③台帳で外す・足す（手動が最優先） */
 const VARIANT_HDR=['プラン名','プラン','商材','商品名','サービス名','種別','建物種別','住居','タイプ','会員区分名称','コース','区分','申込区分','契約区分','工事区分','申込種別'];
-const AXIS_NAMES=['住居','速度','区分','タイプ','単体/セット','支払方法','アポ','プラン','所属','リスト','決済金額','ITSS','独自CP','ネット','電気','オプション'];
+const AXIS_NAMES=['住居','速度','区分','タイプ','単体/セット','支払方法','アポ','プラン','所属','リスト','決済金額','申込期','ITSS','独自CP','ネット','電気','オプション'];
 /* 担当者の所属先（2026-10 菊地さん「担当者の所属先、リスト、申込商材」）: 店舗名の列。無ければ担当者名 → 所属先
    （商材フロー「営業アカウント」= lg.staffCo と、店舗名と担当者が両方ある明細から Mac が学んだ対応 = mem.staffLearned） */
 function staffNorm(v){return String(v==null?'':v).normalize('NFKC').replace(/\s|FC用|（.*?）|\(.*?\)/g,'')}
@@ -3191,6 +3191,7 @@ function attrsOf(h,r,prod){
     if(/^(店舗名?|所属先?|獲得店舗名?)$/.test(n)&&!A['所属']&&(/^所属/.test(n)||/株式会社|合同会社|有限会社|Holdings|㈱/i.test(t)))A['所属']=axisNorm(t);
     if(/^(営業担当者?名?|担当者名?|営業者名?)$/.test(n)&&!A['_担当'])A['_担当']=t;
     if(/^(リスト\s*ID|リスト番号|リストNo)$/i.test(n)&&!A['リスト'])A['リスト']=axisNorm(t);
+    if(/^(申込日|申込年月日|契約日|獲得日|取次日|入会日|受付日|申込受付日)$/.test(n)&&!A['申込月']){const d=parseDate(v);if(d)A['申込月']=String(ymOfDate(d))}
     if(/^(決済金額|請求金額|課金額|課金金額|月額料金|利用料金|月額利用料)$/.test(n)&&!A['決済金額']){const b=billNorm(t);if(b&&b!=='0')A['決済金額']=b}
     if(/支払い?方法|決済方法/.test(n)&&!A['支払方法'])A['支払方法']=/クレ|カード/.test(t)?'クレカ':/口座|振替/.test(t)?'口座振替':/代引/.test(t)?'代引き':axisNorm(t);
     Object.entries(AXIS_HDR_RAW).forEach(([ax,re])=>{if(re.test(n)&&!A[ax])A[ax]=axisNorm(t)});
@@ -3216,7 +3217,7 @@ const AXES_SEED=[
   [/コスモウォーター/,['プラン','支払方法']],[/不動産/,['ネット','電気']]];
 /* オプション商材は 申込商材×支払方法×所属×リスト×決済金額 で単価が決まる（2026-10 菊地さん「どのオプション商材もこれを軸に」） */
 const OPTION_PRODUCT_RE=/月額ペイ|クラブペイ|^LS$|OTS|LPM|オタスケ|ライフサポート|Life365|月ネオ|コンテンツ|ショットOP|データトラブル|OPストック/i;
-const OPTION_AXES=['プラン','支払方法','所属','リスト','決済金額'];
+const OPTION_AXES=['プラン','支払方法','所属','リスト','決済金額','申込期'];
 function axesOf(product){
   const p=String(product||'').replace(/〔.*?〕$/,'');
   const lg=S.memory&&S.memory.ledger;const cfg=lg&&lg.axes&&lg.axes[p];
@@ -3230,7 +3231,12 @@ function variantFor(product,attrs,axes){
   axes=axes||axesOf(product);const a=attrs||{};
   /* リストは標準と違う単価のリストだけ番号で分ける（Mac が history.json で束ねた残り＝mem.listKeep） */
   const lk=S.memory&&S.memory.listKeep&&S.memory.listKeep[String(product||'').replace(/〔.*?〕$/,'')];
-  const val=x=>x==='リスト'&&a[x]?(lk&&!lk.includes(a[x])?'':'リスト'+a[x]):x==='決済金額'&&a[x]?'決済'+Number(a[x]).toLocaleString()+'円':a[x];
+  /* 申込日: 単価が切り替わった月（Mac が history.json で見つけた区切り = mem.periodCuts）で期間に分ける（2026-10 菊地さん） */
+  const cuts=S.memory&&S.memory.periodCuts&&S.memory.periodCuts[String(product||'').replace(/〔.*?〕$/,'')];
+  const per=()=>{if(a['申込期'])return a['申込期'];const m=a['申込月'];if(!m||!cuts||!cuts.length)return '';
+    const past=cuts.filter(c=>c<=m);const c=past.length?past[past.length-1]:null;
+    return c?`申込${c.slice(0,4)}/${c.slice(4)}〜`:`申込〜${cuts[0].slice(0,4)}/${cuts[0].slice(4)}前`};
+  const val=x=>x==='申込期'?per():x==='リスト'&&a[x]?(lk&&!lk.includes(a[x])?'':'リスト'+a[x]):x==='決済金額'&&a[x]?'決済'+Number(a[x]).toLocaleString()+'円':a[x];
   const v=axes.map(val).filter(Boolean).join('・');
   if(v||!isLineProduct(product))return v;
   return a['プラン']||'';    /* 回線で住居も速度も無い行（光電話・ルーターなどのオプション）は商品名そのものを区分にする */
@@ -7116,6 +7122,7 @@ function ratesFromAttr(ra){
 function applyHistory(h){
   const mem=S.memory||(S.memory=emptyMem());
   if(h.staffCo)mem.staffLearned=h.staffCo;
+  if(h.periodCuts)mem.periodCuts=h.periodCuts;
   if(h.ratesAttr){mem.ratesAttr=h.ratesAttr;ledgerOf().history={};
     const lk={};Object.entries(h.ratesAttr).forEach(([b,bs])=>{const p=b.split('|')[0].replace(/〔.*?〕$/,'');const st=lk[p]||(lk[p]=new Set());Object.keys(bs).forEach(sig=>{try{const v=JSON.parse(sig)['リスト'];if(v)st.add(v)}catch(e){}})});
     mem.listKeep={};Object.entries(lk).forEach(([p,st])=>mem.listKeep[p]=[...st]);}   /* 鍵の作り方が変わるので推移は作り直す */
@@ -7253,10 +7260,11 @@ function ledgerAxesHtml(){
   const pq=p=>esc(p).replace(/'/g,'&#39;');
   return `<div class="patbox"><details><summary class="pat-h" style="cursor:pointer">商材ごとの単価の軸 ${list.length}商材</summary>
     <div class="pat-n">同じパートナー・同じトスでも、ここに並んだ軸ごとに単価を分けて覚えます。単価が割れたときは、割れ方を説明できる列（区分・タイプ・支払方法など）を自動で足します（学習）。違うと思う軸は × で外してください。</div>
-    ${list.map(p=>{const ax=axesOf(p);const c=(lg.axes&&lg.axes[p])||{};const learned=c.learned||[];
+    ${list.map(p=>{const ax=axesOf(p);const c=(lg.axes&&lg.axes[p])||{};const learned=(c.learned||[]).filter(x=>!(OPTION_PRODUCT_RE.test(p)&&OPTION_AXES.includes(x)));
       const cols=new Set();Object.entries((S.memory&&S.memory.ratesAttr)||{}).forEach(([b,bs])=>{if(b.split('|')[0].replace(/〔.*?〕$/,'')!==p)return;Object.keys(bs).forEach(sig=>{try{Object.keys(JSON.parse(sig)).forEach(k=>cols.add(k))}catch(e){}})});
       const rest=AXIS_NAMES.filter(x=>cols.has(x)||!cols.size).concat([...cols].filter(x=>x.startsWith('#')).sort()).filter(x=>!ax.includes(x));
-      return `<div class="pat-row"><div class="pat-l"><div class="pat-label">${esc(p)} <span class="note">${src(p)}</span></div>
+      const cuts=(S.memory&&S.memory.periodCuts&&S.memory.periodCuts[p])||[];
+      return `<div class="pat-row"><div class="pat-l"><div class="pat-label">${esc(p)} <span class="note">${src(p)}${cuts.length&&ax.includes('申込期')?`　申込日の区切り: ${cuts.map(c=>c.slice(0,4)+'/'+c.slice(4)).join('・')}`:''}</span></div>
         <div class="pat-sub">${ax.length?ax.map(x=>`<span class="badge ${learned.includes(x)?'b-warn':'b-fill'}" style="margin-right:4px">${esc(axisLabel(x))}${learned.includes(x)?'（学習）':''} <a href="javascript:void 0" onclick="axisSet('${pq(p)}','${esc(x)}',false)" style="text-decoration:none">×</a></span>`).join(''):'軸なし（パートナー×トスだけで単価が決まる）'}</div></div>
         <div class="pat-r"><select class="btn-ghost btn-sm" onchange="if(this.value)axisSet('${pq(p)}',this.value,true)"><option value="">＋軸を足す</option>${rest.map(x=>`<option value="${esc(x)}">${esc(axisLabel(x))}</option>`).join('')}</select></div></div>`}).join('')}
   </details></div>`;
@@ -7364,7 +7372,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面16';
+const APP_BUILD='2026-10-12 新画面17';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
