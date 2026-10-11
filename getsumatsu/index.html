@@ -6418,7 +6418,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夕方版6';
+const APP_BUILD='2026-10-11 夕方版8';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6730,6 +6730,16 @@ async function syncNow(opts){
         const mem=S.memory||(S.memory=emptyMem());mem.payFill=r;await saveMemory();
         syncLog(`支払高推移: 空欄に ${r.filled.length}件を書き込みました（明細と違う ${r.diffs.length}件・シートに無い支払先 ${r.missing.length}件は書き換えていません）`);
       }catch(e){syncLog('支払高推移の自動入力: '+finErrText(e),'err')}
+    }
+    /* 売上明細書（PDF・エクセル）の候補金額 → 上位店ごとに一致する計算方法を覚えて「売上高推移」の空欄だけを埋める */
+    if(man.salesCand&&man.salesCand.sig&&man.salesCand.sig!==c.salesCandSig){
+      try{
+        const r=await syncPost({action:'fillSales'});
+        if(!r||!r.ok)throw new Error((r&&r.error)||'応答がありません');
+        c.salesCandSig=man.salesCand.sig;saveSyncCfg(c);
+        const mem=S.memory||(S.memory=emptyMem());mem.salesFill=r;await saveMemory();
+        syncLog(`売上高推移: 空欄に ${r.filled.length}件を書き込みました（計算方法が決まった上位店 ${Object.keys(r.learned||{}).length}社・明細と違う ${r.diffs.length}件は書き換えていません）`);
+      }catch(e){syncLog('売上高推移の自動入力: '+finErrText(e),'err')}
     }
     try{if(await syncFin(c,false)){sum.fin=1;syncLog('収支データ（スプレッドシート）を更新しました')}}
     catch(e){syncLog('収支データ: '+finErrText(e),'err')}
@@ -7181,6 +7191,22 @@ function finPayFillHtml(){
   if((r.noCover||[]).length)parts.push(`<details><summary class="note" style="cursor:pointer">表紙の合計が読めない明細 ${r.noCover.length}件（手入力のまま）</summary>${li(r.noCover,x=>esc(x))}</details>`);
   return `<div class="pm" style="margin:0 0 14px"><h3>支払明細書からの自動入力</h3><div class="pm-note">表紙の合計金額で、空いているセルだけを埋めます。入力済みのセルは書き換えません（1円以内の差は同じとみなします）。最終 ${esc(fmtWhen(r.at))}</div>${parts.join('')||'<div class="pat-sub">変更はありません</div>'}</div>`;
 }
+/* 売上明細書からの自動入力の結果（売上高推移のタブに出す） */
+function finSalesFillHtml(){
+  const r=S.memory&&S.memory.salesFill;if(!r)return '';
+  const ym=x=>fmtYmJa(x.month)||x.month,yen=v=>Number(v).toLocaleString()+'円';
+  const mj={pdf:'PDFの表紙',cover:'エクセルの表紙','rows_tax':'明細行×1.1',rows:'明細行の合計','pdf+cover':'PDF＋エクセル'};
+  const li=(arr,f)=>arr.map(x=>`<div class="pat-sub">${f(x)}</div>`).join('');
+  const lr=Object.entries(r.learned||{});
+  const parts=[];
+  if(r.filled.length)parts.push(`<details open><summary class="note" style="cursor:pointer">書き込んだ ${r.filled.length}件</summary>${li(r.filled,x=>`${esc(ym(x))} ${esc(x.partner)} ${yen(x.amount)}（${esc(mj[x.method]||x.method)}）`)}</details>`);
+  if(r.diffs.length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">明細と違う ${r.diffs.length}件（シートの値はそのまま）</summary>${li(r.diffs,x=>`${esc(ym(x))} ${esc(x.partner)}　シート ${yen(x.sheet)} ／ 明細 ${yen(x.amount)}`)}</details>`);
+  if((r.noCol||[]).length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">シートに月の列が無い ${r.noCol.length}件</summary><div class="pat-sub">売上高推移に ${esc([...new Set(r.noCol.map(ym))].join('・'))} の列を足すと、次の同期で書き込みます</div></details>`);
+  if(lr.length)parts.push(`<details><summary class="note" style="cursor:pointer">自動入力する上位店 ${lr.length}社</summary>${li(lr,([u,m])=>`${esc(u)}：${esc(mj[m]||m)}`)}</details>`);
+  const manual=[...(r.unlearned||[]),...(r.multi||[])];
+  if(manual.length)parts.push(`<details><summary class="note" style="cursor:pointer">手入力のままの上位店 ${manual.length}社</summary><div class="pat-sub">${esc(manual.join('・'))}</div><div class="pat-sub">計算方法が決まらない、またはシートの商材行が複数ある上位店です</div></details>`);
+  return `<div class="pm" style="margin:0 0 14px"><h3>売上明細書からの自動入力</h3><div class="pm-note">PDF・エクセルの表紙と明細行から、上位店ごとに過去2ヶ月続けてシートと一致した計算方法で、直近4ヶ月の空いているセルだけを埋めます。入力済みのセルは書き換えません。最終 ${esc(fmtWhen(r.at))}</div>${parts.join('')||'<div class="pat-sub">変更はありません</div>'}</div>`;
+}
 function renderFin(){
   const fd=S.memory&&S.memory.finSheets;
   const tabs=document.getElementById('finTabs'),tb=document.getElementById('finTable'),ch=document.getElementById('finChart'),meta=document.getElementById('finMeta'),lk=document.getElementById('finLink');
@@ -7193,7 +7219,7 @@ function renderFin(){
   const sh=(fd.sheets||[]).find(x=>x.name===S.finTab);
   if(!sh){tb.innerHTML='<div class="pm-note" style="padding:14px">このシートが見つかりません</div>';ch.innerHTML='';return}
   const m=finTrim(sh.display);
-  ch.innerHTML=finChartSvg(finSeries(sh.name,m))+(sh.name==='支払高推移'?finPayFillHtml():'');
+  ch.innerHTML=finChartSvg(finSeries(sh.name,m))+(sh.name==='支払高推移'?finPayFillHtml():sh.name==='売上高推移'?finSalesFillHtml():'');
   const hi=m.findIndex(r=>r.filter(finIsMonth).length>=3||(r.includes('売上高')&&r.includes('支出計')));
   const totRe=/合計|売上高|支払計|粗利|支出計|支払先会社名|前月比利益高/;
   const cell=(v,i,tag,sub)=>{const t=String(v);const num=finNum(t);
@@ -8390,7 +8416,11 @@ function renderIn(){
   const ym=B.month?fmtYmJa(B.month)+'度':'対象月';
   if(btn){
     btn.disabled=!n||B.busy>0;
-    btn.textContent=B.busy>0?'読み込み中…':!n?'ファイルを入れると実行できます'
+    /* 収納明細・支払明細書・記憶データ・XRM だけを入れたときは、その場で反映済み（突合する上位店明細が無いので実行は不要） */
+    const applied=(B.files||[]).filter(f=>['csv','pay','json','xrm'].includes(f.kind));
+    const kindJa={csv:'収納明細は収支推移',pay:'支払明細書は単価の記憶',json:'記憶データ',xrm:'XRM'};
+    const doneMsg=applied.length?`✓ ${[...new Set(applied.map(f=>kindJa[f.kind]))].join('・')}に反映済み（上位店の明細を入れると実行できます）`:'';
+    btn.textContent=B.busy>0?'読み込み中…':!n?(doneMsg||'ファイルを入れると実行できます')
       :(B.ran&&!todo.length?'✓ 実行済み → 結果を見る':`▶ ${ym}をまとめて実行（${todo.length<n?`追加分 ${todo.length} / `:''}${n}商材）`);
     btn.onclick=()=>{if(B.ran&&!todo.length)go(2);else runBatch()};
   }
