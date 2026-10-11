@@ -6418,7 +6418,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-11 夕方版8';
+const APP_BUILD='2026-10-11 夜版';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -6728,7 +6728,7 @@ async function syncNow(opts){
         if(!r||!r.ok)throw new Error((r&&r.error)||'応答がありません');
         c.paySig=man.payments.sig;saveSyncCfg(c);
         const mem=S.memory||(S.memory=emptyMem());mem.payFill=r;await saveMemory();
-        syncLog(`支払高推移: 空欄に ${r.filled.length}件を書き込みました（明細と違う ${r.diffs.length}件・シートに無い支払先 ${r.missing.length}件は書き換えていません）`);
+        syncLog(`支払高推移: ${(r.addedCols||[]).length?`${r.addedCols.map(fmtYmJa).join('・')}の列を足し、`:''}空欄に ${r.filled.length}件を書き込みました（明細と違う ${r.diffs.length}件・シートに無い支払先 ${r.missing.length}件は書き換えていません）`);
       }catch(e){syncLog('支払高推移の自動入力: '+finErrText(e),'err')}
     }
     /* 売上明細書（PDF・エクセル）の候補金額 → 上位店ごとに一致する計算方法を覚えて「売上高推移」の空欄だけを埋める */
@@ -6738,7 +6738,7 @@ async function syncNow(opts){
         if(!r||!r.ok)throw new Error((r&&r.error)||'応答がありません');
         c.salesCandSig=man.salesCand.sig;saveSyncCfg(c);
         const mem=S.memory||(S.memory=emptyMem());mem.salesFill=r;await saveMemory();
-        syncLog(`売上高推移: 空欄に ${r.filled.length}件を書き込みました（計算方法が決まった上位店 ${Object.keys(r.learned||{}).length}社・明細と違う ${r.diffs.length}件は書き換えていません）`);
+        syncLog(`売上高推移: ${(r.addedCols||[]).length?`${r.addedCols.map(fmtYmJa).join('・')}の列を足し、`:''}空欄に ${r.filled.length}件を書き込みました（計算方法が決まった上位店 ${Object.keys(r.learned||{}).length}社・明細と違う ${r.diffs.length}件は書き換えていません）`);
       }catch(e){syncLog('売上高推移の自動入力: '+finErrText(e),'err')}
     }
     try{if(await syncFin(c,false)){sum.fin=1;syncLog('収支データ（スプレッドシート）を更新しました')}}
@@ -7201,7 +7201,7 @@ function finSalesFillHtml(){
   const parts=[];
   if(r.filled.length)parts.push(`<details open><summary class="note" style="cursor:pointer">書き込んだ ${r.filled.length}件</summary>${li(r.filled,x=>`${esc(ym(x))} ${esc(x.partner)} ${yen(x.amount)}（${esc(mj[x.method]||x.method)}）`)}</details>`);
   if(r.diffs.length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">明細と違う ${r.diffs.length}件（シートの値はそのまま）</summary>${li(r.diffs,x=>`${esc(ym(x))} ${esc(x.partner)}　シート ${yen(x.sheet)} ／ 明細 ${yen(x.amount)}`)}</details>`);
-  if((r.noCol||[]).length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">シートに月の列が無い ${r.noCol.length}件</summary><div class="pat-sub">売上高推移に ${esc([...new Set(r.noCol.map(ym))].join('・'))} の列を足すと、次の同期で書き込みます</div></details>`);
+  if((r.noCol||[]).length)parts.push(`<details open><summary class="note" style="cursor:pointer;color:var(--warn)">シートに月の列が無い ${r.noCol.length}件</summary><div class="pat-sub">${esc([...new Set(r.noCol.map(ym))].join('・'))} の列は、前の月が無いため自動で足せませんでした（列は最後の月の次の月だけ自動で足します）</div></details>`);
   if(lr.length)parts.push(`<details><summary class="note" style="cursor:pointer">自動入力する上位店 ${lr.length}社</summary>${li(lr,([u,m])=>`${esc(u)}：${esc(mj[m]||m)}`)}</details>`);
   const manual=[...(r.unlearned||[]),...(r.multi||[])];
   if(manual.length)parts.push(`<details><summary class="note" style="cursor:pointer">手入力のままの上位店 ${manual.length}社</summary><div class="pat-sub">${esc(manual.join('・'))}</div><div class="pat-sub">計算方法が決まらない、またはシートの商材行が複数ある上位店です</div></details>`);
