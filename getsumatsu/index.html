@@ -2430,6 +2430,8 @@ async function loadSavedXrm(){
   try{
     const rec=await Store.get(XRM_KEY);
     if(!rec||!rec.data)return null;
+    /* iPhone などで同期を設定済みなら、保存済みの大きい xlsx は読まない（落ちるため）。同期が軽量版を取りに行く */
+    if(!rec.lite&&/iPhone|iPad|Android/i.test(navigator.userAgent)&&typeof syncCfg==='function'&&syncCfg().url)return null;
     const buf=new Uint8Array(rec.data);
     const wb=rec.lite?await liteFromGz(buf):XLSX.read(buf,{type:'array',cellDates:true});
     S.xrmWb=wb;S.xrmName=rec.name;S.xrmSavedAt=rec.savedAt;S.xrmStub=false;
@@ -6497,7 +6499,8 @@ async function syncNow(opts){
     const man=await syncGet({action:'manifest'});
     c.manifestAt=man.generatedAt||'';
     /* 1) XRM: 新しい版があれば取り込む */
-    if(man.xrm&&man.xrm.path&&(man.xrm.stamp!==c.xrmStamp||!S.xrmWb||S.xrmStub)){
+    const liteOk=man.xrm&&man.xrm.lite&&man.xrm.lite.v===2&&typeof DecompressionStream!=='undefined';
+    if(man.xrm&&man.xrm.path&&(man.xrm.stamp!==c.xrmStamp||!S.xrmWb||S.xrmStub||(liteOk&&!S.xrmWb.lite))){
       const lite=man.xrm.lite&&man.xrm.lite.v===2&&typeof DecompressionStream!=='undefined'?man.xrm.lite:null;
       syncLog(`XRM を取得しています（${man.xrm.name}・${Math.round(((lite||man.xrm).size||0)/1048576)}MB${lite?'・軽量版':''}）`);
       const f=await syncFile((lite||man.xrm).path,(p,n)=>syncSetBusy(true,`XRM ${p}/${n}`));
