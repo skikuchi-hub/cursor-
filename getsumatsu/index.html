@@ -818,8 +818,6 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
         <button onclick="menuGo(openFin)">収支データ（スプレッドシート）</button>
         <button onclick="menuGo(openTrend)">収支推移</button>
         <button onclick="menuGo(openRecov)">回収シミュレーション</button>
-        <button onclick="menuGo(openBoard)">未払いボード（旧）</button>
-        <button onclick="closeMenu();setSingle(true)">商材を1つだけ処理する（旧画面）</button>
       </div></div>
     <span hidden><button id="boardBtn"></button><button id="ratesBtn"></button><button id="finBtn"></button><button id="trendBtn"></button><button id="recovBtn"></button></span>
   </div>
@@ -7384,7 +7382,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面21';
+const APP_BUILD='2026-10-12 新画面22';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
