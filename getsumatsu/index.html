@@ -7506,7 +7506,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面34';
+const APP_BUILD='2026-10-12 新画面35';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10423,11 +10423,9 @@ function makeCarryModule(cfg){
       {const mc={};S.rows.forEach(r=>{if(r.carried&&!r.modo&&r.lastM)mc[r.lastM]=(mc[r.lastM]||0)+1});const top=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0];const tot=Object.values(mc).reduce((a,c)=>a+c,0);
         const cur=top&&top[1]>=20&&top[1]>=tot*0.5?top[0]:'';   /* 毎月払うストックの明細（引き継ぎの大半が同じ月）だけ */
         /* 菊地さん（2026-10-12）: 途中で払わなくなったお客様（4月度まで払い5〜9月度は払っていない・8月度まで払い9月度に抜けた）は、上位店明細に載っていても払わない */
-        /* 月額ペイだけ（LPM などは入金が1ヶ月遅れて翌月にまとめて払うことがある: 9月度 LPM 2件） */
+        /* 菊地さん（2026-10-12）: 月額ペイも含めて今までどおり払う（LPM などは入金が1ヶ月遅れて翌月にまとめて払うこともある）。2ヶ月以上あいた人だけ要確認の印 */
         if(cur)S.rows.forEach(r=>{if(!r.carried||r.modo||!r.lastM)return;
-          if(/月額ペイ/.test(r.product||'')&&r.lastM<cur){r.gap=true;r.price=0;r.state='ok';r.resolved=true;
-            r.why=`${fmtYmJa(r.lastM)}度を最後に払っていない（${fmtYmJa(cur)}度は払っていない）ので支払なし`}
-          else if(r.lastM<prevYm(cur)){r.state='warn';r.gap=true;r.why+=` / ${fmtYmJa(r.lastM)}度のあと ${fmtYmJa(cur)}度まで払っていません（再開なら払う・止めていたなら払わない）`}})}
+          if(r.lastM<prevYm(cur)){r.state='warn';r.gap=true;r.why+=` / ${fmtYmJa(r.lastM)}度のあと ${fmtYmJa(cur)}度まで払っていません（再開なら払う・止めていたなら払わない）`}})}
       /* 過去にも XRM にも無い新しいお客様でも、店舗コード（会社名ではない店舗アカウント）があれば、同じ明細の同じ店舗・同じ商品・同じ決済の種類のお客様の
          支払先と、契約日が新しい人の単価を当てる（9月度: 月額ペイ TK01 → CHAiNON 655/555/505/581円、クレカは 705/619/624/524円） */
       if(storeC>=0){
