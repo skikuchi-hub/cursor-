@@ -5795,6 +5795,22 @@ function reconFindTabs(job,lists){
   }));
   return out;
 }
+/* 名前でタブが決まらないとき: その月のタブを読み、内訳のお客様（電話番号・番号）と一番重なるタブを選ぶ（3割以上重なるとき） */
+async function reconGuessTabs(job,lists){
+  const ym=B.month||'';const keys=new Set();(job.rows||[]).forEach(r=>{const t=inqNorm(r.tel);if(t)keys.add(t);if(r.key)keys.add(String(r.key).trim());(r.keys||[]).forEach(k=>keys.add(String(k)))});
+  if(!keys.size)return [];
+  S._reconTabCache=S._reconTabCache||{};let best=null;
+  for(const b of lists)for(const s of b.sheets){
+    const mm=String(s.name).match(/^(\d{6})/);if(!mm||mm[1]!==ym||s.rows<2)continue;
+    const ck=b.id+'|'+s.name;let d=S._reconTabCache[ck];
+    if(!d){try{d=await syncGet({action:'book',id:b.id,sheet:s.name,all:1})}catch(e){continue}S._reconTabCache[ck]=d}
+    const disp=d.display||[];const h=(disp[0]||[]).map(x=>String(x||'').trim());
+    const cols=h.map((n,i)=>/電話|申込番号|受付番号|お客様番号|会員ID|ID$/.test(n)?i:-1).filter(i=>i>=0);if(!cols.length)continue;
+    let hit=0;disp.slice(1).forEach(r=>{if(cols.some(i=>{const v=String(r[i]||'').trim();return v&&(keys.has(v)||keys.has(inqNorm(v)))}))hit++});
+    if(hit&&(!best||hit>best.hit))best={book:b,name:s.name,rows:s.rows,hit};
+  }
+  return best&&best.hit>=Math.max(keys.size<=3?1:3,keys.size*0.3)?[{book:best.book,name:best.name,rows:best.rows,guessed:true}]:[];
+}
 function reconCompare(job,disp){
   const h=(disp[0]||[]).map(x=>String(x||'').trim());
   const ci=(names)=>{for(const n of names){const i=h.indexOf(n);if(i>=0)return i}return -1};
@@ -5839,7 +5855,9 @@ async function runRecon(){
   for(const group of Object.values(byKey)){
     const job=group.length===1?group[0]:{...group[0],rows:group.flatMap(j=>j.rows||[]),name:group.map(j=>j.name).join(' ＋ ')};
     const na=ansGet('recon','tab:'+job.key);if(na&&na.none)continue;
-    const tabs=reconFindTabs(job,lists);
+    let tabs=reconFindTabs(job,lists);
+    if(!tabs.length){el.innerHTML=`<p class="note">「${esc(productOf(MODULES[job.key]))}」のタブをお客様の番号で探しています…</p>`;tabs=await reconGuessTabs(job,lists);
+      if(tabs.length&&MODULES[job.key]&&!MODULES[job.key].carry)await ansPut('recon','tab:'+job.key,{tail:reconTail(tabs[0].name),label:tabs[0].name,at:new Date().toISOString()})}
     if(!tabs.length){results.push({job,pick:true,err:`${fmtYmJa(B.month)}の「${productOf(MODULES[job.key])}【${vendorOf(MODULES[job.key])}】」にあたるタブが見つかりません。下で選ぶと次の月から自動で使います`});continue}
     for(const t of tabs){
       try{const d=await syncGet({action:'book',id:t.book.id,sheet:t.name,all:1});
@@ -7398,7 +7416,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面31';
+const APP_BUILD='2026-10-12 新画面32';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9965,7 +9983,7 @@ async function taughtPrepare(jobs){
     const tabs=[];lists.forEach(b=>b.sheets.forEach(s=>{const mm=String(s.name).match(/^(\d{6})/);if(mm&&reconTail(s.name)===tail&&s.rows>1&&mm[1]<=(B.month||'999999'))tabs.push({book:b,name:s.name,ym:mm[1]})}));
     tabs.sort((a,b)=>b.ym.localeCompare(a.ym));const use=tabs.slice(0,TAUGHT_MONTHS);
     let prev=mem.taught[tail]||{map:{},loose:{},seen:[],n:0};prev.seen=prev.seen||[];
-    if(prev.v!==2)prev={map:{},loose:{},seen:[],n:0};   /* 覚え方を変えた（上位店の金額ごとの単価）ので覚え直す */
+    if(prev.v!==3)prev={map:{},loose:{},seen:[],n:0};   /* 覚え方を変えた（上位店の金額ごとの単価）ので覚え直す */
     const fresh=use.filter(t=>!prev.seen.includes(t.book.name+':'+t.name));
     if(!fresh.length&&Object.keys(prev.map||{}).length)continue;
     const xmap=xrmPhoneMap(S.xrmWb,m.xrmSheets);const nmap=xrmNameMap(S.xrmWb,m.xrmSheets);const map=prev.map||{},loose=prev.loose||{};let n=0;
@@ -9974,15 +9992,19 @@ async function taughtPrepare(jobs){
       const h=(d.display&&d.display[0]||[]).map(x=>String(x||'').trim());
       const tc=m.tabCols||{};const ix=(names,def)=>{for(const n of (names||[]).concat(def)){const i=h.indexOf(n);if(i>=0)return i}return -1};
       const iT=ix(tc.tel,['電話番号']),iN=ix(tc.name,['氏名']),iI=ix(tc.item,['商材']),iF=ix(tc.fee,['支払手数料']),iP=ix(tc.partner,['パートナー名']),iU=tc.up?ix(tc.up,[]):-1;if((iT<0&&iN<0)||iI<0||iF<0)continue;
-      (d.display||[]).slice(1).forEach(r=>{const tel=iT>=0?normPhone(r[iT]):'';const fee=reconYen(r[iF]);if(fee==null||fee<0)return;
-        const x=(tel&&xmap.get(tel))||(iN>=0?nmap.get(nameKey(r[iN])):null);if(!tel&&!x&&!r[iP])return;const partner=x?x.partner:String(r[iP]||'');const toss=x?x.toss:'';
+      (d.display||[]).slice(1).forEach(r=>{
+        /* 電話番号と氏名の列の中身が入れ替わっているタブがある（@nifty アライアンス）: 電話番号らしい方を電話番号として使う */
+        let tel=iT>=0?normPhone(r[iT]):'';let nmv=iN>=0?r[iN]:'';
+        if(!(tel&&tel.length>=10)&&iN>=0){const t2=normPhone(r[iN]);if(t2&&t2.length>=10){tel=t2;nmv=iT>=0?r[iT]:''}}
+        const fee=reconYen(r[iF]);if(fee==null||fee<0)return;
+        const x=(tel&&xmap.get(tel))||(nmv?nmap.get(nameKey(nmv)):null);if(!tel&&!x&&!r[iP])return;const partner=x?x.partner:String(r[iP]||'');const toss=x?x.toss:'';
         if(!partner||/該当なし/.test(partner))return;
         const k=taughtKey(partner,toss,r[iI]),k2=[reconNorm(partner),String(r[iI]||'').replace(/\s/g,'')].join('|');
         (map[k]=map[k]||{})[fee]=(map[k][fee]||0)+1;(loose[k2]=loose[k2]||{})[fee]=(loose[k2][fee]||0)+1;n++;
         /* 上位店の金額ごとの単価（@nifty: 上位店 58,000 → 53,000 のように、同じ項目でも上位店の金額で支払が変わる） */
         if(iU>=0){const u=reconYen(r[iU]);if(u!=null){const ku=k+'@'+Math.round(u);(map[ku]=map[ku]||{})[fee]=(map[ku][fee]||0)+1}}});
     }
-    mem.taught[tail]={v:2,map,loose,n:(prev.n||0)+n,seen:prev.seen.concat(fresh.map(t=>t.book.name+':'+t.name)).slice(-24),at:new Date().toISOString(),tabs:[...new Set((prev.tabs||[]).concat(fresh.map(t=>t.name)))].slice(-12)};
+    mem.taught[tail]={v:3,map,loose,n:(prev.n||0)+n,seen:prev.seen.concat(fresh.map(t=>t.book.name+':'+t.name)).slice(-24),at:new Date().toISOString(),tabs:[...new Set((prev.tabs||[]).concat(fresh.map(t=>t.name)))].slice(-12)};
     progLine(`明細一覧「${tail}」の ${fresh.map(t=>t.name.slice(0,6)).join('・')} から単価を覚えました（${n}件・合計 ${Object.keys(map).length}通り）`);
   }
   await saveMemory();
@@ -10141,11 +10163,11 @@ function carryHist(keys){
   return out;
 }
 /* 項目ごとに単価が違う明細は、明細一覧のタブから パートナー×項目 の単価を覚えて当てる（2026-10: OwlEye のインターネット回線） */
-const CARRY_TABS=[[/インターネット/,'auひかり【株式会社OwlEye】',{name:['契約名義'],item:['プラン名'],tel:['電話番号'],up:['上位店入金額']},['項目']],
-  [/@nifty|ニフティ/,'@nifty光【アライアンス・テクノロジー】',{name:['契約者名'],item:['対象サービス'],tel:['電話番号'],up:['上位店入金額']},['対象サービス']]];
+const CARRY_TABS=[[/インターネット/,'auひかり【株式会社OwlEye】',{name:['契約名義'],item:['プラン名'],tel:['電話番号'],up:['上位店入金額']},['項目'],['auひかり','auひかり（ISP：BIGLOBE光）','auひかり（ISP：So-net光）']],
+  [/@nifty|ニフティ/,'@nifty光【アライアンス・テクノロジー】',{name:['契約者名'],item:['対象サービス'],tel:['電話番号'],up:['上位店入金額']},['対象サービス'],['＠nifty光','＠nifty光（D）','＠nifty光（R）','@nifty光（U）']]];
 function makeCarryModule(cfg){
   const tab=CARRY_TABS.find(([re])=>re.test(String(cfg.fname).normalize('NFC')));
-  return {taughtTail:tab?tab[1]:null,tabCols:tab?tab[2]:null,
+  return {taughtTail:tab?tab[1]:null,tabCols:tab?tab[2]:null,xrmSheets:tab?tab[4]:[],
     title:`${cfg.product||cfg.sheet}/${cfg.vendor||'上位店'}`,src:`${cfg.fname}「${cfg.sheet}」`,wtProduct:cfg.product||cfg.sheet,carry:true,noXrm:true,hidden:true,   /* hidden: 他のファイルの同名シートで誤って検出しないように */
     desc:'専用の処理が無い明細を、お客様ごとに過去の支払明細で最後に払った支払先・単価で引き継ぎます。過去に払っていないお客様は XRM の支払先と台帳の単価。戻入は払った分を全額マイナス。',
     hint1:'',amountLabel:'支払見込',alertLabel:'支払先・単価が決まらない',prices:[],pmNote:'過去の支払明細から引き継ぎます',
@@ -10262,7 +10284,8 @@ function makeOffsetModule(cfg){
     buildWb(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['相殺通知書','渡し先','支払','根拠']].concat(S.rows.map(r=>[r.sheet,r.payTo,r.price,r.why]))),'相殺');return wb}};
 }
 /* アプリで内訳を作らない明細（2026-10 菊地さん）: 直販で支払いが無いもの、担当者が別に処理するもの */
-const CARRY_SKIP_FILES=[[/エイチエナジー手数料明細書/,'エイチエナジー（SEILAN）は石原さんが処理するので対象外'],[/SB法人携帯|携帯詳細|【2312】.*詳細/,'法人携帯は直販で支払いが無いので対象外'],[/スマートサブスクライブ/,'スマートサブスクライブは直販で支払いが無いので対象外']];
+const CARRY_SKIP_FILES=[[/疑義|ご確認依頼/,'上位店からの確認依頼の一覧（支払の明細ではない）'],[/MatoPass.*課金明細/i,'MatoPass の課金明細（ショット先出OPの実績として収支データで使う）'],
+  [/エイチエナジー手数料明細書/,'エイチエナジー（SEILAN）は石原さんが処理するので対象外'],[/SB法人携帯|携帯詳細|【2312】.*詳細/,'法人携帯は直販で支払いが無いので対象外'],[/スマートサブスクライブ/,'スマートサブスクライブは直販で支払いが無いので対象外']];
 function carrySkipReason(name,wb){const n=String(name).normalize('NFC')+' '+((wb&&wb.SheetNames)||[]).join(' ');const r=CARRY_SKIP_FILES.find(([re])=>re.test(n));return r?r[1]:''}
 /* 専用の処理が無い明細: 番号の列があるシートごとに汎用の読み込みを用意する */
 function carryDetect(wb,name){
