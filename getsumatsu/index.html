@@ -66,7 +66,7 @@ header{
   display:flex;align-items:center;gap:20px;flex-wrap:wrap;
   padding:20px 40px;border-bottom:1px solid var(--line);
   background:rgba(255,255,255,.78);backdrop-filter:blur(24px) saturate(1.4);
-  position:sticky;top:0;z-index:40;
+  position:sticky;top:0;z-index:50;   /* ステッパー（z-index 40）より上に。「その他」メニューがステッパーやカードの下に潜らないように */
 }
 header::after{
   content:'';position:absolute;left:0;right:0;bottom:-1px;height:1px;
@@ -93,7 +93,7 @@ header::after{
 .tab-n{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--alert);color:#fff;font-size:11px;font-weight:600;line-height:18px;text-align:center;font-variant-numeric:tabular-nums}
 .tab-n:empty{display:none}
 .menu{position:relative}
-.menu-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:240px;display:flex;flex-direction:column;padding:6px;
+.menu-pop{position:absolute;right:0;top:calc(100% + 8px);z-index:60;min-width:240px;max-width:calc(100vw - 32px);max-height:calc(100vh - 140px);overflow-y:auto;display:flex;flex-direction:column;padding:6px;
   background:var(--surface);border:1px solid var(--line-2);border-radius:12px;box-shadow:var(--sh-3)}
 .menu-pop[hidden]{display:none}
 .menu-pop button{appearance:none;border:0;background:transparent;text-align:left;font:inherit;font-size:14px;color:var(--txt);padding:10px 12px;border-radius:8px}
@@ -456,7 +456,7 @@ tr.r-alert:hover td{background:rgba(217,45,32,.13)}
 }
 
 @media(max-width:640px){
-  header{padding:14px 16px;gap:10px;position:static}
+  header{padding:14px 16px;gap:10px;position:relative;z-index:50}
   .logo{font-size:11px;letter-spacing:.2em}
   .hd-tag{font-size:9px;padding:2px 8px}
   .hd-right{font-size:9.5px}
@@ -7384,7 +7384,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面20';
+const APP_BUILD='2026-10-12 新画面21';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
