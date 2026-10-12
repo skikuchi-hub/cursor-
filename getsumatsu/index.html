@@ -815,7 +815,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
     <div class="menu"><button class="boardbtn" onclick="toggleMenu(event)" aria-haspopup="true">その他 ▾</button>
       <div class="menu-pop" id="hdMenu" hidden>
         <button onclick="menuGo(openRates)">ルール台帳・覚えた答え</button>
-        <button onclick="menuGo(openFin)">収支データ（スプレッドシート）</button>
+        <button onclick="menuGo(openFin)">収支データ</button>
         <button onclick="menuGo(openTrend)">収支推移</button>
         <button onclick="menuGo(openRecov)">回収シミュレーション</button>
       </div></div>
@@ -7382,7 +7382,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面22';
+const APP_BUILD='2026-10-12 新画面23';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7748,7 +7748,7 @@ async function syncNow(opts){
           const lg=ledgerOf();if(JSON.stringify(lg.staffCo||{})!==JSON.stringify(m)){lg.staffCo=m;await saveMemory();syncLedgerSoon();syncLog(`担当者の所属先 ${Object.keys(m).length}人分を取り込みました（商材フロー「営業アカウント」）`)}}
       }
     }catch(e){console.warn('営業アカウント',e)}
-    syncProg(96,97,0.5,'収支データ（スプレッドシート）を確認しています');
+    syncProg(96,97,0.5,'収支データを確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
     if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
       try{
@@ -7769,7 +7769,7 @@ async function syncNow(opts){
         syncLog(`売上高推移: ${(r.addedCols||[]).length?`${r.addedCols.map(fmtYmJa).join('・')}の列を足し、`:''}空欄に ${r.filled.length}件を書き込みました（計算方法が決まった上位店 ${Object.keys(r.learned||{}).length}社・明細と違う ${r.diffs.length}件は書き換えていません）`);
       }catch(e){syncLog('売上高推移の自動入力: '+finErrText(e),'err')}
     }
-    try{if(await syncFin(c,false)){sum.fin=1;syncLog('収支データ（スプレッドシート）を更新しました')}}
+    try{if(await syncFin(c,false)){sum.fin=1;syncLog('収支データを更新しました')}}
     catch(e){syncLog('収支データ: '+finErrText(e),'err')}
     syncProg(96,98,1,'ルール台帳をまとめています');
     /* 5) ルール台帳: Drive の台帳とまとめて、結果を送り返す */
