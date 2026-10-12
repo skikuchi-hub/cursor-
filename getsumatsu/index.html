@@ -3217,6 +3217,7 @@ const AXES_SEED=[
   [/コスモウォーター/,['プラン','支払方法']],[/不動産/,['ネット','電気']]];
 /* オプション商材は 申込商材×支払方法×所属×リスト×決済金額 で単価が決まる（2026-10 菊地さん「どのオプション商材もこれを軸に」） */
 const OPTION_PRODUCT_RE=/月額ペイ|クラブペイ|^LS$|OTS|LPM|オタスケ|ライフサポート|Life365|月ネオ|コンテンツ|ショットOP|データトラブル|OPストック/i;
+const PRODUCT_ALIAS={'LS':'ライフサポート'};   /* 同じ商材の別名（2026-10 菊地さん「LS=ライフサポート」） */
 const OPTION_AXES=['プラン','支払方法','所属','リスト','決済金額','申込期'];
 function axesOf(product){
   const p=String(product||'').replace(/〔.*?〕$/,'');
@@ -3304,6 +3305,11 @@ async function setFixedRate(product,partner,toss,amount){
 }
 /* 学習済み単価を引く: {amount,count,distinct,month,samples,fixed} */
 /* 上位店明細の行から軸の材料を読む（見出し行は先頭10行のうち文字の列がいちばん多い行） */
+function xrmHeaderOf(sn){
+  S._xrmHdr=S._xrmHdr||{};if(S._xrmHdr.wb!==S.xrmWb)S._xrmHdr={wb:S.xrmWb};
+  if(!S._xrmHdr[sn]){const ws=S.xrmWb&&S.xrmWb.Sheets[sn];S._xrmHdr[sn]=ws?(XLSX.utils.sheet_to_json(ws,{header:1,defval:null,range:0})[0]||[]):[]}
+  return S._xrmHdr[sn];
+}
 function upAttrsOf(r,product){
   if(!S.meisaiWb||!S.meisaiSheet||!r||!r.sheetRow)return null;
   if(!S._upRaw||S._upRaw.wb!==S.meisaiWb||S._upRaw.sheet!==S.meisaiSheet){
@@ -3350,7 +3356,12 @@ function applyLearnedRates(){
   S.rows.forEach(r=>{
     if(r.resolved||r.price!=null||!r.x)return;
     if(!m.pricePattern(r))return;
-    const lr=learnedRate(m.wtProduct,r.x.partner,r.x.toss,variantFor(m.wtProduct,upAttrsOf(r,m.wtProduct)||{}));
+    /* 上位店明細に無いリスト・所属・申込日は、突合した XRM の行から埋める（2026-10 菊地さん） */
+    const ua=upAttrsOf(r,m.wtProduct)||{};
+    if(!ua['リスト']&&r.x.listId)ua['リスト']=axisNorm(r.x.listId);
+    if(!ua['所属']&&r.x.partner)ua['所属']=axisNorm(r.x.partner);
+    if(!ua['申込月']&&r.x.raw&&r.x.sheet){const i=findCol(xrmHeaderOf(r.x.sheet),['申込日']);const d=i>=0?parseDate(r.x.raw[i]):null;if(d)ua['申込月']=String(ymOfDate(d))}
+    const lr=learnedRate(m.wtProduct,r.x.partner,r.x.toss,variantFor(m.wtProduct,ua));
     if(!lr)return;
     if(!lr.fixed&&(lr.distinct!==1||lr.count<2))return; /* 確定単価以外は、金額がブレる組合せを自動適用しない */
     r.price=r.modo?-lr.amount:lr.amount;
@@ -4425,7 +4436,7 @@ function paySheetStd(rows,sn,month,fileName){
       /* 手数料の内訳（取次・アポ・郵送 等）とトス会社も保持する */
       let toss='',ti=-1;
       if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;ti=c;break}}}
-      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,attrs:attrsOf(h,r,prod),
+      out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:PRODUCT_ALIAS[prod]||prod,toss,attrs:attrsOf(h,r,prod),
         partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
         fees:pickFees(h,r),
         name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -4505,7 +4516,7 @@ function paySheetExt(rows,sn,month,fileName){
     const modo=/請求/.test(kubun)||/戻入/.test(item)||/戻入/.test(sn);
     let toss='';
     if(cTossHdr>=0){for(const c of [cTossHdr,cTossHdr+1,cTossHdr+2]){const v=isCompanyCell(r[c]);if(v){toss=v;break}}}
-    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:prod,toss,attrs:attrsOf(h,r,prod),
+    out.push({tel,app,amount:amt,abs:Math.abs(amt),paid:amt,modo,product:PRODUCT_ALIAS[prod]||prod,toss,attrs:attrsOf(h,r,prod),
       partner:cPar>=0?(isCompanyCell(r[cPar])||''):'',
       fees:null,ext:true,
       name:cName>=0?clean(r[cName]):'',month,file:fileName,sheet:sn});
@@ -7372,7 +7383,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面17';
+const APP_BUILD='2026-10-12 新画面18';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
