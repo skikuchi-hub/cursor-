@@ -1124,7 +1124,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
 <!-- ============ 回収シミュレーション ============ -->
 <section class="screen" id="scRecov">
   <h1>ストック先出し 回収シミュレーション</h1>
-  <p class="sub">サブセレ/ブランニューのストック収益をショット化して先出しした支払いを、月々のストック入金（税抜）でどこまで回収できているかを獲得月コホートごとに追跡します。毎月の明細を処理してxlsxをダウンロードすると自動で記録されます。</p>
+  <p class="sub">サブセレ/ブランニューのストック収益をショット化して先出しした支払いを、月々のストック入金（税抜）でどこまで回収できているかを獲得月コホートごとに追跡します。毎朝の同期で、Drive の売上明細書（ストックシート）と支払明細書から自動で作ります（アップロード・ダウンロードは不要）。</p>
   <div id="recovBody"></div>
   <div class="footer-nav">
     <button class="btn-ghost" onclick="closeRecov()">← 処理画面に戻る</button>
@@ -2339,7 +2339,8 @@ const MODULES = {
         {name:'Wetopia株式会社',count:wt.length,amt:wt.length*num('p_wt5'),rows:wt,sub:`自社a-pa1のWTトス（受信日時突合） × ${yen(num('p_wt5'))}`},
         {name:'Exploration Holdings（自社）',count:ex.length,amt:null,noPay:true,rows:ex,sub:'トスなし・支払なし'},
         {name:'株式会社ブランニュー（参考）',count:bn.length,amt:null,noPay:true,rows:bn,sub:'a-pa2・別スタッフ処理'}
-      ].concat(other.length?[{name:'その他（手動確定分）',count:other.length,amt:other.reduce((a,r)=>a+r.price,0),rows:other,sub:'要確認から確定した分'}]:[])
+      ].concat(Object.entries(feeBy).map(([n,rs])=>({name:n,count:rs.length,amt:rs.reduce((a,r)=>a+r.price,0),rows:rs,sub:`リスト代（エネポート対象リストの客 ${rs.length}人）`})))
+     .concat(other.length?[{name:'その他（手動確定分）',count:other.length,amt:other.reduce((a,r)=>a+r.price,0),rows:other,sub:'要確認から確定した分'}]:[])
        .filter(p=>p.count>0);
       S.checks=[
         {ok:true,txt:`承認件数(${S.rows.filter(r=>!r.hold).length}) = Crescere(${cre.length}) + ASH(${ash.length}) + Alt(${alt.length}) + WTトス(${wt.length}) + 自社(${ex.length}) + BN参考(${bn.length}) + 対象外(${dyn.length}) + その他(${other.length})`},
@@ -2824,7 +2825,8 @@ function applyModoFull(){
     let hit=null;
     if(ph&&ph.by)for(const k of [r.tel,r.key,r.x&&r.x.app].filter(Boolean)){
       const arr=ph.by[inqNorm(k)]||ph.by[String(k)];if(!arr)continue;
-      arr.forEach(e=>{const pn=reconNorm(ph.products[e[0]]||'');if(names.some(p=>pn&&(pn.includes(p)||p.includes(pn)))&&(!hit||e[1]>hit.a))hit={a:Number(e[1]),m:e[2],partner:e[3]}});
+      const mine=r.payTo?arr.filter(e=>reconNorm(e[6]||e[3]||'')===reconNorm(reconPartner(r.payTo))):[];   /* 支払先ごとに残している（本体と OP）ので、その行の支払先に払った額を優先 */
+      (mine.length?mine:arr).forEach(e=>{const pn=reconNorm(ph.products[e[0]]||'');if(names.some(p=>pn&&(pn.includes(p)||p.includes(pn)))&&(!hit||e[1]>hit.a))hit={a:Number(e[1]),m:e[2],partner:e[6]||e[3]}});
       if(hit)break;
     }
     const wt=/Wetopia/.test(r.payTo||'');
@@ -6131,6 +6133,8 @@ async function clearBoardPaid(){
      支払漏れタブは今回分として取り込み「前月漏れ分」を明記（2026-08-26確定）
    会員IDはコンテンツ略称付きで一意化（KM/SS/DR/MM/LS24/LSP/KD/VB）
 ========================================================= */
+/* エネポート対象リスト（スキル brandnew-meisai-processing・crescere-affiliate-processing と共通の13リスト） */
+const BN_ENE_LISTS=['1981','1983','1990','2026','2049','2052','2097','2114','2115','2144','2182','2265','2305'];
 const BN_ABBR={'クマモリ':'KM','スマホ安心サポート':'SS','データ復旧サービス':'DR','まもるん':'MM',
   'ライフサポート24':'LS24','ライフサポートパック':'LSP','家電回収サービス':'KD',
   'ウイルスバスターマルチデバイス':'VB'};
@@ -6215,6 +6219,9 @@ MODULES.subsele={
         row.why=`${m0.kind}: ${fmtYm(paidYm)}に先出し支払済 → 今回支払なし`;
         return row;
       }
+      /* 同じ明細の中で同じお客様・同じコンテンツが ショット と ストック の両方にあれば1回だけ払う（ストックで入金があってもパートナーへはショットで1回だけ。2026-10 菊地さん） */
+      S._bnSeen=S._bnSeen&&S._bnSeen.run===S.meisaiName?S._bnSeen:{run:S.meisaiName,set:new Set()};
+      if(S._bnSeen.set.has(bkey)){row.skip=true;row.price=0;row.why=`${m0.kind}: 同じ明細の別のシートで払うので今回は支払なし（1回だけ）`;return row}
       /* 過去の支払明細（ショットOP タブ。会員ID＋コンテンツ略称）で払っていれば、今回は払わない（ストックの先出し済み・二重払い防止） */
       {const ph=S.memory&&S.memory.paidHist;const sh=k=>((ph&&ph.by&&ph.by[k])||[]).filter(e=>/ショット/.test(ph.products[e[0]]||'')&&e[1]>0);   /* history.json は過去の月の明細だけ */
         const hs=sh(m0.lmp+'_'+bnAbbr(m0.content)).length?sh(m0.lmp+'_'+bnAbbr(m0.content)):sh(m0.lmp);
@@ -6242,14 +6249,27 @@ MODULES.subsele={
         row.state='alert';row.resolved=false;
         row.why=`${m0.kind}: 法人名「${m0.corp}」（未知）→ 支払先・単価を確認`;
       }
+      if(row.price>0&&!row.skip)S._bnSeen.set.add(bkey);
       return row;
     });
-    /* リストごとに単価が違う（9月度: Wetopia のリスト 2026・1981・2049 は 1,700円）: 過去の支払明細で そのパートナー×リスト に払った単価があればそれを使う */
-    {const X=xrmAllIndex();let nl=0;
-      S.rows.forEach(r=>{if(r.skip||!r.resolved||!(r.price>0)||!r.payTo)return;const x=X.get(String(r.lmp).replace(/_[A-Z0-9]{1,5}$/,''));if(!x||!x.listId)return;
-        const lr=listRateFor('ショットOP',r.payTo,x.listId,r.date?`${r.date.getFullYear()}${String(r.date.getMonth()+1).padStart(2,'0')}`:'');if(!lr||lr.amount===r.price)return;
-        r.why+=` → リスト${x.listId}は ${lr.amount.toLocaleString()}円（${fmtYmJa(lr.m)}度の明細 ${lr.n}件）`;r.price=lr.amount;nl++});
-      if(nl)progLine(`リスト別の単価を当てた行 ${nl}件`)}
+    /* スキル brandnew-meisai-processing（2026-09 菊地さん確認）:
+       ・Wetopia はエネポート対象リスト（13リスト）の客は 1,700円（その客の全コンテンツ行）。それ以外のリストで過去の明細に別の単価があればそれ
+       ・リスト代: エネポート対象リストの客は 客ごとに エネポート株式会社 4,000円 ＋ 株式会社KAISEI 6,000円（ショット分。LEF_2 の自社案件も対象） */
+    {const X=xrmAllIndex();let nl=0;const ENE=new Set(BN_ENE_LISTS);const fee=new Map();
+      S.rows.forEach(r=>{const x=X.get(String(r.lmp).replace(/_[A-Z0-9]{1,5}$/,''));r.listId=x&&x.listId||'';if(x)r.xtel=x.tel||'';
+        if(r.skip||!r.resolved||!r.listId)return;
+        if(ENE.has(String(r.listId))&&r.kind!=='ストック'&&!fee.has(r.lmp))fee.set(r.lmp,r);
+        if(!(r.price>0)||!r.payTo)return;
+        if(r.payTo==='Wetopia株式会社'&&ENE.has(String(r.listId))){if(r.price!==1700){r.why+=` → エネポート対象リスト${r.listId}の客は 1,700円`;r.price=1700;nl++}return}
+        const lr=listRateFor('ショットOP',r.payTo,r.listId,r.date?`${r.date.getFullYear()}${String(r.date.getMonth()+1).padStart(2,'0')}`:'');if(!lr||lr.amount===r.price)return;
+        r.why+=` → リスト${r.listId}は ${lr.amount.toLocaleString()}円（${fmtYmJa(lr.m)}度の明細 ${lr.n}件）`;r.price=lr.amount;nl++});
+      if(nl)progLine(`リスト別の単価を当てた行 ${nl}件`);
+      /* 過去の明細でリスト代を払った客は払わない */
+      const ph=S.memory&&S.memory.paidHist;const paidFee=k=>!!(ph&&ph.by&&k&&(ph.by[normPhone(k)]||ph.by[k]||[]).some(e=>/^OP/.test(ph.products[e[0]]||'')&&/エネポート|KAISEI/.test(e[6]||e[3]||'')));
+      const add=[];fee.forEach((r,lmp)=>{if(paidFee(r.xtel)||paidFee(lmp))return;
+        [['エネポート株式会社','OP',4000],['株式会社KAISEI','OP_エネ',6000]].forEach(([pt,pr,a])=>add.push({i:0,kind:'リスト代',corp:r.corp,content:'（客ごと）',lmp,tel:r.xtel?normPhone(r.xtel):'',date:r.date,state:'ok',resolved:true,price:a,payTo:pt,product:pr,listFee:true,name:lmp,x:{},
+          why:`リスト代: エネポート対象リスト${r.listId}の客 → ${pt} ${a.toLocaleString()}円（客ごと・${r.corp}）`}))});
+      if(add.length){S.rows=S.rows.concat(add);S.rows.forEach((r,i)=>r.i=i+1);progLine(`リスト代: エネポート対象リストの客 ${add.length/2}人 → エネポート 4,000円＋KAISEI 6,000円`)}}
     progLine(`振り分け: Wetopia ${S.rows.filter(r=>r.payTo==='Wetopia株式会社').length}件 / EX自社 ${S.rows.filter(r=>r.payTo.startsWith('Exploration')).length}件 / 要確認 ${S.rows.filter(r=>r.state==='alert').length}件`);
   },
   tableRow:r=>[r.i,badge(r.state),esc(r.kind),fmtDate(r.date),esc(r.lmp),esc(r.content||'—'),
@@ -6267,7 +6287,8 @@ MODULES.subsele={
     const wt=active.filter(r=>r.payTo==='Wetopia株式会社');
     const lib=active.filter(r=>r.payTo==='株式会社Liberte');
     const ex=active.filter(r=>r.payTo.startsWith('Exploration'));
-    const other=active.filter(r=>r.price&&!r.payTo.startsWith('Exploration')&&r.payTo!=='Wetopia株式会社'&&r.payTo!=='株式会社Liberte');
+    const other=active.filter(r=>r.price&&!r.listFee&&!r.payTo.startsWith('Exploration')&&r.payTo!=='Wetopia株式会社'&&r.payTo!=='株式会社Liberte');
+    const fees=active.filter(r=>r.listFee);const feeBy={};fees.forEach(r=>(feeBy[r.payTo]=feeBy[r.payTo]||[]).push(r));
     const grpSub=g=>{
       const s=g.filter(r=>r.kind==='ショット').length,st=g.filter(r=>r.kind==='ストック').length,
             mo=g.filter(r=>r.kind==='前月漏れ分').length;
@@ -6408,7 +6429,7 @@ function renderRecov(){
   const el=document.getElementById('recovBody');if(!el)return;
   const {months,latest,rows,totals}=computeRecov();
   if(!rows.length){
-    el.innerHTML='<p class="sub">まだデータがありません。「サブセレ/ブランニュー」の処理を実行してxlsxをダウンロードすると、その月のストック先出し額と入金が自動で記録されます。毎月の明細を処理するたびに回収状況がここに積み上がります。</p>';
+    el.innerHTML='<p class="sub">まだデータがありません。Mac の同期（毎朝9時）で、ブランニューの売上明細書（ストックシート）と支払明細書から自動で作られます。「同期」を押すと今すぐ取り込みます。</p>';
     return;
   }
   const pct=v=>v==null?'—':Math.round(v*100)+'%';
@@ -7174,6 +7195,8 @@ function ledgerIsStable(c){
   if(c.status!=='pending'||c.type==='conflict'||/^⚠/.test(c.note||''))return false;
   const to=ledgerLastSeenYm(c);
   if(!/^\d{6}$/.test(to)||!/^\d{6}$/.test(c.month||'')||ledgerIsStale(c))return false;
+  /* 台帳にまだ無い組み合わせで、明細の9割以上が同じ単価（5件以上）なら1ヶ月目から採用（実際に払った額なので、人が1件ずつ押す必要はない。2026-10 菊地さん「2度手間にしない」） */
+  if(c.type==='new'&&c.old==null&&c.total&&c.count>=5&&c.count/c.total>=0.9)return true;
   if(ym2n(to)-ym2n(c.month)<2)return false;
   return !!(c.total&&c.count>=3&&c.count/c.total>=0.8);
 }
@@ -7506,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面36';
+const APP_BUILD='2026-10-12 新画面39';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7892,6 +7915,15 @@ async function syncNow(opts){
       }catch(e){syncLog('支払高推移の自動入力: '+finErrText(e),'err')}
     }
     /* パスワード付き明細のパスワード（Mac の非公開の設定から） */
+    /* 回収シミュ（ブランニューのストック先出し）: Mac が売上明細書と支払明細書から自動で作る。処理・ダウンロードしなくても埋まる */
+    if(man.bnRecovery&&man.bnRecovery.path&&man.bnRecovery.sig!==c.bnRecovSig){
+      try{const f=await syncFile(man.bnRecovery.path,null,{});const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+        const rec=S.bnRecov||{months:{}};rec.months=rec.months||{};Object.entries(j.months||{}).forEach(([m,v])=>{rec.months[m]=v});
+        S.bnRecov=rec;await Store.set(BN_RECOV,rec);c.bnRecovSig=man.bnRecovery.sig;saveSyncCfg(c)}catch(e){console.warn('bnRecovery',e)}}
+    /* 店舗ごとの支払の決まり（store_rules.json: 個人名が入るので公開のアプリには書かず Drive から読む） */
+    if(man.storeRules&&man.storeRules.path&&man.storeRules.sig!==c.storeRulesSig){
+      try{const f=await syncFile(man.storeRules.path,null,{});const mem=S.memory||(S.memory=emptyMem());
+        mem.storeRules=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));await saveMemory();c.storeRulesSig=man.storeRules.sig;saveSyncCfg(c)}catch(e){console.warn('storeRules',e)}}
     if(man.filePasswords&&man.filePasswords.path&&man.filePasswords.sig!==c.filePwSig){
       try{const f=await syncFile(man.filePasswords.path,null,{});const mem=S.memory||(S.memory=emptyMem());
         mem.filePw=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));await saveMemory();c.filePwSig=man.filePasswords.sig;saveSyncCfg(c)}catch(e){console.warn('filePw',e)}
@@ -10328,7 +10360,7 @@ function carryHintRe(fname,sheet){const t=String(fname||'')+' '+String(sheet||''
 function carryHist(keys){
   const ph=S.memory&&S.memory.paidHist;if(!ph||!ph.by)return [];
   const out=[];const seen=new Set();
-  keys.forEach(k=>(ph.by[k]||[]).forEach(e=>{const prod=ph.products[e[0]]||'';const id=k+'|'+e[0];if(seen.has(id))return;seen.add(id);
+  keys.forEach(k=>(ph.by[k]||[]).forEach(e=>{const prod=ph.products[e[0]]||'';const id=k+'|'+e[0]+'|'+reconNorm(e[6]||e[3]||'');if(seen.has(id))return;seen.add(id);
     out.push({key:k,product:prod,max:e[1],maxM:e[2],partner:e[3]||'',a:e[4]!=null?e[4]:e[1],m:e[5]||e[2],p:e[6]||e[3]||''})}));
   return out;
 }
@@ -10394,7 +10426,16 @@ function makeCarryModule(cfg){
           if(m.modo&&!pos){row.price=null;row.resolved=false;row.state='warn';row.why='戻入ですが、払った記録（プラスの支払）が見つかりません';return row}
           row.why=m.modo?`戻入: ${fmtYmJa(e.maxM)}度に払った ${Number(e.max||e.a).toLocaleString()}円を全額マイナス（${e.product}）`
             :`${fmtYmJa(e.m)}度と同じ ${stockShort(row.payTo)} へ ${Number(e.a).toLocaleString()}円（${e.product}）を引き継ぎ`;
-          row.lastM=String(e.m);return row}
+          row.lastM=String(e.m);
+          /* 同じお客様に同じ月、ほかの支払先（OP: EN.・クラウドナイン・last Bet・Hitotech など）にも払っていれば、その分の行も作る（2026-10: LPM は Wetopia 650円＋EN. 110円） */
+          const idKeys=m.keys.filter(k=>!/^N:/.test(k)&&!/^0\d{9,10}$/.test(k));
+          if(idKeys.length){let all=carryHist(idKeys);if(hint)all=all.filter(x=>hint.test(x.product));
+            const it=m.item?String(m.item).normalize('NFKC').replace(/\s+/g,'').slice(0,30):'';const itH=it?carryHist(idKeys.map(k=>k+'#'+it)):[];
+            const byP={};all.filter(x=>String(x.m)===String(e.m)&&(x.a>0||x.max>0)&&reconNorm(x.p||x.partner)!==reconNorm(row.payTo)&&!/戻|返/.test(x.product)).forEach(x=>{const pk=reconNorm(x.p||x.partner);if(!byP[pk]||x.a>byP[pk].a)byP[pk]=x});
+            row.co=Object.values(byP).map(x=>{const ih=itH.find(y=>reconNorm(y.p||y.partner)===reconNorm(x.p||x.partner)&&String(y.m)===String(e.m));const a=ih?ih.a:x.a;
+              return {payTo:x.p||x.partner,product:x.product,price:m.modo?-((ih&&ih.max)||x.max||Math.abs(a)):a,
+                why:m.modo?`戻入（OP）: ${fmtYmJa(x.maxM)}度に ${stockShort(x.p||x.partner)} へ払った ${Number((ih&&ih.max)||x.max||a).toLocaleString()}円を全額マイナス（${x.product}）`:`同じお客様の OP: ${fmtYmJa(x.m)}度と同じ ${stockShort(x.p||x.partner)} へ ${Number(a).toLocaleString()}円（${x.product}）を引き継ぎ`}})}
+          return row}
         let x=m.keys.map(k=>X.get(k)).find(Boolean)||null;
         if(!x&&m.name){S._xrmNames=S._xrmNames&&S._xrmNames.wb===S.xrmWb?S._xrmNames:{wb:S.xrmWb,map:xrmNameMap(S.xrmWb,S.xrmWb?S.xrmWb.SheetNames:[])};x=S._xrmNames.map.get(nameKey(m.name))||null;if(x)row.byName=true}
         row.x=x;
@@ -10419,6 +10460,10 @@ function makeCarryModule(cfg){
         if(lr&&(lr.fixed||(lr.distinct===1&&lr.count>=2))){row.price=lr.amount;row.why=`XRM の支払先 ${partner}・学習の単価 ${lr.amount.toLocaleString()}円（${row.product}）`;return row}
         row.state='alert';row.resolved=false;row.why=`新しいお客様（XRM「${x.sheet}」: ${partner}${toss&&toss!=='-'?' × '+toss:''}）。${row.product} の単価が決まっていません`;return row;
       });
+      /* 商品ごとに単価が違うお客様で、この商品だけ過去に払った記録が無い（新しいコンテンツ。9月度 月額ペイの「デバイスケア」）→ ほかの商品の単価をそのまま当てているので要確認 */
+      {const itemKeys=new Set(S.rows.filter(r=>r.byItem).map(r=>r.key));let n=0;
+        S.rows.forEach(r=>{if(r.carried&&!r.byItem&&!r.modo&&r.item&&itemKeys.has(r.key)){r.state='warn';r.why+=` / 「${r.item}」はこのお客様に払った記録が無い（新しい商品）。単価を確認してください`;n++}});
+        if(n)progLine(`「${cfg.sheet}」: 過去に払った記録の無い商品 ${n}行（要確認）`)}
       /* 引き継いだお客様のうち、ほかのお客様（その明細の大半）が最後に払った月より前で止まっている人 */
       {const mc={};S.rows.forEach(r=>{if(r.carried&&!r.modo&&r.lastM)mc[r.lastM]=(mc[r.lastM]||0)+1});const top=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0];const tot=Object.values(mc).reduce((a,c)=>a+c,0);
         const cur=top&&top[1]>=20&&top[1]>=tot*0.5?top[0]:'';   /* 毎月払うストックの明細（引き継ぎの大半が同じ月）だけ */
@@ -10447,13 +10492,17 @@ function makeCarryModule(cfg){
            申込日（±3日）× 決済方法 × パートナー企業 が同じお客様を探して、判定根拠に候補を出す（9月度に払った37人は全員ここにいたが、一人に決める手がかりが無い。永利さんに確認中） */
         /* newlife の振り分け（一緒に入れたとき）でユーザーIDが見つかれば: 支払先はそのタブのパートナー、単価は過去の明細の リスト×商品×決済の種類（無ければ振り分けの単価・要確認） */
         let nRef=0;
-        if(typeof B!=='undefined'&&B.nlRef&&B.nlRef.size)S.rows.forEach(r=>{if(!r.notFound)return;const ref=B.nlRef.get(String(r.key));if(!ref)return;
+        if(typeof B!=='undefined'&&B.nlRef&&B.nlRef.size)S.rows.forEach(r=>{if(!r.notFound)return;const refs=B.nlRef.get(String(r.key));if(!refs||!refs.length)return;
+          const o0=sp[r.store];const pe0=o0?Object.entries(o0).sort((a,b)=>b[1]-a[1]):[];
+          /* 本体: 店舗の支払先と同じタブ、無ければ最初のタブ。ほかのタブは OP として同じお客様にもう1行 */
+          const ref=refs.find(x=>pe0.length&&reconNorm(x.tab)&&reconNorm(pe0[0][0]).includes(reconNorm(x.tab)))||refs[0];
+          r.co=refs.filter(x=>x!==ref).map(x=>{const pv=x.price[r.item]!=null?x.price[r.item]:(x.price['']!=null?x.price['']:Object.values(x.price)[0]);return pv>0?{payTo:x.tab,product:r.product||cfg.sheet,price:pv,why:`同じお客様の OP: newlife/Aster の振り分け「${x.tab}」の ${Number(pv).toLocaleString()}円（確認してください）`,fromRef:true}:null}).filter(Boolean);
           const o=sp[r.store];const pe=o?Object.entries(o).sort((a,b)=>b[1]-a[1]):[];const tabP=reconPartner(ref.tab)||ref.tab;
           const payee=pe.length&&reconNorm(reconPartner(pe[0][0])||pe[0][0])===reconNorm(tabP)?pe[0][0]:tabP;
           const d0=typeof r.cdate==='number'?new Date(Math.round((r.cdate-25569)*864e5)):new Date(r.cdate);const ym=isNaN(d0)?'':`${d0.getFullYear()}${String(d0.getMonth()+1).padStart(2,'0')}`;
-          const pr=ref.list?attrRate('月額ペイ',payee,{リスト:ref.list,プラン:r.item,支払方法:r.payM,所属:r.store},ym):null;
-          const fb=ref.price[r.item];if(!pr&&!(fb>0))return;
-          r.payTo=payee;r.price=pr?pr.amount:fb;r.notFound=false;r.byRef=true;r.product='月額ペイ';if(!pr||(fb>0&&fb!==pr.amount))r.state='warn';
+          const pr=ref.list?attrRate(/2608|【\d{4}】明細/.test(cfg.fname)?'月額ペイ':famTop,payee,{リスト:ref.list,プラン:r.item,支払方法:r.payM,所属:r.store},ym):null;
+          const fb=ref.price[r.item]!=null?ref.price[r.item]:(ref.price['']!=null?ref.price['']:Object.values(ref.price)[0]);if(!pr&&!(fb>0))return;
+          r.payTo=payee;r.price=pr?pr.amount:fb;r.notFound=false;r.byRef=true;r.product=/2608|【\d{4}】明細/.test(cfg.fname)?'月額ペイ':(r.product||cfg.sheet);if(!pr||(fb>0&&fb!==pr.amount))r.state='warn';
           r.why=`新しいお客様: newlife の振り分け「${ref.tab}」に ${ref.staff||'担当不明'}・リスト${ref.list||'—'} → ${stockShort(payee)}・${r.item} ${r.price.toLocaleString()}円`+(pr?`（過去の明細の リスト×商品×決済の種類、${fmtYmJa(pr.m)}度 ${pr.n}件）`:'（過去の明細に同じリストの単価が無いので振り分けの単価・確認してください）')+(pr&&fb>0&&fb!==pr.amount?` / 振り分けは ${fb.toLocaleString()}円`:'');nRef++});
         if(nRef)progLine(`「${cfg.sheet}」: newlife の振り分けで見つけた新しいお客様 ${nRef}行`);
         const NL=xrmNewlifeIndex();let nNl=0;
@@ -10469,6 +10518,22 @@ function makeCarryModule(cfg){
           r.nlCand=cand.length;r.why+=` / XRM「${cand[0].sn}」に 申込日・決済方法・パートナーが同じお客様 ${cand.length}人（ユーザーIDが無いので一人に決まらない。払うなら ${stockShort(payee)}・${r.item} ${Number(pe2[0][0]).toLocaleString()}円 など）`;nNl++});
         if(nNl)progLine(`「${cfg.sheet}」: 過去にも XRM にも番号が無い新しいお客様 ${nNl}行（XRM newlife に同じ日の候補あり・支払なし）`);
       }
+      /* OP の行: その明細で引き継いだお客様の2%以上（3人以上）に同じ「支払先×商材」の OP があるものだけ（9月度 OTS の EN. は 288人中12人）（番号が別の商材と重なっていても、たまたまの支払を足さない） */
+      {const carriedN=new Set(S.rows.filter(r=>r.carried).map(r=>r.key)).size;const cnt={};
+        S.rows.forEach(r=>(r.co||[]).forEach(c=>{const k=reconNorm(c.payTo)+'|'+c.product;(cnt[k]=cnt[k]||new Set()).add(r.key)}));
+        const okK=new Set(Object.entries(cnt).filter(([,v])=>v.size>=Math.max(3,carriedN*0.02)).map(([k])=>k));const add=[];
+        S.rows.forEach(r=>{(r.co||[]).forEach(c=>{if(!c.fromRef&&!okK.has(reconNorm(c.payTo)+'|'+c.product))return;add.push({...r,co:null,payTo:c.payTo,product:c.product,price:c.price,why:c.why,coOf:r.i,state:'ok',resolved:true})});delete r.co});
+        if(add.length){S.rows=S.rows.concat(add);S.rows.forEach((r,i)=>r.i=i+1);progLine(`「${cfg.sheet}」: 同じお客様の OP（ほかの支払先）${add.length}行`)}}
+      /* 店舗ごとの決まり（菊地さん 2026-10-12: 店舗コードごとの支払先と、お客様ごとの上乗せ。中身は Drive の store_rules.json）: 支払先・商品ごとの単価（クレカ/キャリア）と、お客様ごとの上乗せ */
+      {const SR=(S.memory&&S.memory.storeRules)||{};const add=[];const seenC=new Set();
+        if(storeC>=0&&Object.keys(SR).length)S.rows.forEach(r=>{const rule=SR[r.store];if(!rule||r.modo)return;
+          const pc=/クレ|カード/.test(r.payM||'')?'クレカ':'キャリア';const pr=rule.prices&&rule.prices[pc]&&rule.prices[pc][r.item];
+          if(pr==null&&!rule.payee)return;
+          r.payTo=rule.payee||r.payTo;if(pr!=null)r.price=pr;r.product=rule.product||r.product;r.notFound=false;r.resolved=true;r.state='ok';r.byStoreRule=true;
+          r.why=`店舗「${r.store}」の決まり: ${stockShort(r.payTo)}・${r.item}（${pc}）${r.price!=null?Number(r.price).toLocaleString()+'円':''}`;
+          (rule.extra||[]).forEach(x=>{const k=r.key+'|'+x.payee;if(seenC.has(k))return;seenC.add(k);
+            add.push({...r,item:'（お客様ごと）',payTo:x.payee,price:x.perCustomer,product:x.product||r.product,extraFor:r.key,why:`店舗「${r.store}」の決まり: お客様ごとに ${x.payee} へ ${Number(x.perCustomer).toLocaleString()}円`})})});
+        if(add.length){S.rows=S.rows.concat(add);S.rows.forEach((r,i)=>r.i=i+1);progLine(`「${cfg.sheet}」: 店舗の決まりでお客様ごとの支払 ${add.length}件を追加`)}}
       progLine(`「${cfg.sheet}」: 引き継ぎ ${S.rows.filter(r=>r.carried).length}件・XRMと台帳 ${S.rows.filter(r=>!r.carried&&r.resolved).length}件・要確認 ${S.rows.filter(r=>!r.resolved).length}件`);
     },
     tableRow:r=>[r.i,(r.modo?'<span class="badge b-min">戻入</span> ':'')+badge(r.state),esc(r.name||'—'),esc(r.key||r.tel||''),esc(r.payTo||'—'),esc(r.product||''),esc(r.why),r.price!=null?yen(r.price):'（空欄）'],
@@ -10678,15 +10743,26 @@ function rebuildJobs(){
   const kinds=new Set(B.files.filter(f=>f.stock&&!f.stock.err).map(f=>f.stock.kind||'PS'));
   if(kinds.size){const ref=B.jobs.filter(j=>(j.key==='sbps'&&kinds.has('PS'))||(j.key==='robopay'&&kinds.has('R')));
     if(ref.length){B.jobs=B.jobs.filter(j=>!ref.includes(j));B.refBooks=ref.map(j=>j.name)}}
-  /* 「newlifeYYYYMMDD.xlsx」（パートナー別タブ）は、月額ペイの上位店明細（【YYMM】明細: 店舗名・商品名・ユーザーID・支払手数料）をスタッフが振り分けたもの。
-     上位店明細と一緒に入っていれば、二重払いにならないよう処理しない（2026-10: Wetopia タブ 8,809行が明細一覧の月額ペイと同じ） */
-  {const isUp=j=>{if(!String(j.key).startsWith('carry:'))return false;const wb=j.wb||((B.files.find(f=>f.name===j.name)||{}).wb);const ws=wb&&wb.Sheets[j.sheet];if(!ws)return false;
-      const h=(XLSX.utils.sheet_to_json(ws,{header:1,defval:null})[0]||[]).map(x=>String(x==null?'':x).normalize('NFKC').trim());return ['店舗名','商品名','ユーザーID','支払手数料'].every(x=>h.includes(x))};
-    if(B.jobs.some(isUp)){const ref=B.jobs.filter(j=>j.key==='neoglyph');if(ref.length){B.jobs=B.jobs.filter(j=>!ref.includes(j));B.refBooks=(B.refBooks||[]).concat(ref.map(j=>j.name));
-      /* ただし newlife の振り分けには ユーザーID → パートナー（タブ）・営業担当・リストID が載っている（XRM にはユーザーIDが無い）ので、新しいお客様を見つける手がかりに使う（2026-10 菊地さん） */
-      B.nlRef=new Map();ref.forEach(j=>{const wb=j.wb||((B.files.find(f=>f.name===j.name)||{}).wb);if(!wb)return;wb.SheetNames.forEach(sn=>{const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});const h=rows[0]||[];
-        const iU=findCol(h,['ユーザーID']),iI=findCol(h,['商品名']),iS=findCol(h,['営業担当']),iL=findCol(h,['リストID']),iP=findCol(h,['支払い単価','支払単価']);if(iU<0)return;
-        for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[iU])continue;const u=clean(r[iU]);const o=B.nlRef.get(u)||{tab:sn,staff:'',list:'',price:{}};if(iS>=0&&r[iS])o.staff=clean(r[iS]);if(iL>=0&&r[iL]!=null)o.list=String(r[iL]).trim();if(iI>=0&&iP>=0)o.price[clean(r[iI])]=Number(r[iP]);B.nlRef.set(u,o)}})});}}}
+  /* 「newlifeYYYYMMDD.xlsx」「AsterYYYYMMDD.xlsx」（パートナー別タブ）は、上位店明細（月額ペイの【YYMM】明細・コンテンツの LPM/オタスケ）を
+     スタッフが振り分けたもの（2026-10: newlife の Wetopia タブ 8,809行 = 明細一覧の月額ペイ、Aster の LPM（Wetopia）385人 = コンテンツ LPM の全員）。
+     同じお客様の上位店明細と一緒に入っていれば、二重払いにならないよう処理しない。ただし ユーザーID → パートナー（タブ）・営業担当・リストID・単価 の
+     対応表として、過去にも XRM にも無い新しいお客様を見つける手がかりに使う（2026-10 菊地さん） */
+  {const SPLIT=/^(newlife|Aster)\d{8}/i;const fname=j=>String(j.name||'').normalize('NFC');
+    const keysOf=j=>{const wb=j.wb||((B.files.find(f=>f.name===j.name)||{}).wb);const ws=wb&&wb.Sheets[j.sheet];const out=new Set();if(!ws)return out;
+      XLSX.utils.sheet_to_json(ws,{header:1,defval:null}).forEach(r=>(r||[]).forEach(v=>{if(typeof v==='string'&&/^[A-Z]{2,5}\d{6,}$/.test(v.trim()))out.add(v.trim())}));return out};
+    const files=[...new Set(B.jobs.filter(j=>SPLIT.test(fname(j))).map(fname))];
+    files.forEach(fn=>{const js=B.jobs.filter(j=>fname(j)===fn);const others=B.jobs.filter(j=>!SPLIT.test(fname(j)));
+      const ks=new Set();js.forEach(j=>keysOf(j).forEach(k=>ks.add(k)));if(!ks.size)return;
+      const ko=new Set();others.forEach(j=>{if(String(j.key).startsWith('carry:')||j.key==='life365')keysOf(j).forEach(k=>ko.add(k))});
+      let n=0;ks.forEach(k=>{if(ko.has(k))n++});if(n<ks.size*0.5)return;
+      B.jobs=B.jobs.filter(j=>!js.includes(j));B.refBooks=(B.refBooks||[]).concat([js[0].name]);
+      B.nlRef=B.nlRef||new Map();
+      {const j=js[0];const wb=j.wb||((B.files.find(f=>f.name===j.name)||{}).wb);if(wb)wb.SheetNames.forEach(sn=>{const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});const h=rows[0]||[];
+        const iU=findCol(h,['ユーザーID','申込番号','会員ID','システムID']),iI=findCol(h,['商品名']),iS=findCol(h,['営業担当']),iL=findCol(h,['リストID']),iP=findCol(h,['支払い単価','支払単価','支払い金額','支払金額']);if(iU<0)return;
+        const tab=((sn.match(/[（(](.+?)[)）]/)||[])[1]||sn).trim();
+        for(let i=1;i<rows.length;i++){const r=rows[i];if(!r||!r[iU])continue;const u=clean(r[iU]);const arr=B.nlRef.get(u)||[];let o=arr.find(x=>x.tab===tab);
+          if(!o){o={tab,staff:'',list:'',price:{}};arr.push(o);B.nlRef.set(u,arr)}if(iS>=0&&r[iS])o.staff=clean(r[iS]);if(iL>=0&&r[iL]!=null)o.list=String(r[iL]).trim();
+          if(iP>=0&&typeof r[iP]==='number')o.price[iI>=0?clean(r[iI]):'']=r[iP]}})}});}
   /* 「追加分」のファイルの、前月より古い月のタブ（もう払った月の明細）は処理しない（二重払い防止） */
   if(B.month){const lim=prevYm(B.month);const drop=B.jobs.filter(j=>j.addFile&&j.sheetYm&&j.sheetYm<lim);
     if(drop.length){B.jobs=B.jobs.filter(j=>!drop.includes(j));B.dropped=drop.map(j=>`${j.name}「${j.sheet}」`)}}
