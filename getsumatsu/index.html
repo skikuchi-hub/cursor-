@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面40';
+const APP_BUILD='2026-10-12 新画面41';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7810,6 +7810,12 @@ async function syncNow(opts){
     syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
     SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
+    /* ショット先出OP: 会社別の計画（36ヶ月シミュレーション）と、WST の MatoPass 課金明細（実績）を同期で自動で読み込む（入れる画面に入れなくてよい） */
+    try{c.shotDone=c.shotDone||{};const src=(Array.isArray(man.shotPlans)?man.shotPlans:[]).concat(SALES_LIST.filter(x=>/MatoPass|課金明細/i.test(String(x.name||''))&&x.payer!=='EX'));
+      let ns=0;for(const it of src){const k=it.path+'|'+(it.mtime||it.size||'');if(c.shotDone[it.path]===k)continue;
+        try{const f=await syncFile(it.path,null,{size:it.size});const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});S._shotSrc=it.path;const r=await shotIngest(wb,it.name);S._shotSrc=null;
+          c.shotDone[it.path]=k;if(r&&r.kind==='json'){ns++;syncLog(r.note)}}catch(e){console.warn('shot',it.name,e)}}
+      if(ns)saveSyncCfg(c)}catch(e){console.warn('shot',e)}
     if(SALES_LIST.length){const sm=salesMonths()[0];syncLog(`売上明細書: ${fmtYmJa(sm.month)}分 ${sm.files.length}件ほか（「入れる」画面のボタンから取り込めます）`)}
     /* 2d) 売上明細書の3年分の集計（上位店×月の入金） */
     if(man.salesHistory&&man.salesHistory.path&&(man.salesHistory.mtime!==c.salesHistMtime||!(S.memory&&S.memory.salesHistory))){
@@ -8469,7 +8475,7 @@ function shotReadMatoPass(wb){
 async function shotIngest(wb,name){
   const m=shotMem();
   if(shotIsMatoPass(wb)){const a=shotReadMatoPass(wb);if(a.err)return {kind:'error',note:a.err};
-    m.actual[a.ym]=Object.assign(m.actual[a.ym]||{},a.res);if(Object.keys(a.unknown).length)m.unknownStores=Object.assign(m.unknownStores||{},a.unknown);
+    m.actual[a.ym]=Object.assign(m.actual[a.ym]||{},a.res);if(S._shotSrc)m.matoSrc=Object.assign(m.matoSrc||{},{[a.ym]:S._shotSrc});if(Object.keys(a.unknown).length)m.unknownStores=Object.assign(m.unknownStores||{},a.unknown);
     await saveMemory();syncLedgerSoon();
     const main=Object.entries(a.res).filter(([,v])=>!v.ref);
     return {kind:'json',note:`ショット先出OP：MatoPass ${fmtYmJa(a.ym)}の実績（${main.map(([c,v])=>`${c} 支払対象${v.pt}件・課金${v.act}件`).join('・')}）を収支データに入れました${Object.keys(a.unknown).length?`。会社が分からない店舗 ${Object.keys(a.unknown).join('・')} があります（収支データで選んでください）`:''}`}}
@@ -8488,12 +8494,16 @@ async function shotIngest(wb,name){
   return null;
 }
 async function shotSetStore(st){const v=(document.getElementById('shotSt_'+st)||{}).value;if(!v){toast('会社を選んでください');return}
-  await ansPut('shot','store:'+st,{co:v,label:'MatoPass 店舗 '+st+' → '+v});renderFin();toast(`${st} を ${v} として覚えました`)}
+  await ansPut('shot','store:'+st,{co:v,label:'MatoPass 店舗 '+st+' → '+v});
+  /* 選んだらその場で、Drive にある MatoPass 課金明細を読み直して数字に反映する（もう一度入れなくてよい） */
+  const m=shotMem();if(m.unknownStores)delete m.unknownStores[st];
+  for(const pth of Object.values(m.matoSrc||{})){try{const f=await syncFile(pth,null,{});const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});S._shotSrc=pth;await shotIngest(wb,pth.split('/').pop());S._shotSrc=null}catch(e){console.warn(e)}}
+  renderFin();toast(`${st} を ${v} として覚えて、数字に反映しました`)}
 /* 収支データ「ショット先出OP」タブ */
 function shotView(){
   const m=shotMem();const order=c=>{const i=SHOT_COS.indexOf(c);return i<0?99:i};
   const cos=[...new Set([...Object.keys(m.plan),...Object.values(m.actual).flatMap(x=>Object.entries(x).filter(([,v])=>!v.ref).map(([c])=>c))])].sort((a,b)=>order(a)-order(b));
-  if(!cos.length)return '<div class="pm-note" style="padding:14px">まだデータがありません。会社別の「36ヶ月シミュレーション」と、毎月の実績リスト（店舗コード・ユーザーID・契約月・入金済み…）を「入れる」に入れてください。</div>';
+  if(!cos.length)return '<div class="pm-note" style="padding:14px">まだデータがありません。Mac の同期（毎朝9時）で、デスクトップ「ショット先出OP/各社シミュレーション」の36ヶ月シミュレーションと、WST の MatoPass 課金明細（売上明細書）を自動で読み込みます。「同期」を押すと今すぐ取り込みます。</div>';
   const actYms=Object.keys(m.actual).sort();
   const lastAct=actYms[actYms.length-1]||'';
   const ymsAll=[...new Set([...actYms,...Object.values(m.plan).flatMap(p=>Object.keys(p.rows))])].sort();
@@ -8523,7 +8533,7 @@ function shotView(){
   const unk=Object.entries(m.unknownStores||{}).filter(([st])=>!shotStoreCo(st));
   const unkHtml=unk.length?`<div class="rc"><b style="color:var(--warn)">会社が分からない店舗があります</b><div class="note">MatoPass の店舗名をどの会社の分として数えるか選んでください。次から自動で使います。</div>
     ${unk.map(([st,n])=>`<div class="pm-bar" style="gap:8px;flex-wrap:wrap"><span>${esc(st)}（${n}人）</span><select id="shotSt_${esc(st)}">${['','Liberte','ブランニュー','ラストワンマイル','GeNNeo','参考_EX自社','参考_Wetopia','対象外'].map(c=>`<option value="${esc(c)}">${c?esc(c):'会社を選ぶ'}</option>`).join('')}</select><button class="btn btn-sm" onclick="shotSetStore('${esc(st).replace(/'/g,'')}')">覚える</button></div>`).join('')}
-    <p class="note">選んだあと、その月の MatoPass 課金明細をもう一度入れると数字に反映されます。</p></div>`:'';
+    <p class="note">選ぶとその場で数字に反映されます。</p></div>`:'';
   return `${unkHtml}${chart}<p class="note">${withAct.map(esc).join('・')||'—'} の合計。太字が実績、小さい字が計画（36ヶ月シミュレーション）です。売上はシミュレーションの取り分の単価（クレカ・キャリア別）で計算しています。</p>
     ${cos.map(card).join('')}
     ${refs.length?`<p class="note" style="margin-top:12px">参考（ショットの対象外）: ${refs.map(c=>{const r=actYms.map(y=>[y,actOf(c,y)]).filter(([,a])=>a);return `${esc(c)} ${r.map(([y,a])=>`${fmtYmJa(y)} 課金${a.act}件`).join('・')}`}).join(' ／ ')}</p>`:''}
