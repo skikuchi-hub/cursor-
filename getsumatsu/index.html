@@ -816,7 +816,6 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <div class="menu-pop" id="hdMenu" hidden>
         <button onclick="menuGo(openRates)">ルール台帳・覚えた答え</button>
         <button onclick="menuGo(openFin)">収支データ</button>
-        <button onclick="menuGo(openTrend)">収支推移</button>
         <button onclick="menuGo(openRecov)">回収シミュレーション</button>
       </div></div>
     <span hidden><button id="boardBtn"></button><button id="ratesBtn"></button><button id="finBtn"></button><button id="trendBtn"></button><button id="recovBtn"></button></span>
@@ -7382,7 +7381,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面23';
+const APP_BUILD='2026-10-12 新画面24';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7561,6 +7560,9 @@ function mergeLedger(remote){
     Object.entries(m||{}).forEach(([k,r])=>{if(del[k]&&(r.at||'')<=del[k])return;const cur=mine[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){mine[k]=r;n++}}});
   });
   if(remote.staffCo&&Object.keys(remote.staffCo).length&&!(lg.staffCo&&Object.keys(lg.staffCo).length))lg.staffCo=remote.staffCo;
+  /* アプリで作った支払内訳の合計（月×商材）: 新しい方 */
+  Object.entries(remote.trend||{}).forEach(([mo,ps])=>{lg.trend=lg.trend||{};const mine=lg.trend[mo]||(lg.trend[mo]={});
+    Object.entries(ps||{}).forEach(([p,v])=>{if(!mine[p]||(v.at||0)>(mine[p].at||0)){mine[p]=v;n++}})});
   /* 商材ごとの単価の軸: 新しい方 */
   Object.entries(remote.axes||{}).forEach(([k,r])=>{lg.axes=lg.axes||{};const cur=lg.axes[k];if(!cur||(r.at||0)>(cur.at||0)){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.axes[k]=r;n++}}});
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
@@ -7574,7 +7576,7 @@ function mergeLedger(remote){
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},staffCo:lg.staffCo||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},staffCo:lg.staffCo||{},trend:lg.trend||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -7750,6 +7752,11 @@ async function syncNow(opts){
     }catch(e){console.warn('営業アカウント',e)}
     syncProg(96,97,0.5,'収支データを確認しています');
     /* 支払明細書の表紙の合計 → 管理元帳「支払高推移」の空いているセルだけを埋める（Apps Script が実行。入力済みは上書きしない） */
+    /* 支払明細書の表紙の合計（月×パートナー）を「アプリの集計」用に取っておく */
+    if(man.payments&&man.payments.path&&(man.payments.sig!==c.payHistSig||!(S.memory&&S.memory.paymentsHist))){
+      try{const f=await syncFile(man.payments.path,null,{});const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+        const mem=S.memory||(S.memory=emptyMem());mem.paymentsHist=j.months||{};await saveMemory();c.payHistSig=man.payments.sig;saveSyncCfg(c)}catch(e){console.warn('payments',e)}
+    }
     if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
       try{
         const r=await syncPost({action:'fillPayments'});
@@ -8113,7 +8120,10 @@ async function recordTrend(product,vals,month){
   if(vals.rev!=null)cur.rev=vals.rev;
   if(vals.pay!=null)cur.pay=vals.pay;
   cur.updated=fmtDate(new Date());
-  await saveMemory();
+  /* 全端末で共有する（収支データ「アプリの集計」の参考列） */
+  const lg=ledgerOf();lg.trend=lg.trend||{};const lm=lg.trend[mo]=lg.trend[mo]||{};
+  lm[product]={pay:cur.pay,rev:cur.rev,at:Date.now()};
+  await saveMemory();syncLedgerSoon();
 }
 function trendMonths(){
   const t=(S.memory&&S.memory.trend)||{};
@@ -8135,8 +8145,36 @@ function trendTotals(mo){
   Object.values(t).forEach(v=>{rev+=Number(v.rev)||0;pay+=Number(v.pay)||0});
   return {rev,pay,gross:rev-pay,rate:rev?(rev-pay)/rev:0};
 }
+/* ===== 収支データ「アプリの集計」（旧「収支推移」を統合。2026-10 菊地さん）
+   売上 = Mac が Drive の売上明細書から集計した上位店ごとの入金（sales_history.json）
+   支払 = Mac が支払明細書の表紙から集計したパートナーごとの支払（payments.json）
+   参考 = アプリで作った支払内訳の合計（台帳に記録・全端末共有）。支払明細書がまだ無い月の見込みに使う ===== */
+function appSummaryHtml(){
+  const mem=S.memory||{};const sh=mem.salesHistory,pay=mem.paymentsHist||{},lg=(mem.ledger&&mem.ledger.trend)||{};
+  /* スプレッドシート「売上高推移」の 売上高・パートナー支払計・粗利益高（社員が入れている正式な数字） */
+  const sheet={};const fs=mem.finSheets&&(mem.finSheets.sheets||[]).find(x=>x.name==='売上高推移');
+  if(fs){const d=finSeries('売上高推移',finTrim(fs.display));if(d)d.months.forEach((lab,i)=>{const mm=String(lab).match(/(\d{4})\D+(\d{1,2})/);if(!mm)return;const k=mm[1]+String(mm[2]).padStart(2,'0');
+    const g=n=>{const x=d.series.find(z=>z.name===n);return x?x.v[i]:null};sheet[k]={rev:g('売上高'),pay:g('パートナー支払計'),gross:g('粗利益高')}})}
+  const ms=new Set(Object.keys(sheet));if(sh&&sh.upstreams)Object.values(sh.upstreams).forEach(d=>Object.keys(d).forEach(m=>ms.add(m)));
+  Object.keys(pay).forEach(m=>ms.add(m));Object.keys(lg).forEach(m=>ms.add(m));
+  const months=[...ms].filter(m=>/^\d{6}$/.test(m)&&m<=thisYm()).sort().slice(-12);
+  if(!months.length)return '<div class="pm-note" style="padding:14px">まだ集計がありません。「同期」を押すと、Drive の売上明細書・支払明細書とスプレッドシートから集計します。</div>';
+  const rev=m=>sh&&sh.upstreams?Object.values(sh.upstreams).reduce((a,d)=>a+((d[m]&&d[m].total)||0),0):0;
+  const pd=m=>Object.values(pay[m]||{}).reduce((a,v)=>a+(Number(v)||0),0);
+  const app=m=>Object.values(lg[m]||{}).reduce((a,v)=>a+(Number(v&&v.pay)||0),0);
+  const yen0=v=>v?Math.round(v).toLocaleString():'—';
+  const pct=(a,b)=>a&&b?Math.round(a/b*100)+'%':'';
+  const rows=months.map(m=>{const s=sheet[m]||{};const r=rev(m),p=pd(m)||app(m);
+    return {m,sr:s.rev,sp:s.pay,sg:s.rev?(s.gross??(s.pay?s.rev-s.pay:null)):null,r,p,est:!pd(m)&&!!app(m)}});
+  const chart=finChartSvg({months:rows.map(x=>x.m.slice(2,4)+'/'+x.m.slice(4)),series:[{name:'売上（シート）',v:rows.map(x=>x.sr||null)},{name:'パートナー支払（シート）',v:rows.map(x=>x.sp||null)},{name:'粗利（シート）',v:rows.map(x=>x.sg)}]});
+  return `${chart}<p class="note" style="margin:6px 0 10px">シート＝明細作成用管理元帳「売上高推移」（社員が入れている数字）。アプリ＝Drive の売上明細書のお客様の行の合計と、支払明細書の表紙の合計（支払明細書がまだ無い月はアプリで作った支払内訳の合計＝見込み）。アプリの列がシートに近づくほど、アプリだけで月末処理ができる状態です。売上（アプリ）は明細の入金月とシートの計上月のずれ・同じ明細の重複を含むので、100%を超える月があります（参考）。</p>
+  <table class="fin"><thead><tr><th class="lbl">月</th><th>売上（シート）</th><th>粗利（シート）</th><th>粗利率</th><th>パートナー支払（シート）</th><th>売上（アプリ）</th><th>拾えた割合</th><th>支払（アプリ）</th><th>拾えた割合</th></tr></thead><tbody>
+  ${rows.map(x=>`<tr><td class="lbl">${esc(fmtYmJa(x.m))}</td><td>${yen0(x.sr)}</td><td class="${x.sg<0?'neg':''}">${x.sg!=null?yen0(x.sg):'—'}</td><td>${x.sr&&x.sg!=null?(x.sg/x.sr*100).toFixed(1)+'%':'—'}</td><td>${yen0(x.sp)}</td>
+    <td>${yen0(x.r)}</td><td class="mut">${pct(x.r,x.sr)}</td><td>${x.p?yen0(x.p)+(x.est?'<small class="fin-sub">見込み</small>':''):'—'}</td><td class="mut">${pct(x.p,x.sp)}</td></tr>`).join('')}
+  </tbody></table>`;
+}
 /* ===== 収支データ（スプレッドシート「明細作成用管理元帳」の3シートを表示） ===== */
-const FIN_TABS=['売上高推移','ストック利益推移','支払高推移','ショット先出OP'];
+const FIN_TABS=['アプリの集計','売上高推移','ストック利益推移','支払高推移','ショット先出OP'];
 /* =========================================================
    ショット先出OP（パートナーへ初回課金時にショット手数料を先に払い、毎月のサブスク取り分で回収するモデル）
    計画 = 会社別の「36ヶ月シミュレーション」ファイル（入れる画面に入れると覚える）
@@ -8423,6 +8461,7 @@ function renderFin(){
   if(!tabs)return;
   if(!S.finTab)S.finTab=FIN_TABS[0];
   tabs.innerHTML=FIN_TABS.map(t=>`<button class="chip ${t===S.finTab?'on':''}" onclick="S.finTab='${t}';renderFin()">${t}</button>`).join('');
+  if(S.finTab==='アプリの集計'){ch.innerHTML='';tb.innerHTML=appSummaryHtml();meta.textContent='スプレッドシートの数字と、アプリが Drive の明細から集計した数字の付け合わせ（全端末で同じ数字）';lk.style.display='none';return}
   if(S.finTab==='ショット先出OP'){ch.innerHTML=shotView();tb.innerHTML='';meta.textContent='ショット先出OP: 計画（36ヶ月シミュレーション）と毎月の実績リストから';lk.style.display='none';return}
   if(!fd){meta.textContent=syncReady()?'まだ取り込んでいません。「最新にする」を押してください。':'先に「同期」で接続先を設定してください。';tb.innerHTML='';ch.innerHTML='';lk.style.display='none';return}
   meta.textContent=`スプレッドシートの更新: ${fmtWhen(fd.updated)}　取り込み: ${fmtWhen(fd.at)}`;
