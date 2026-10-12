@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面44';
+const APP_BUILD='2026-10-12 新画面45';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9037,8 +9037,8 @@ function stockBuild(p){
       else if(op&&curOp.length&&!curOp.includes(op))check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:`リスト ${li.list} は${stockShort(op)}のリストですが、前月は${curOp.map(stockShort).join('・')}に支払っています（前月どおり）`,soft:1});
       Object.entries(hit).forEach(([pt,src])=>{
         /* OP のリストではないのに OP に払っている顧客は、OP に払い続けて WT には払わない（2026-10 菊地さん指示） */
-        /* ただしリスト番号が分からない顧客（XRM に無い旧クラブペイなど）は前月どおり WT にも払う（9月度: WT 956円＋クラウドナイン 600円を6〜9月ずっと払っている） */
-        if(pt==='Wetopia株式会社'&&!op&&curOp.length&&li.list)return;
+        /* 菊地さん確認（2026-10-12）: 9月度までは WT と OP の両方に払っていた旧クラブペイなども、OP のリストでなければ OP だけ（リスト番号が分からない客も同じ） */
+        if(pt==='Wetopia株式会社'&&!op&&curOp.length)return;
         /* 月によって列の並びが違うことがあるので、見出し名で今月の並びに直す */
         const h=hdrOf[pt]||src.hdr,pi=h.findIndex(x=>/単価/.test(x)),ki=h.indexOf('売上返金区分名称'),mi=h.indexOf('支払い方法');
         const spi=src.hdr.findIndex(x=>/単価/.test(x));
