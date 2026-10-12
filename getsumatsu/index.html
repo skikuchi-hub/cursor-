@@ -7381,7 +7381,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面28';
+const APP_BUILD='2026-10-12 新画面29';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10077,18 +10077,31 @@ function xrmProductMap(){
   S._xrmProd={wb:S.xrmWb,ph,map};return map;
 }
 /* パートナー×商材の直近の単価（台帳の確定 → 過去の支払明細の推移） */
-function histRate(product,partner,toss,attrs){
+/* パートナー × 商材 ごとに、お客様単位で払った額の一覧（history.json の paid。単価の推移に残らない明細も拾える） */
+function partnerPaidAmounts(partner,product,famRe){
+  const ph=S.memory&&S.memory.paidHist;if(!ph||!ph.by)return {};
+  if(!S._ppa||S._ppa.ph!==ph){const idx={};Object.values(ph.by).forEach(es=>es.forEach(e=>{const pay=reconNorm(e[6]||e[3]||'');const pr=ph.products[e[0]]||'';const a=e[4]!=null?e[4]:e[1];if(!pay||!(a>0))return;
+    const o=(idx[pay]=idx[pay]||{});const q=(o[pr]=o[pr]||{});q[a]=(q[a]||0)+1}));S._ppa={ph,idx}}
+  const o=S._ppa.idx[reconNorm(partner)]||{};const out={};
+  Object.entries(o).forEach(([pr,q])=>{if(pr===product||(famRe&&famRe.test(pr))||normProduct(pr)===normProduct(product))Object.entries(q).forEach(([a,c])=>out[a]=(out[a]||0)+c)});
+  return out;
+}
+function histRate(product,partner,toss,attrs,famRe,upAmt){
+  /* 支払単価はパートナーごとに違うので、必ず「そのパートナーに払ってきた単価」から引く（ほかのパートナーの単価は使わない。2026-10 菊地さん） */
   const lg=ledgerOf();const ks=[];const e={product,partner,toss,attrs:attrs||{}};const k4=ruleKeyOf(e);if(k4)ks.push(k4);ks.push(rateKey(product,partner,toss),rateKey(product,partner,''));
   for(const k of ks){const r=lg.rules[k];if(r&&r.status==='confirmed')return {amount:Number(r.price),src:'台帳'}}
   for(const k of ks){const h=lg.history&&lg.history[k];if(h&&h.length){const last=h[h.length-1];return {amount:last.price,src:`${fmtYmJa(last.to)}度までの明細`}}}
-  /* そのパートナーの実績が無ければ、その商材をほかのパートナーにいくらで払っているか（8割以上が同じ単価のときだけ） */
-  const cnt={};let tot=0;Object.entries(lg.history||{}).forEach(([k,h])=>{if(String(k).split('|')[0]!==product||!h.length)return;const last=h[h.length-1];cnt[last.price]=(cnt[last.price]||0)+(last.cnt||1);tot+=(last.cnt||1)});
-  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
-  /* そのパートナーにその商材を払った実績（区分違いを含む）で一番多い単価 */
-  const pc={};let pt=0;const pre=product+'|'+partner+'|';Object.entries(lg.history||{}).forEach(([k,h])=>{if(!String(k).startsWith(pre)||!h.length)return;const last=h[h.length-1];pc[last.price]=(pc[last.price]||0)+(last.cnt||1);pt+=(last.cnt||1)});
+  /* 同じパートナー・同じ商材（明細ごとの商材名の表記ゆれ nifty光／@nifty光(Y)／ニフティ光(アラT) などもまとめる）の直近の単価 */
+  const pn=reconNorm(partner);const same=p=>p===product||(famRe&&famRe.test(p))||normProduct(p)===normProduct(product);
+  const pc={};let pt=0;let lastTo='';Object.entries(lg.history||{}).forEach(([k,h])=>{const [p0,pa0]=String(k).split('|');if(reconNorm(pa0)!==pn||!same(p0.replace(/〔.*?〕$/,''))||!h.length)return;
+    const last=h[h.length-1];pc[last.price]=(pc[last.price]||0)+(last.cnt||1);pt+=(last.cnt||1);if(String(last.to)>lastTo)lastTo=String(last.to)});
   const ptop=Object.entries(pc).sort((a,b)=>b[1]-a[1])[0];
-  if(ptop&&ptop[1]/pt>=0.6)return {amount:Number(ptop[0]),src:`${stockShort(partner)} の ${product} の直近の単価（区分違いを含む ${ptop[1]}/${pt}件）`,loose:ptop[1]/pt<0.8};
-  if(top&&tot>=3&&top[1]/tot>=0.8)return {amount:Number(top[0]),src:`${product} の標準単価（${top[1]}/${tot}件）`};
+  if(ptop)return {amount:Number(ptop[0]),src:`${stockShort(partner)} に払ってきた単価（${ptop[1]}/${pt}件${lastTo?'・'+fmtYmJa(lastTo)+'度まで':''}）`,loose:ptop[1]/pt<0.8||Object.keys(pc).length>1};
+  /* お客様ごとの支払の記録から: そのパートナーに払ってきた額のうち、上位店の金額を超えない一番大きい額（上位店 58,000 → 53,000、2,000 → 1,500 のように差を引いて払っている） */
+  const pa=partnerPaidAmounts(partner,product,famRe);const vals=Object.keys(pa).map(Number).filter(v=>v>0);
+  if(vals.length&&upAmt!=null&&isFinite(upAmt)&&upAmt>0){const c=vals.filter(v=>v<=upAmt&&v>=upAmt*0.5).sort((a,b)=>b-a)[0];
+    if(c)return {amount:c,src:`${stockShort(partner)} に払ってきた額のうち、上位店 ${Number(upAmt).toLocaleString()}円に一番近い額（過去 ${pa[c]}件）`,loose:true}}
+  if(vals.length===1)return {amount:vals[0],src:`${stockShort(partner)} に払ってきた額（${pa[vals[0]]}件）`,loose:true};
   return null;
 }
 /* ファイル名・シート名から商材の見当（社内の商材名に当てる正規表現）。見当があれば、その商材の支払履歴だけを使う */
@@ -10174,8 +10187,10 @@ function makeCarryModule(cfg){
         if(m.modo){row.state='warn';row.resolved=false;row.why='戻入ですが、過去に払った記録がありません（払っていなければ引かない）';return row}
         const ua=upAttrsOf(row,row.product)||{};
         const pay2=row.payTo||partner;
-        const hr=histRate(row.product,pay2,toss,ua)||histRate(row.product,partner,toss,ua);
-        if(hr){row.price=hr.amount;if(hr.loose||/標準単価|区分違い/.test(hr.src))row.state='warn';row.why=(row.why||'')+`新しいお客様: XRM の支払先 ${pay2}${toss&&toss!=='-'?' × '+toss:''}・${row.product} の単価 ${hr.amount.toLocaleString()}円（${hr.src}）`;return row}
+        /* 上位店のインセンティブ（達成インセンティブなど）はパートナーに払わない（9月度 @nifty の実績） */
+        if(/インセンティブ|達成/.test(m.item||'')){row.price=0;row.state='warn';row.why=(row.why||'')+'上位店のインセンティブはパートナーに払わない';return row}
+        const hr=histRate(row.product,pay2,toss,ua,hint,m.fee)||(pay2!==partner?histRate(row.product,partner,toss,ua,hint,m.fee):null);
+        if(hr){row.price=hr.amount;if(hr.loose)row.state='warn';row.why=(row.why||'')+`新しいお客様: XRM の支払先 ${pay2}${toss&&toss!=='-'?' × '+toss:''}・${row.product} の単価 ${hr.amount.toLocaleString()}円（${hr.src}）`;return row}
         const lr=learnedRate(row.product,partner,toss);
         if(lr&&(lr.fixed||(lr.distinct===1&&lr.count>=2))){row.price=lr.amount;row.why=`XRM の支払先 ${partner}・学習の単価 ${lr.amount.toLocaleString()}円（${row.product}）`;return row}
         row.state='alert';row.resolved=false;row.why=`新しいお客様（XRM「${x.sheet}」: ${partner}${toss&&toss!=='-'?' × '+toss:''}）。${row.product} の単価が決まっていません`;return row;
