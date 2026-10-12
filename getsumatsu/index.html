@@ -7381,7 +7381,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面29';
+const APP_BUILD='2026-10-12 新画面30';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9995,7 +9995,7 @@ function makeTaughtModule(cfg){
         rows.push({i:rows.length+1,date:parseDate(r[MC.date]),name,tel,item,plan:clean(r[MC.plan]),fee,modo:/戻入|請求/.test(item)||(fee!=null&&fee<0)})}
       S.rows=rows.map(m=>{
         let x=m.tel?xmap.get(m.tel):null;if(!x&&!m.tel){nmap=nmap||xrmNameMap(S.xrmWb,cfg.xrmSheets);x=nmap.get(nameKey(m.name))||null;if(x){m.byName=true;m.tel=x.tel||''}}const row={...m,x,state:'ok',payTo:'',price:null,why:'',resolved:true};
-        if(!x){row.state='warn';row.why=m.tel?'XRMに該当する電話番号がありません':'電話番号が無く、XRMの氏名でも1件に決まりません';row.resolved=false;return row}
+        if(!x){row.price=0;row.payTo='（支払なし）';row.notFound=true;row.why=(m.tel?'XRMに該当する電話番号がありません':'電話番号が無く、XRMの氏名でも1件に決まりません')+' → どこにも見つからないので支払なし';return row}
         if(m.byName)row.why='（氏名でXRMと突き合わせ）';
         const partner=x.partner||'',toss=x.toss||'';
         row.payTo=partner+(toss&&toss!=='-'?' × '+toss:'');
@@ -10175,7 +10175,8 @@ function makeCarryModule(cfg){
         let x=m.keys.map(k=>X.get(k)).find(Boolean)||null;
         if(!x&&m.name){S._xrmNames=S._xrmNames&&S._xrmNames.wb===S.xrmWb?S._xrmNames:{wb:S.xrmWb,map:xrmNameMap(S.xrmWb,S.xrmWb?S.xrmWb.SheetNames:[])};x=S._xrmNames.map.get(nameKey(m.name))||null;if(x)row.byName=true}
         row.x=x;
-        if(!x){row.state='warn';row.resolved=false;row.why='過去の支払明細にも XRM にも見つかりません';return row}
+        /* 過去の支払明細にも XRM にも見つからないお客様は支払わない（2026-10 菊地さん「今後もどこにも見つからないお客さんは支払不要」） */
+        if(!x){row.price=0;row.payTo='（支払なし）';row.why='過去の支払明細にも XRM にも見つからないので支払なし';row.notFound=true;return row}
         const partner=x.partner||'',toss=x.toss||'';row.payTo=partner;
         const xp=xrmProductMap()[String(x.sheet).replace(/_\d+$|（.*?）|\(.*?\)|[A-Z]$/g,'')];
         row.product=(xp&&(!hint||hint.test(xp)))?xp:(fam.find(p=>!hint||hint.test(p))||famTop);
@@ -10199,7 +10200,10 @@ function makeCarryModule(cfg){
     },
     tableRow:r=>[r.i,(r.modo?'<span class="badge b-min">戻入</span> ':'')+badge(r.state),esc(r.name||'—'),esc(r.key||r.tel||''),esc(r.payTo||'—'),esc(r.product||''),esc(r.why),r.price!=null?yen(r.price):'（空欄）'],
     total(){return S.rows.filter(r=>r.resolved&&!r.hold&&r.price!=null).reduce((a,r)=>a+r.price,0)},
-    approval(){return {type:'newp',opts:[]}},
+    approval(r){return {type:'select',opts:[
+      {v:'keep',label:r.price!=null?`この金額で払う（${yen(r.price)}）`:'空欄のまま',apply:x=>{if(x.price!=null){x.resolved=true;x.state='ok'}}},
+      {v:'none',label:'支払わない',apply:x=>{x.price=0;x.resolved=true;x.state='ok';x.why+=' → 支払わない'}},
+      {v:'hold',label:'この行を出力から外す（保留）',hold:true}]}},
     output(){
       const ok=S.rows.filter(r=>r.resolved&&!r.hold&&r.price!=null&&r.price!==0);const by={};
       ok.forEach(r=>{const k=(reconPartner(r.payTo)||r.payTo||'（不明）');(by[k]=by[k]||{n:0,a:0,prods:{}});by[k].n++;by[k].a+=r.price;by[k].prods[r.product]=(by[k].prods[r.product]||0)+1});
