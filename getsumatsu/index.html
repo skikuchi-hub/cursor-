@@ -7381,7 +7381,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面24';
+const APP_BUILD='2026-10-12 新画面25';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7765,6 +7765,16 @@ async function syncNow(opts){
         const mem=S.memory||(S.memory=emptyMem());mem.payFill=r;await saveMemory();
         syncLog(`支払高推移: ${(r.addedCols||[]).length?`${r.addedCols.map(fmtYmJa).join('・')}の列を足し、`:''}空欄に ${r.filled.length}件を書き込みました（明細と違う ${r.diffs.length}件・シートに無い支払先 ${r.missing.length}件は書き換えていません）`);
       }catch(e){syncLog('支払高推移の自動入力: '+finErrText(e),'err')}
+    }
+    /* パスワード付き明細のパスワード（Mac の非公開の設定から） */
+    if(man.filePasswords&&man.filePasswords.path&&man.filePasswords.sig!==c.filePwSig){
+      try{const f=await syncFile(man.filePasswords.path,null,{});const mem=S.memory||(S.memory=emptyMem());
+        mem.filePw=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));await saveMemory();c.filePwSig=man.filePasswords.sig;saveSyncCfg(c)}catch(e){console.warn('filePw',e)}
+    }
+    /* 売上明細書（PDF・エクセル）の候補金額を「アプリの集計」用に取っておく */
+    if(man.salesCand&&man.salesCand.path&&(man.salesCand.sig!==c.salesCandHistSig||!(S.memory&&S.memory.salesCand))){
+      try{const f=await syncFile(man.salesCand.path,null,{});const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+        const mem=S.memory||(S.memory=emptyMem());mem.salesCand={months:j.months||{},alias:j.alias||{}};await saveMemory();c.salesCandHistSig=man.salesCand.sig;saveSyncCfg(c)}catch(e){console.warn('salesCand',e)}
     }
     /* 売上明細書（PDF・エクセル）の候補金額 → 上位店ごとに一致する計算方法を覚えて「売上高推移」の空欄だけを埋める */
     if(man.salesCand&&man.salesCand.sig&&man.salesCand.sig!==c.salesCandSig){
@@ -8157,9 +8167,15 @@ function appSummaryHtml(){
     const g=n=>{const x=d.series.find(z=>z.name===n);return x?x.v[i]:null};sheet[k]={rev:g('売上高'),pay:g('パートナー支払計'),gross:g('粗利益高')}})}
   const ms=new Set(Object.keys(sheet));if(sh&&sh.upstreams)Object.values(sh.upstreams).forEach(d=>Object.keys(d).forEach(m=>ms.add(m)));
   Object.keys(pay).forEach(m=>ms.add(m));Object.keys(lg).forEach(m=>ms.add(m));
+  if(mem.salesCand&&mem.salesCand.months)Object.keys(mem.salesCand.months).forEach(m=>ms.add(m));
   const months=[...ms].filter(m=>/^\d{6}$/.test(m)&&m<=thisYm()).sort().slice(-12);
   if(!months.length)return '<div class="pm-note" style="padding:14px">まだ集計がありません。「同期」を押すと、Drive の売上明細書・支払明細書とスプレッドシートから集計します。</div>';
-  const rev=m=>sh&&sh.upstreams?Object.values(sh.upstreams).reduce((a,d)=>a+((d[m]&&d[m].total)||0),0):0;
+  /* 売上（アプリ）= 上位店ごとの候補（PDFの表紙・エクセルの表紙・明細行）から、シートと一致した計算方法（売上高推移の自動入力で覚えたもの）で。
+     まだ決まっていない上位店は PDF → 表紙 → 明細行 の順 */
+  const sc=mem.salesCand,learned=(mem.salesFill&&mem.salesFill.learned)||{};
+  const sv=(a,m)=>!a?null:m==='pdf'?(a.pdf_n?a.pdf:null):m==='cover'?(a.cover_n?a.cover:null):m==='rows_tax'?(a.xlsx&&a.rows?Math.round(a.rows*1.1):null):m==='rows'?(a.xlsx&&a.rows?a.rows:null):m==='pdf+cover'?(a.pdf_n&&a.cover_n?a.pdf+a.cover:null):null;
+  const rev=m=>{if(sc&&sc.months&&sc.months[m])return Object.entries(sc.months[m]).reduce((t,[u,a])=>t+(sv(a,learned[u])??sv(a,'pdf')??sv(a,'cover')??sv(a,'rows')??0),0);
+    return sh&&sh.upstreams?Object.values(sh.upstreams).reduce((a,d)=>a+((d[m]&&d[m].total)||0),0):0};
   const pd=m=>Object.values(pay[m]||{}).reduce((a,v)=>a+(Number(v)||0),0);
   const app=m=>Object.values(lg[m]||{}).reduce((a,v)=>a+(Number(v&&v.pay)||0),0);
   const yen0=v=>v?Math.round(v).toLocaleString():'—';
@@ -8167,7 +8183,7 @@ function appSummaryHtml(){
   const rows=months.map(m=>{const s=sheet[m]||{};const r=rev(m),p=pd(m)||app(m);
     return {m,sr:s.rev,sp:s.pay,sg:s.rev?(s.gross??(s.pay?s.rev-s.pay:null)):null,r,p,est:!pd(m)&&!!app(m)}});
   const chart=finChartSvg({months:rows.map(x=>x.m.slice(2,4)+'/'+x.m.slice(4)),series:[{name:'売上（シート）',v:rows.map(x=>x.sr||null)},{name:'パートナー支払（シート）',v:rows.map(x=>x.sp||null)},{name:'粗利（シート）',v:rows.map(x=>x.sg)}]});
-  return `${chart}<p class="note" style="margin:6px 0 10px">シート＝明細作成用管理元帳「売上高推移」（社員が入れている数字）。アプリ＝Drive の売上明細書のお客様の行の合計と、支払明細書の表紙の合計（支払明細書がまだ無い月はアプリで作った支払内訳の合計＝見込み）。アプリの列がシートに近づくほど、アプリだけで月末処理ができる状態です。売上（アプリ）は明細の入金月とシートの計上月のずれ・同じ明細の重複を含むので、100%を超える月があります（参考）。</p>
+  return `${chart}<p class="note" style="margin:6px 0 10px">シート＝明細作成用管理元帳「売上高推移」（社員が入れている数字）。アプリ＝Drive の売上明細書のお客様の行の合計と、支払明細書の表紙の合計（支払明細書がまだ無い月はアプリで作った支払内訳の合計＝見込み）。アプリの列がシートに近づくほど、アプリだけで月末処理ができる状態です。売上（アプリ）は上位店ごとに、PDF・エクセルの表紙・明細行のうちシートと2ヶ月続けて一致した計算方法で数えます（まだ決まっていない上位店は PDF → 表紙 → 明細行の順）。</p>
   <table class="fin"><thead><tr><th class="lbl">月</th><th>売上（シート）</th><th>粗利（シート）</th><th>粗利率</th><th>パートナー支払（シート）</th><th>売上（アプリ）</th><th>拾えた割合</th><th>支払（アプリ）</th><th>拾えた割合</th></tr></thead><tbody>
   ${rows.map(x=>`<tr><td class="lbl">${esc(fmtYmJa(x.m))}</td><td>${yen0(x.sr)}</td><td class="${x.sg<0?'neg':''}">${x.sg!=null?yen0(x.sg):'—'}</td><td>${x.sr&&x.sg!=null?(x.sg/x.sr*100).toFixed(1)+'%':'—'}</td><td>${yen0(x.sp)}</td>
     <td>${yen0(x.r)}</td><td class="mut">${pct(x.r,x.sr)}</td><td>${x.p?yen0(x.p)+(x.est?'<small class="fin-sub">見込み</small>':''):'—'}</td><td class="mut">${pct(x.p,x.sp)}</td></tr>`).join('')}
@@ -9844,7 +9860,9 @@ async function officeDecrypt(u8,password){
   if(!(zip[0]===0x50&&zip[1]===0x4b))throw new Error('パスワードが違います');
   return zip;
 }
-function filePasswordOf(name){const m=String(name||'').match(/【([^】]+)】/);return m?m[1].trim():''}
+function filePasswordOf(name){const m=String(name||'').match(/【([^】]+)】/);if(m)return m[1].trim();
+  /* ファイル名に【】が無いもの（ライセンスの「顧客詳細」など）は、Mac の設定（data/file_passwords.json）から */
+  const pw=(S.memory&&S.memory.filePw)||{};const n=String(name||'').normalize('NFC');const k=Object.keys(pw).find(x=>n.includes(x));return k?pw[k]:''}
 function readWb(file,opts){
   return new Promise((res,rej)=>{
     const rd=new FileReader();
