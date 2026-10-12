@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面43';
+const APP_BUILD='2026-10-12 新画面44';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7810,6 +7810,21 @@ async function syncNow(opts){
     syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
     SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
+    /* ライフサポートの内訳（SBPS・ロボペイ）: Drive にある最新月の決済 CSV から同期で自動で作り、入れる画面にカードを出す（アップロード不要・2026-10 菊地さん）。
+       結果は記憶にも残す（mem.stockOut: 支払先ごとの件数・金額）。明細書の仕上げの材料にする */
+    try{const csvs=SALES_LIST.filter(x=>x.payer==='WST'&&/\.csv$/i.test(String(x.name||''))&&/SBPS|PAY_/i.test(String(x.name||'')));
+      const newest={};csvs.forEach(x=>{const k=/SBPS/i.test(x.name)?'PS':'R';if(!newest[k]||String(x.month)>String(newest[k].month))newest[k]=x});
+      for(const [k,it] of Object.entries(newest)){if((B.files||[]).some(f=>f.name===it.name))continue;
+        try{const fl=await syncFile(it.path,null,{size:it.size});const u8=new Uint8Array(fl.buf);let txt=new TextDecoder('utf-8').decode(u8);
+          if(k==='R'&&!/^\uFEFF?決済番号/.test(txt))txt=new TextDecoder('shift_jis').decode(u8);
+          const p=k==='PS'?parseSbpsCsv(txt):(/^\uFEFF?決済番号/.test(txt)?parseRobopayCsv(txt):null);if(!p)continue;
+          const st=stockBuild(p);if(st.err)continue;
+          /* もう支払明細書がある月（払い済み）は作らない */
+          const paidYms=Object.keys((S.memory.stockLs&&S.memory.stockLs.months)||{}).sort();if(paidYms.length&&st.target<=paidYms[paidYms.length-1])continue;
+          B.files=B.files||[];B.files.push({name:it.name,size:it.size,kind:'csv',note:`Drive の決済 CSV から ${fmtYmJa(st.target.replace('-',''))}度のライフサポート（${k==='R'?'ロボペイ':'SBPS'}）支払内訳を自動で作りました（下のカード）`,jobs:[],err:'',order:B.files.length,stock:st,stockSrc:p,auto:true});
+          const mem=S.memory||(S.memory=emptyMem());mem.stockOut=mem.stockOut||{};mem.stockOut[k+'|'+st.target]={at:new Date().toISOString(),file:it.name,total:st.total,partners:st.partners.map(x=>({name:x.name,n:x.n,amt:x.amt}))};await saveMemory();
+          syncLog(`ライフサポート（${k==='R'?'ロボペイ':'SBPS'}）${fmtYmJa(st.target.replace('-',''))}度の内訳を作りました: 合計 ${yen(st.total)}`)}catch(e){console.warn('stockAuto',e)}}
+      if(typeof renderIn==='function')renderIn()}catch(e){console.warn('stockAuto',e)}
     /* ショット先出OP: 会社別の計画（36ヶ月シミュレーション）と、WST の MatoPass 課金明細（実績）を同期で自動で読み込む（入れる画面に入れなくてよい） */
     try{c.shotDone=c.shotDone||{};const src=(Array.isArray(man.shotPlans)?man.shotPlans:[]).concat(SALES_LIST.filter(x=>/MatoPass|課金明細/i.test(String(x.name||''))&&x.payer!=='EX'));
       let ns=0;for(const it of src){const k=it.path+'|'+(it.mtime||it.size||'');if(c.shotDone[it.path]===k)continue;
@@ -9022,7 +9037,8 @@ function stockBuild(p){
       else if(op&&curOp.length&&!curOp.includes(op))check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:`リスト ${li.list} は${stockShort(op)}のリストですが、前月は${curOp.map(stockShort).join('・')}に支払っています（前月どおり）`,soft:1});
       Object.entries(hit).forEach(([pt,src])=>{
         /* OP のリストではないのに OP に払っている顧客は、OP に払い続けて WT には払わない（2026-10 菊地さん指示） */
-        if(pt==='Wetopia株式会社'&&!op&&curOp.length)return;
+        /* ただしリスト番号が分からない顧客（XRM に無い旧クラブペイなど）は前月どおり WT にも払う（9月度: WT 956円＋クラウドナイン 600円を6〜9月ずっと払っている） */
+        if(pt==='Wetopia株式会社'&&!op&&curOp.length&&li.list)return;
         /* 月によって列の並びが違うことがあるので、見出し名で今月の並びに直す */
         const h=hdrOf[pt]||src.hdr,pi=h.findIndex(x=>/単価/.test(x)),ki=h.indexOf('売上返金区分名称'),mi=h.indexOf('支払い方法');
         const spi=src.hdr.findIndex(x=>/単価/.test(x));
