@@ -2403,7 +2403,7 @@ const MODULES = {
       const xh=xr[0]||[];
       const xc={hp:findCol(xh,['HPクリック']),rcv:findCol(xh,['受信日時']),
         partner:findCol(xh,['パートナー企業']),toss:findCol(xh,['トスアップパートナー']),
-        tossAcc:findCol(xh,['トスアップアカウント']),name:findCol(xh,['顧客氏名','氏名'])};
+        tossAcc:findCol(xh,['トスアップアカウント']),name:findCol(xh,['顧客氏名','氏名']),list:findCol(xh,['リストID'])};
       if(xc.hp<0&&xc.rcv<0)throw new Error('XRM Eシートに「HPクリック日時」「受信日時」列が見つかりません');
       const xrows=[];
       for(let i=1;i<xr.length;i++){
@@ -2413,7 +2413,7 @@ const MODULES = {
         if(!hp&&!rcv)continue;
         xrows.push({idx:xrows.length,hp,rcv,
           partner:clean(xc.partner>=0?r[xc.partner]:''),toss:clean(xc.toss>=0?r[xc.toss]:''),
-          tossAcc:clean(xc.tossAcc>=0?r[xc.tossAcc]:''),custName:clean(xc.name>=0?r[xc.name]:'')});
+          tossAcc:clean(xc.tossAcc>=0?r[xc.tossAcc]:''),custName:clean(xc.name>=0?r[xc.name]:''),listId:xc.list>=0?String(r[xc.list]??'').trim():''});
       }
       progLine(`XRM「セゾンプラチナ・ビジネスカードE」を読み込み（日時あり ${xrows.length}行・表記ゆれ正規化済）`);
       /* ±5分 1対1最適割当（時間差昇順greedy） */
@@ -2443,6 +2443,10 @@ const MODULES = {
         if(x.toss==='Wetopia株式会社'){
           row.payTo='Wetopia株式会社（トス）';row.price=num('p_sofi_wt5');
           row.why=`時間差${Math.round(a.diff/1000)}秒で突合 / WTトス`;
+          /* リストごとに単価が違う（9月度: リスト 2026・1981・1983 など は 2,000円）: 過去の明細で Wetopia×リスト に払った単価 */
+          const ym=m.occur?`${m.occur.getFullYear()}${String(m.occur.getMonth()+1).padStart(2,'0')}`:'';
+          const lr=x.listId?listRateFor('セゾンカード','Wetopia株式会社',x.listId,ym):null;
+          if(lr&&lr.amount!==row.price){row.price=lr.amount;row.why+=` / リスト${x.listId}は ${lr.amount.toLocaleString()}円（${fmtYmJa(lr.m)}度の明細 ${lr.n}件）`}
         }else{
           row.payTo='Exploration Holdings（自社）';row.price=0;
           row.why=`時間差${Math.round(a.diff/1000)}秒で突合 / トスなし（自社）`;
@@ -2467,7 +2471,7 @@ const MODULES = {
       const ex=active.filter(r=>r.payTo.startsWith('Exploration'));
       const un=active.filter(r=>!r.x&&!r.price);
       S.outPartners=[
-        {name:'Wetopia株式会社',count:wt.length,amt:wt.length*num('p_sofi_wt5'),rows:wt,sub:`WTトス × ${yen(num('p_sofi_wt5'))}`},
+        {name:'Wetopia株式会社',count:wt.length,amt:wt.reduce((a,r)=>a+(r.price||0),0),rows:wt,sub:`WTトス × ${yen(num('p_sofi_wt5'))}${wt.some(r=>r.price!==num('p_sofi_wt5'))?'（リスト別の単価あり）':''}`},
         {name:'Exploration Holdings（自社）',count:ex.length,amt:null,noPay:true,rows:ex,sub:'トスなし・支払なし'},
         {name:'未突合（要確認）',count:un.length,amt:null,noPay:true,rows:un,sub:'±5分で突合不可'}
       ].filter(p=>p.count>0);
@@ -3307,6 +3311,26 @@ function xrmHeaderOf(sn){
   if(!S._xrmHdr[sn]){const ws=S.xrmWb&&S.xrmWb.Sheets[sn];S._xrmHdr[sn]=ws?(XLSX.utils.sheet_to_json(ws,{header:1,defval:null,range:0})[0]||[]):[]}
   return S._xrmHdr[sn];
 }
+/* そのパートナーに最後に支払明細書を出した月（history.json の paid。記録が無ければ ''、履歴そのものが無ければ null） */
+function partnerLastPaidMonth(partner){
+  const ph=S.memory&&S.memory.paidHist;if(!ph||!ph.by)return null;
+  if(!S._plm||S._plm.ph!==ph){const m={};let mx='';Object.values(ph.by).forEach(es=>es.forEach(e=>{const mm=String(e[5]||e[2]||'');if(mm>mx)mx=mm;[e[6],e[3]].forEach(p=>{const n=reconNorm(p||'');if(n&&(!m[n]||mm>m[n]))m[n]=mm})}));S._plm={ph,m,mx}}
+  const n=reconNorm(partner);if(!n)return null;return S._plm.m[n]||'';
+}
+/* 履歴の最新月から n ヶ月前（「ここ半年」の判定用） */
+function recentCutYm(n){partnerLastPaidMonth('x');let y=(S._plm&&S._plm.mx)||'';for(let i=0;i<n&&y;i++)y=prevYm(y);return y}
+/* 過去の支払明細で パートナー×リスト に払った直近の単価（history.json の ratesAttr。2件以上で8割以上同じ額のときだけ） */
+function listRateFor(product,partner,listId,ym){
+  const ra=S.memory&&S.memory.ratesAttr;if(!ra||!listId)return null;const pn=reconNorm(partner);let best=null;
+  /* 申込日の区切り（periodCuts）があれば、同じ期間の単価だけ */
+  const cuts=(S.memory.periodCuts||{})[product];let per='';
+  if(ym&&cuts&&cuts.length){const past=cuts.filter(c=>c<=ym);const c=past.length?past[past.length-1]:null;per=c?`申込${c.slice(0,4)}/${c.slice(4)}〜`:`申込〜${cuts[0].slice(0,4)}/${cuts[0].slice(4)}前`}
+  Object.entries(ra).forEach(([b,bs])=>{const [p,pa]=b.split('|');if(p.replace(/〔.*?〕$/,'')!==product||reconNorm(pa)!==pn)return;
+    Object.entries(bs).forEach(([sig,byM])=>{let a={};try{a=JSON.parse(sig)}catch(e){}if(String(a['リスト']||'')!==String(listId))return;if(per&&a['申込期']&&a['申込期']!==per)return;
+      Object.entries(byM).forEach(([m,d])=>{if(best&&m<best.m)return;if(!best||m>best.m)best={m,d:{}};Object.entries(d).forEach(([amt,c])=>best.d[amt]=(best.d[amt]||0)+c)})})});
+  if(!best)return null;const e=Object.entries(best.d).sort((a,b)=>b[1]-a[1]);const tot=e.reduce((a,[,c])=>a+c,0);
+  if(e[0][1]<2||e[0][1]<tot*0.8)return null;return {amount:Number(e[0][0]),m:best.m,n:e[0][1]};
+}
 function upAttrsOf(r,product){
   if(!S.meisaiWb||!S.meisaiSheet||!r||!r.sheetRow)return null;
   if(!S._upRaw||S._upRaw.wb!==S.meisaiWb||S._upRaw.sheet!==S.meisaiSheet){
@@ -3632,6 +3656,7 @@ function fillFromMemory(){
   let n=0;
   S.rows.forEach(r=>{
     if(r.resolved&&r.x&&r.x.toss)return;
+    if(r.carried)return;   /* 過去の支払明細から引き継いだ行（汎用の読み込み）は、そのまま */
     const hit=(r.tel&&memGet(byP,r.tel))||(r.key&&memGet(byK,String(r.key)))||(r.x&&r.x.app&&memGet(byK,String(r.x.app)));
     if(!hit)return;
     const label=hit.m==='999999'?'手動確定の記憶':`記憶(${hit.m?hit.m.slice(0,4)+'年'+Number(hit.m.slice(4))+'月':'月不明'})`;
@@ -6142,6 +6167,11 @@ MODULES.subsele={
         row.why=`${m0.kind}: ${fmtYm(paidYm)}に先出し支払済 → 今回支払なし`;
         return row;
       }
+      /* 過去の支払明細（ショットOP タブ。会員ID＋コンテンツ略称）で払っていれば、今回は払わない（ストックの先出し済み・二重払い防止） */
+      {const ph=S.memory&&S.memory.paidHist;const sh=k=>((ph&&ph.by&&ph.by[k])||[]).filter(e=>/ショット/.test(ph.products[e[0]]||'')&&e[1]>0);   /* history.json は過去の月の明細だけ */
+        const hs=sh(m0.lmp+'_'+bnAbbr(m0.content)).length?sh(m0.lmp+'_'+bnAbbr(m0.content)):sh(m0.lmp);
+        if(hs&&hs.length){const e=hs[0];row.skip=true;row.price=0;row.payTo=e[6]||e[3]||'';
+          row.why=`${m0.kind}: ${fmtYmJa(e[5]||e[2])}度の明細で ${stockShort(row.payTo)} に ${Number(e[4]!=null?e[4]:e[1]).toLocaleString()}円 払い済み → 今回支払なし`;return row}}
       if(isEX(m0.corp)){
         row.payTo='Exploration Holdings（自社）';row.price=0;
         row.why=`${m0.kind}: ${m0.corp} → EX案件・支払0円`;
@@ -6166,6 +6196,12 @@ MODULES.subsele={
       }
       return row;
     });
+    /* リストごとに単価が違う（9月度: Wetopia のリスト 2026・1981・2049 は 1,700円）: 過去の支払明細で そのパートナー×リスト に払った単価があればそれを使う */
+    {const X=xrmAllIndex();let nl=0;
+      S.rows.forEach(r=>{if(r.skip||!r.resolved||!(r.price>0)||!r.payTo)return;const x=X.get(String(r.lmp).replace(/_[A-Z0-9]{1,5}$/,''));if(!x||!x.listId)return;
+        const lr=listRateFor('ショットOP',r.payTo,x.listId,r.date?`${r.date.getFullYear()}${String(r.date.getMonth()+1).padStart(2,'0')}`:'');if(!lr||lr.amount===r.price)return;
+        r.why+=` → リスト${x.listId}は ${lr.amount.toLocaleString()}円（${fmtYmJa(lr.m)}度の明細 ${lr.n}件）`;r.price=lr.amount;nl++});
+      if(nl)progLine(`リスト別の単価を当てた行 ${nl}件`)}
     progLine(`振り分け: Wetopia ${S.rows.filter(r=>r.payTo==='Wetopia株式会社').length}件 / EX自社 ${S.rows.filter(r=>r.payTo.startsWith('Exploration')).length}件 / 要確認 ${S.rows.filter(r=>r.state==='alert').length}件`);
   },
   tableRow:r=>[r.i,badge(r.state),esc(r.kind),fmtDate(r.date),esc(r.lmp),esc(r.content||'—'),
@@ -6415,8 +6451,13 @@ MODULES.neoglyph={
       }
       progLine(`「${sn}」から ${r.length-1}行を読み込み`);
     });
+    /* タブのパートナーに、ここ半年 支払明細書を出していなければ払わない（9月度: OwlEye は 2025年9月度が最後。同じお客様は Wetopia のタブで払う） */
+    const inact={};[...new Set(rows.map(r=>r.partner))].forEach(p=>{const lm=partnerLastPaidMonth(p);if(lm&&lm<recentCutYm(6))inact[p]=lm});
+    rows.forEach(r=>{if(r.skip||!(r.partner in inact))return;r.skip=true;r.price=null;r.state='warn';skipped++;skipSum+=r.rawPrice;
+      r.why=`「${r.partner}」には ${inact[r.partner]?fmtYmJa(inact[r.partner])+'度を最後に':'これまで'}支払明細書を出していないので支払対象外（払うなら「支払対象に戻す」）`});
+    Object.entries(inact).forEach(([p,lm])=>progLine(`「${p}」タブは支払対象外（${lm?fmtYmJa(lm)+'度を最後に支払なし':'支払の記録なし'}）`,'err'));
     S.rows=rows;
-    S.excluded=skipped?[{name:'解約日が課金日以前',fee:skipped}]:[];
+    S.excluded=skipped?[{name:'解約日が課金日以前・支払っていないパートナー',fee:skipped}]:[];
     progLine(`支払対象 ${rows.length-skipped}件 / 対象外 ${skipped}件（${skipSum.toLocaleString()}円）`);
   },
   tableRow:r=>[r.i,badge(r.state),esc(r.partner),esc(r.item),esc(r.uid),
@@ -6879,7 +6920,8 @@ MODULES.life365={
     return wb.SheetNames.find(sn=>{
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:null});
       const h=rows[0]||[];
-      return findCol(h,['支払手数料'])>=0&&findCol(h,['ユ-ザ-ID','ユーザーID','ユ－ザ－ID','ユーザID','ザ-ID','ザーID'])>=0;
+      /* パートナー名の列が無い明細（月額ペイの【YYMM】明細 など。店舗名・商品名・ユーザーID・支払手数料）は Life365 ではない → 過去の支払明細から引き継ぐ */
+      return findCol(h,['支払手数料'])>=0&&findCol(h,['ユ-ザ-ID','ユーザーID','ユ－ザ－ID','ユーザID','ザ-ID','ザーID'])>=0&&findCol(h,['パートナー名'])>=0;
     })||null;
   },
   xrmCheck(){return null},
@@ -7416,7 +7458,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面32';
+const APP_BUILD='2026-10-12 新画面33';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -8793,7 +8835,8 @@ function stockBuild(p){
     let hit=base[id],how='前月';
     if(!hit){const k=olderIdx.findIndex(o=>o[id]);if(k>=0){hit=olderIdx[k][id];how='過去'}}
     /* XRM に見つからない顧客は、前月に払っていても支払わない（2026-10 菊地さん指示） */
-    if(hit&&X&&!X[id]){check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:'XRM に無い顧客（支払わない）'});return}
+    /* ロボペイは、前に払っていれば XRM に無くても同じように払う（2026-10 菊地さん「支払って」） */
+    if(hit&&X&&!X[id]&&K!=='R'){check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:'XRM に無い顧客（支払わない）'});return}
     if(hit){
       const x0=X&&X[id],li=listOf(id,hit),inf=listInfo(li.list);
       if(li.list&&!inf)noteUnknown(li.list,id);
@@ -10185,6 +10228,8 @@ function makeCarryModule(cfg){
       const tabItem=(CARRY_TABS.find(([re])=>re.test(String(cfg.fname).normalize('NFC')))||[])[3]||[];
       let itemC=tabItem.map(n=>h.indexOf(n)).find(i=>i>=0);if(itemC==null||itemC<0)itemC=h.findIndex(n=>/商材|商品|プラン|サービス|内容|コンテンツ/.test(n));if(itemC<0)itemC=h.findIndex(n=>/^項目$/.test(n));
       const nameC=h.findIndex(n=>/氏名|顧客名|契約者|お客様名|名義|お名前|需要家名|申込者/.test(n));
+      /* 店舗コードの列（月額ペイの TK01・パートナー005 など、パートナーごとの店舗アカウント）・決済方法・契約日 */
+      const storeC=h.findIndex(n=>/^店舗(名|コード)?$/.test(n)),payMC=h.findIndex(n=>/決済方法|支払方法/.test(n)),dateC=h.findIndex(n=>/^(契約日|申込日|受付日)$/.test(n));
       const rows=[];
       for(let i=hi+1;i<raw.length;i++){const r=raw[i];if(!r)continue;
         let keys=[];(idCols.length?idCols:r.map((_,j)=>j)).forEach(j=>{keys=keys.concat(carryKeysOf(r[j]))});keys=[...new Set(keys)];
@@ -10193,11 +10238,16 @@ function makeCarryModule(cfg){
         const fee=amtC>=0&&typeof r[amtC]==='number'?r[amtC]:null;const item=itemC>=0?clean(r[itemC]):'';
         const nm0=nameC>=0?clean(r[nameC]):'';if(nm0&&nameKey(nm0).length>=2)keys.push('N:'+nameKey(nm0));
         rows.push({i:rows.length+1,sheetRow:i+1,keys,tel:keys.find(k=>/^0\d{9,10}$/.test(k))||'',key:keys.find(k=>!/^0\d{9,10}$/.test(k))||keys[0],
-          name:nameC>=0?clean(r[nameC]):'',item,fee,modo:/戻入|請求戻|返金/.test(item)||(fee!=null&&fee<0)||/戻入/.test(S.meisaiSheet)||r.some(v=>typeof v==='string'&&/^(戻入|解約戻入|戻し)$/.test(v.trim()))});
+          name:nameC>=0?clean(r[nameC]):'',item,fee,store:storeC>=0?clean(r[storeC]):'',payM:payMC>=0?clean(r[payMC]):'',cdate:dateC>=0?r[dateC]:null,modo:/戻入|請求戻|返金/.test(item)||(fee!=null&&fee<0)||/戻入/.test(S.meisaiSheet)||r.some(v=>typeof v==='string'&&/^(戻入|解約戻入|戻し)$/.test(v.trim()))});
       }
       /* この明細のお客様が過去にどの商材で払われていたか（番号で一致したものを優先）→ 商材の見当 */
       const cnt={};let matched=0;const hint=carryHintRe(cfg.fname,cfg.sheet);
-      rows.forEach(m=>{m.hist=carryHist(m.keys);if(hint)m.hist=m.hist.filter(x=>hint.test(x.product));if(!m.hist.length)return;matched++;[...new Set(m.hist.map(x=>x.product))].forEach(p=>cnt[p]=(cnt[p]||0)+1)});
+      rows.forEach(m=>{m.hist=carryHist(m.keys);
+        /* 1人のお客様に商品が複数あり、商品ごとに単価が違う明細（月額ペイの4コンテンツ）: 番号＋商品名 で払った記録を優先 */
+        if(m.item){const it=String(m.item).normalize('NFKC').replace(/\s+/g,'').slice(0,30);const hi=carryHist(m.keys.filter(k=>!/^N:/.test(k)).map(k=>k+'#'+it));
+          /* 商品ごとの記録が番号の最新の支払より古い（別の商材で払っていた頃の単価）なら使わない */
+          const lm=a=>a.reduce((x,e)=>String(e.m)>x?String(e.m):x,'');if(hi.length&&lm(hi)>=lm(m.hist)){m.hist=hi;m.byItem=true}}
+        if(hint)m.hist=m.hist.filter(x=>hint.test(x.product));if(!m.hist.length)return;matched++;[...new Set(m.hist.map(x=>x.product))].forEach(p=>cnt[p]=(cnt[p]||0)+1)});
       const fam=Object.entries(cnt).filter(([,c])=>c>=Math.max(2,matched*0.1)).sort((a,b)=>b[1]-a[1]).map(([p])=>p);
       const famTop=fam[0]||cfg.product||cfg.sheet;
       progLine(`「${cfg.sheet}」: ${rows.length}件のうち ${matched}件が過去の支払明細と一致（商材の見当: ${fam.slice(0,4).join('・')||'なし'}）`);
@@ -10217,7 +10267,7 @@ function makeCarryModule(cfg){
           if(m.modo&&!pos){row.price=null;row.resolved=false;row.state='warn';row.why='戻入ですが、払った記録（プラスの支払）が見つかりません';return row}
           row.why=m.modo?`戻入: ${fmtYmJa(e.maxM)}度に払った ${Number(e.max||e.a).toLocaleString()}円を全額マイナス（${e.product}）`
             :`${fmtYmJa(e.m)}度と同じ ${stockShort(row.payTo)} へ ${Number(e.a).toLocaleString()}円（${e.product}）を引き継ぎ`;
-          return row}
+          row.lastM=String(e.m);return row}
         let x=m.keys.map(k=>X.get(k)).find(Boolean)||null;
         if(!x&&m.name){S._xrmNames=S._xrmNames&&S._xrmNames.wb===S.xrmWb?S._xrmNames:{wb:S.xrmWb,map:xrmNameMap(S.xrmWb,S.xrmWb?S.xrmWb.SheetNames:[])};x=S._xrmNames.map.get(nameKey(m.name))||null;if(x)row.byName=true}
         row.x=x;
@@ -10242,6 +10292,28 @@ function makeCarryModule(cfg){
         if(lr&&(lr.fixed||(lr.distinct===1&&lr.count>=2))){row.price=lr.amount;row.why=`XRM の支払先 ${partner}・学習の単価 ${lr.amount.toLocaleString()}円（${row.product}）`;return row}
         row.state='alert';row.resolved=false;row.why=`新しいお客様（XRM「${x.sheet}」: ${partner}${toss&&toss!=='-'?' × '+toss:''}）。${row.product} の単価が決まっていません`;return row;
       });
+      /* 引き継いだお客様のうち、ほかのお客様より2ヶ月以上前に最後に払った人（あいだに払っていない月がある）は要確認にする */
+      {const mc={};S.rows.forEach(r=>{if(r.carried&&!r.modo&&r.lastM)mc[r.lastM]=(mc[r.lastM]||0)+1});const top=Object.entries(mc).sort((a,b)=>b[1]-a[1])[0];const tot=Object.values(mc).reduce((a,c)=>a+c,0);
+        const cur=top&&top[1]>=20&&top[1]>=tot*0.5?top[0]:'';   /* 毎月払うストックの明細（引き継ぎの大半が同じ月）だけ */
+        if(cur)S.rows.forEach(r=>{if(r.carried&&!r.modo&&r.lastM&&r.lastM<prevYm(cur)){r.state='warn';r.gap=true;r.why+=` / ${fmtYmJa(r.lastM)}度のあと ${fmtYmJa(cur)}度まで払っていません（再開なら払う・止めていたなら払わない）`}})}
+      /* 過去にも XRM にも無い新しいお客様でも、店舗コード（会社名ではない店舗アカウント）があれば、同じ明細の同じ店舗・同じ商品・同じ決済の種類のお客様の
+         支払先と、契約日が新しい人の単価を当てる（9月度: 月額ペイ TK01 → CHAiNON 655/555/505/581円、クレカは 705/619/624/524円） */
+      if(storeC>=0){
+        const pc=t=>/クレ|カード/.test(t||'')?'クレカ':'キャリア決済';const dv=v=>v instanceof Date?v.getTime():typeof v==='number'?v:Date.parse(v)||0;
+        const peers={},sp={},pp={};
+        S.rows.forEach(r=>{if(!r.carried||r.modo||!(r.price>0)||!r.store)return;const k=r.store+'|'+r.item+'|'+pc(r.payM);(peers[k]=peers[k]||[]).push(r);const k2=r.payTo+'|'+r.item+'|'+pc(r.payM);(pp[k2]=pp[k2]||[]).push(r);const o=(sp[r.store]=sp[r.store]||{});o[r.payTo]=(o[r.payTo]||0)+1});
+        let nPeer=0;
+        S.rows.forEach(r=>{if(!r.notFound||!r.store||/株式会社|合同会社|有限会社|Holdings|ホールディングス/i.test(r.store))return;
+          const o=sp[r.store];if(!o)return;const pe=Object.entries(o).sort((a,b)=>b[1]-a[1]);const tot=pe.reduce((a,[,c])=>a+c,0);if(pe[0][1]<tot*0.9)return;
+          let g=(peers[r.store+'|'+r.item+'|'+pc(r.payM)]||[]).filter(x=>x.payTo===pe[0][0]);let via='同じ店舗';
+          /* 同じ店舗のお客様が少なければ、同じ支払先のほかの店舗（パートナー001・005 → Syncpiece など）から */
+          if(g.length<2){g=pp[pe[0][0]+'|'+r.item+'|'+pc(r.payM)]||[];via=stockShort(pe[0][0])+'のほかの店舗'}
+          g=g.slice().sort((a,b)=>dv(b.cdate)-dv(a.cdate)).slice(0,15);if(g.length<2)return;
+          const pcnt={};g.forEach(x=>pcnt[x.price]=(pcnt[x.price]||0)+1);const top=Object.entries(pcnt).sort((a,b)=>b[1]-a[1])[0];
+          r.payTo=pe[0][0];r.price=Number(top[0]);r.notFound=false;r.peer=true;r.product=g[0].product;if(top[1]<g.length*0.8)r.state='warn';
+          r.why=`新しいお客様: 店舗「${r.store}」は ${stockShort(r.payTo)}（${pe[0][1]}/${tot}件）。${via}・${r.item}・${pc(r.payM)}で契約日が新しいお客様の単価 ${r.price.toLocaleString()}円（${top[1]}/${g.length}件）`;nPeer++});
+        if(nPeer)progLine(`「${cfg.sheet}」: 店舗コードから支払先・単価を当てた新しいお客様 ${nPeer}件`);
+      }
       progLine(`「${cfg.sheet}」: 引き継ぎ ${S.rows.filter(r=>r.carried).length}件・XRMと台帳 ${S.rows.filter(r=>!r.carried&&r.resolved).length}件・要確認 ${S.rows.filter(r=>!r.resolved).length}件`);
     },
     tableRow:r=>[r.i,(r.modo?'<span class="badge b-min">戻入</span> ':'')+badge(r.state),esc(r.name||'—'),esc(r.key||r.tel||''),esc(r.payTo||'—'),esc(r.product||''),esc(r.why),r.price!=null?yen(r.price):'（空欄）'],
@@ -10284,7 +10356,7 @@ function makeOffsetModule(cfg){
     buildWb(){const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([['相殺通知書','渡し先','支払','根拠']].concat(S.rows.map(r=>[r.sheet,r.payTo,r.price,r.why]))),'相殺');return wb}};
 }
 /* アプリで内訳を作らない明細（2026-10 菊地さん）: 直販で支払いが無いもの、担当者が別に処理するもの */
-const CARRY_SKIP_FILES=[[/疑義|ご確認依頼/,'上位店からの確認依頼の一覧（支払の明細ではない）'],[/MatoPass.*課金明細/i,'MatoPass の課金明細（ショット先出OPの実績として収支データで使う）'],
+const CARRY_SKIP_FILES=[[/疑義|ご確認依頼/,'上位店からの確認依頼の一覧（支払の明細ではない）'],[/つばさでんき/,'つばさでんきは石原さんの管轄なので対象外'],[/ご返金分.*請求書|御請求書\(合同会社ＩＴサポート/,'返金の請求書（支払内訳は作らない）'],[/MatoPass.*課金明細/i,'MatoPass の課金明細（ショット先出OPの実績として収支データで使う）'],
   [/エイチエナジー手数料明細書/,'エイチエナジー（SEILAN）は石原さんが処理するので対象外'],[/SB法人携帯|携帯詳細|【2312】.*詳細/,'法人携帯は直販で支払いが無いので対象外'],[/スマートサブスクライブ/,'スマートサブスクライブは直販で支払いが無いので対象外']];
 function carrySkipReason(name,wb){const n=String(name).normalize('NFC')+' '+((wb&&wb.SheetNames)||[]).join(' ');const r=CARRY_SKIP_FILES.find(([re])=>re.test(n));return r?r[1]:''}
 /* 専用の処理が無い明細: 番号の列があるシートごとに汎用の読み込みを用意する */
@@ -10327,8 +10399,16 @@ function detectJobs(wb,name){
         if(pk.keys.size)out.push({key,sheet:String(pk.info.sheets[0]||'').replace(/\(\d+\)$/,''),paidKeys:pk.keys.size});
         return;
       }
-      const sh=m.findSheet(wb);
-      if(sh)out.push({key,sheet:sh});
+      let sh=m.findSheet(wb);
+      if(sh){
+        /* 同じ商材のタブが月ごとに並ぶファイル（ユーネットの「明細追加分」など、毎月まとめて送られてくる）:
+           一番新しい月のタブを使い、それが前月より古ければ（もう払った月の明細なので）読まない（2026-10: 二重払い防止） */
+        const all=wb.SheetNames.filter(sn=>{try{return m.findSheet({SheetNames:[sn],Sheets:{[sn]:wb.Sheets[sn]}})===sn}catch(e){return false}});
+        const ymOfSheet=sn=>{const t=String(sn).normalize('NFKC');let mm=t.match(/(20\d{2})(\d{2})/);if(mm)return mm[1]+mm[2];mm=t.match(/(?:^|\D)(\d{2})(\d{2})(?:\D|$)/);return mm&&+mm[2]>=1&&+mm[2]<=12?'20'+mm[1]+mm[2]:''};
+        if(all.length>1){const dated=all.map(sn=>({sn,ym:ymOfSheet(sn)})).filter(x=>x.ym).sort((a,b)=>b.ym.localeCompare(a.ym));if(dated.length)sh=dated[0].sn}
+        const sy=ymOfSheet(sh);
+        out.push({key,sheet:sh,sheetYm:sy,addFile:/追加/.test(String(name))});
+      }
     }catch(e){console.warn('detect',key,name,e)}
   });
   return out;
@@ -10412,7 +10492,7 @@ function rebuildJobs(){
     const sorted=list.slice().sort((a,b)=>((fixRe.test(b.file.name)?1:0)-(fixRe.test(a.file.name)?1:0))||(b.file.order-a.file.order));
     const main=sorted[0];
     const prev=B.jobs.find(j=>j.key===key&&j.name===main.file.name&&j.rows);
-    const job={key,file:main.file,wb:main.file.wb,name:main.file.name,sheet:main.sheet,extra:[],ignored:[],status:'ready',done:false};
+    const job={key,file:main.file,wb:main.file.wb,name:main.file.name,sheet:main.sheet,sheetYm:main.sheetYm||'',addFile:!!main.addFile,extra:[],ignored:[],status:'ready',done:false};
     if(m.kind==='audit'){
       /* 監査は複数月の明細をまとめて使える（支払済キーの和集合） */
       job.extra=sorted.slice(1).map(x=>({wb:x.file.wb,name:x.file.name}));
@@ -10438,6 +10518,19 @@ function rebuildJobs(){
     if(ym)months[ym]=(months[ym]||0)+1;
   });
   B.month=Object.entries(months).sort((a,b)=>b[1]-a[1]).map(([k])=>k)[0]||'';
+  /* 「SBPSYYYYMMDD.xlsx」「ロボペイYYYYMMDD.xlsx」はパートナー別にできあがった内訳（スタッフ作成）。
+     同じ月の決済 CSV からアプリが内訳を作るときは、二重にならないよう処理せず、付け合わせ用にだけ残す（2026-10） */
+  const kinds=new Set(B.files.filter(f=>f.stock&&!f.stock.err).map(f=>f.stock.kind||'PS'));
+  if(kinds.size){const ref=B.jobs.filter(j=>(j.key==='sbps'&&kinds.has('PS'))||(j.key==='robopay'&&kinds.has('R')));
+    if(ref.length){B.jobs=B.jobs.filter(j=>!ref.includes(j));B.refBooks=ref.map(j=>j.name)}}
+  /* 「newlifeYYYYMMDD.xlsx」（パートナー別タブ）は、月額ペイの上位店明細（【YYMM】明細: 店舗名・商品名・ユーザーID・支払手数料）をスタッフが振り分けたもの。
+     上位店明細と一緒に入っていれば、二重払いにならないよう処理しない（2026-10: Wetopia タブ 8,809行が明細一覧の月額ペイと同じ） */
+  {const isUp=j=>{if(!String(j.key).startsWith('carry:'))return false;const wb=j.wb||((B.files.find(f=>f.name===j.name)||{}).wb);const ws=wb&&wb.Sheets[j.sheet];if(!ws)return false;
+      const h=(XLSX.utils.sheet_to_json(ws,{header:1,defval:null})[0]||[]).map(x=>String(x==null?'':x).normalize('NFKC').trim());return ['店舗名','商品名','ユーザーID','支払手数料'].every(x=>h.includes(x))};
+    if(B.jobs.some(isUp)){const ref=B.jobs.filter(j=>j.key==='neoglyph');if(ref.length){B.jobs=B.jobs.filter(j=>!ref.includes(j));B.refBooks=(B.refBooks||[]).concat(ref.map(j=>j.name))}}}
+  /* 「追加分」のファイルの、前月より古い月のタブ（もう払った月の明細）は処理しない（二重払い防止） */
+  if(B.month){const lim=prevYm(B.month);const drop=B.jobs.filter(j=>j.addFile&&j.sheetYm&&j.sheetYm<lim);
+    if(drop.length){B.jobs=B.jobs.filter(j=>!drop.includes(j));B.dropped=drop.map(j=>`${j.name}「${j.sheet}」`)}}
 }
 
 /* ---- 入れる画面 ---- */
@@ -10457,6 +10550,8 @@ function renderIn(){
       d=(prods.length?prods.join(' / '):'')+(audits.length?`${prods.length?' ・ ':''}未払い監査: ${audits.join(' / ')}`:'');
       const ign=B.jobs.filter(j=>j.ignored&&j.ignored.includes(f.name)).map(j=>productOf(MODULES[j.key]));
       if(ign.length)d+=`（${ign.join(' / ')} は修正版/新しい方を採用するためこのファイルは使いません）`;
+      if((B.refBooks||[]).includes(f.name))d+='（スタッフが振り分けた内訳なので処理しません。上位店の明細・決済データからアプリが作ります＝二重払い防止）';
+      const dr=(B.dropped||[]).filter(t=>t.startsWith(f.name));if(dr.length)d+=`（前月より古い月のタブ ${dr.length}枚は払い済みのため処理しません）`;
     }
     else if(f.kind==='unknown'){tag=pill('warn','判別できず');d=f.note}
     else if(f.kind==='error'){tag=pill('bad','エラー');d=f.err}
