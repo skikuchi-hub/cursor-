@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-12 新画面42';
+const APP_BUILD='2026-10-12 新画面43';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7909,7 +7909,7 @@ async function syncNow(opts){
     /* 支払明細書の表紙の合計（月×パートナー）を「アプリの集計」用に取っておく */
     if(man.payments&&man.payments.path&&(man.payments.sig!==c.payHistSig||!(S.memory&&S.memory.paymentsHist))){
       try{const f=await syncFile(man.payments.path,null,{});const j=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
-        const mem=S.memory||(S.memory=emptyMem());mem.paymentsHist=j.months||{};await saveMemory();c.payHistSig=man.payments.sig;saveSyncCfg(c)}catch(e){console.warn('payments',e)}
+        const mem=S.memory||(S.memory=emptyMem());mem.paymentsHist=j.months||{};mem.paymentsTabs=j.tabs||{};await saveMemory();c.payHistSig=man.payments.sig;saveSyncCfg(c)}catch(e){console.warn('payments',e)}
     }
     if(man.payments&&man.payments.sig&&man.payments.sig!==c.paySig){
       try{
@@ -8500,6 +8500,11 @@ async function shotSetStore(st){const v=(document.getElementById('shotSt_'+st)||
   for(const pth of Object.values(m.matoSrc||{})){try{const f=await syncFile(pth,null,{});const wb=XLSX.read(new Uint8Array(f.buf),{type:'array',cellDates:true});S._shotSrc=pth;await shotIngest(wb,pth.split('/').pop());S._shotSrc=null}catch(e){console.warn(e)}}
   renderFin();toast(`${st} を ${v} として覚えて、数字に反映しました`)}
 /* 収支データ「ショット先出OP」タブ */
+function shotStmtPay(co,ym){
+  const T=(S.memory&&S.memory.paymentsTabs)||{};const nx=stockYmAdd?String(stockYmAdd(ym.slice(0,4)+'-'+ym.slice(4),1)).replace('-',''):'';const ps=T[nx];if(!ps)return null;
+  const k=Object.keys(ps).find(p=>reconNorm(p).includes(reconNorm(co)));if(!k)return null;
+  const v=Object.entries(ps[k]).filter(([t])=>/Life365|ライフ365/i.test(t)).reduce((a,[,x])=>a+(Number(x)||0),0);return v||null;
+}
 function shotView(){
   const m=shotMem();const order=c=>{const i=SHOT_COS.indexOf(c);return i<0?99:i};
   const cos=[...new Set([...Object.keys(m.plan),...Object.values(m.actual).flatMap(x=>Object.entries(x).filter(([,v])=>!v.ref).map(([c])=>c))])].sort((a,b)=>order(a)-order(b));
@@ -8512,7 +8517,8 @@ function shotView(){
   const yms=ymsAll.filter((y,i)=>y>=startYm&&i<=endIdx);
   const yen0=v=>v==null?'—':Math.round(v).toLocaleString();const cnt=v=>v==null?'—':(Math.round(v*10)/10).toLocaleString();
   const metrics=[['nw','新規獲得',cnt],['pt','支払対象（初回課金）',cnt],['shot','ショット支払',yen0],['act','課金会員',cnt],['rev','売上（取り分）',yen0],['net','当月ネット',yen0],['cum','累計ネット',yen0]];
-  const actOf=(co,ym)=>(m.actual[ym]||{})[co];
+  /* ショット支払は、支払明細書（MatoPass の◯月期 → 翌月度の明細書の Life365 タブ）に載った額を使う。明細書がまだ無い月だけ 件数×計画の単価 */
+  const actOf=(co,ym)=>{const a=(m.actual[ym]||{})[co];if(!a||a.ref)return a;const st=shotStmtPay(co,ym);if(st==null)return a;return {...a,shot:st,net:a.rev!=null?a.rev-st:a.net,stmt:true}};
   const cumAct=co=>{let s=0;const o={};ymsAll.forEach(y=>{const a=actOf(co,y);if(a&&a.net!=null){s+=a.net;o[y]=s}else if(y<=lastAct&&y>=startYm&&o[y]==null&&s)o[y]=s});return o};
   const card=co=>{const p=m.plan[co];const ca=cumAct(co);
     const head=`<tr><th class="lbl">${esc(co)}</th>${yms.map(y=>`<th>${esc(fmtYmJa(y).replace(/^20(\d\d)年/,'$1/').replace('月',''))}${y<=lastAct?'':'<small class="fin-sub">計画</small>'}</th>`).join('')}</tr>`;
@@ -8534,7 +8540,7 @@ function shotView(){
   const unkHtml=unk.length?`<div class="rc"><b style="color:var(--warn)">会社が分からない店舗があります</b><div class="note">MatoPass の店舗名をどの会社の分として数えるか選んでください。次から自動で使います。</div>
     ${unk.map(([st,n])=>`<div class="pm-bar" style="gap:8px;flex-wrap:wrap"><span>${esc(st)}（${n}人）</span><select id="shotSt_${esc(st)}">${['','Liberte','ブランニュー','ラストワンマイル','GeNNeo','参考_EX自社','参考_Wetopia','対象外'].map(c=>`<option value="${esc(c)}">${c?esc(c):'会社を選ぶ'}</option>`).join('')}</select><button class="btn btn-sm" onclick="shotSetStore('${esc(st).replace(/'/g,'')}')">覚える</button></div>`).join('')}
     <p class="note">選ぶとその場で数字に反映されます。</p></div>`:'';
-  return `${unkHtml}${chart}<p class="note">${withAct.map(esc).join('・')||'—'} の合計。太字が実績、小さい字が計画（36ヶ月シミュレーション）です。売上はシミュレーションの取り分の単価（クレカ・キャリア別）で計算しています。</p>
+  return `${unkHtml}${chart}<p class="note">${withAct.map(esc).join('・')||'—'} の合計。太字が実績、小さい字が計画（36ヶ月シミュレーション）です。課金会員・支払対象は売上明細書（WST の MatoPass 課金明細の入金済み〇）から、ショット支払は翌月度の支払明細書（Life365 タブ）の額です（明細書がまだ無い月だけ 件数×計画の単価）。売上は課金会員×取り分の単価（クレカ・キャリア別）。</p>
     ${cos.map(card).join('')}
     ${refs.length?`<p class="note" style="margin-top:12px">参考（ショットの対象外）: ${refs.map(c=>{const r=actYms.map(y=>[y,actOf(c,y)]).filter(([,a])=>a);return `${esc(c)} ${r.map(([y,a])=>`${fmtYmJa(y)} 課金${a.act}件`).join('・')}`}).join(' ／ ')}</p>`:''}
     <details style="margin-top:12px"><summary class="note">数字の決め方</summary><div class="pat-sub">新規獲得＝契約月がその月の件数。支払対象＝その月に初回課金が成功した件数（入金済み かつ 1回目）。ショット支払＝支払対象×ショット単価。課金会員＝その月に入金済みの件数。売上＝課金会員×取り分（クレカ・キャリア別）。当月ネット＝売上−ショット支払。累計ネット＝当月ネットの積み上げ。</div></details>`;
