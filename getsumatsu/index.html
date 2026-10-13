@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面57';
+const APP_BUILD='2026-10-13 新画面58';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10716,6 +10716,46 @@ async function stockSaveToDrive(k,st){
 function stockSaveNote(ent,k){
   stockSaveToDrive(k,ent.stock).then(sv=>{if(sv.saved||sv.same){ent.note+=` ／ 内訳 Excel（${sv.name}）を ${sv.where} に${sv.same?'保存済み':'保存します（Mac の同期で1時間以内）'}`;renderIn()}else if(sv.err){ent.note+=' ／ 内訳 Excel の保存に失敗: '+sv.err;renderIn()}}).catch(e=>console.warn('stockSave',e));
 }
+/* ---- 読み込んだ履歴（2026-10-13 菊地さん「アップして読み込んだ履歴も下に残してほしい【上位店名】商材名」） ----
+   この端末に残す（localStorage、新しい順に 200件）。アップロードしたとき・Drive の売上明細書を入れたときに記録する */
+const UPLOAD_HIST_KEY='getsumatsu_upload_history';
+function uploadHistory(){try{return JSON.parse(localStorage.getItem(UPLOAD_HIST_KEY)||'[]')||[]}catch(e){return []}}
+function uploadHistorySave(list){try{localStorage.setItem(UPLOAD_HIST_KEY,JSON.stringify(list.slice(0,200)))}catch(e){}}
+function entUpstream(ent){
+  const dir=(ent.arch&&ent.arch.where)||'';
+  let m=dir.match(/売上明細書\/([^\/]+)\/?$/);if(m)return m[1];
+  const sl=SALES_LIST.find(x=>x.name===ent.name);if(sl&&sl.upstream)return sl.upstream;
+  if(ent.kind==='csv')return /SBPS|収納/i.test(ent.name)?'SBPS':'ロボペイ';
+  m=dir.match(/会計\/[^\/]+\/(.+?)\/?$/);return m?m[1]:'';
+}
+function entProducts(ent){
+  if(ent.kind==='csv')return ent.stock&&!ent.stock.err?`ライフサポート（${/SBPS|収納/i.test(ent.name)?'SBPS':'ロボペイ'}）`:'収納明細';
+  const js=(ent.jobs||[]).map(j=>MODULES[j.key]?productOf(MODULES[j.key]):'').filter(Boolean);
+  return [...new Set(js)].join('・')||(ent.kind==='pay'?'前月の支払明細書':ent.kind==='xrm'?'XRM':ent.kind==='skip'?'（処理対象外）':'—');
+}
+function uploadHistoryAdd(ent,how){
+  if(!ent||!ent.name)return;
+  const list=uploadHistory();
+  const key=ent.name+'|'+ent.size;
+  const rec={at:new Date().toISOString(),name:ent.name,size:ent.size,up:entUpstream(ent),prod:entProducts(ent),how,where:(ent.arch&&ent.arch.where)||''};
+  const i=list.findIndex(x=>x.name+'|'+x.size===key);
+  if(i>=0)list.splice(i,1);
+  list.unshift(rec);uploadHistorySave(list);
+  try{renderUploadHistory()}catch(e){}
+}
+function uploadHistoryClear(){if(!confirm('読み込んだ履歴を消しますか？（ファイルは消えません）'))return;uploadHistorySave([]);renderUploadHistory()}
+function renderUploadHistory(){
+  const files=document.getElementById('inFiles');if(!files)return;
+  let host=document.getElementById('inHistory');
+  if(!host){host=document.createElement('div');host.id='inHistory';files.insertAdjacentElement('afterend',host)}
+  const list=uploadHistory();
+  if(!list.length){host.innerHTML='';return}
+  const fmt=iso=>{const d=new Date(iso);return isNaN(d)?'':`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
+  host.innerHTML=`<details class="adv" style="margin-top:14px" open><summary><span>読み込んだ履歴（この端末・${list.length}件）</span><span class="adv-sub"><a href="#" onclick="uploadHistoryClear();return false" style="font-size:12px">消す</a></span></summary>
+    <div class="tbl-wrap" style="padding:6px 0"><table><thead><tr><th>日時</th><th>【上位店名】商材名</th><th>ファイル</th><th>どこから</th></tr></thead><tbody>
+    ${list.slice(0,30).map(x=>`<tr><td style="white-space:nowrap">${esc(fmt(x.at))}</td><td><b>${esc(x.up?`【${x.up}】`:'')}</b>${esc(x.prod||'')}</td><td title="${esc(x.name)}">${esc(x.name.length>40?x.name.slice(0,38)+'…':x.name)}</td><td>${esc(x.how||'')}</td></tr>`).join('')}
+    </tbody></table></div>${list.length>30?`<p class="note">ほか ${list.length-30}件</p>`:''}</details>`;
+}
 /* ---- アプリに入れた明細を会計フォルダへ（2026-10-13 菊地さん「アプリにアップしたものを会計フォルダに保存してくれるパターン」） ----
    「入れる」に直接入れたファイル（Drive から入れたものは除く）を、Drive の data/out/<今月YYYYMM>/<会計フォルダ内の場所>/<元の名前> にそのまま置く。
    Mac の同期（毎時）がそれを 会計/<YYYY年M月会計資料>/<場所>/ に写す（sync_out_files）。
@@ -10823,6 +10863,7 @@ async function archiveUpload(f,ent,g){
     else if(g.byBatch)why='一緒に入れたファイルと同じ場所にしました。Mac の同期で1時間以内に入ります';
     else if(!g.sure)why=`過去の置き場所から推定しました（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）。違えば Mac で移してください`;
     setArch({st:'saved',where,why});
+    uploadHistoryAdd(ent,'アップロード');
   }catch(e){console.warn('archive',f.name,e);setArch({st:'err',sig:archiveSig(f),g,why:((e&&e.message)||String(e))+'（通信と「同期」の設定を確認して、もう一度ボタンを押してください）'})}
 }
 async function batchRoute(files,opts){
@@ -10876,7 +10917,7 @@ async function batchRoute(files,opts){
         if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
         ent.jobs=jobs;
       }catch(ex){ent.kind='error';ent.err=(ex&&ex.message)||String(ex);console.error(f.name,ex)}
-      finally{if(!opts.fromDrive)toArchive.push({f,ent});else ent.arch={st:'skip',why:'会計フォルダ（Drive）から入れたものです'}}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
+      finally{if(!opts.fromDrive)toArchive.push({f,ent});else{ent.arch={st:'skip',why:'会計フォルダ（Drive）から入れたものです'};uploadHistoryAdd(ent,'会計フォルダから')}}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
     }
   }finally{B.busy--}
   rebuildJobs();renderIn();
@@ -10997,6 +11038,7 @@ function renderIn(){
     }
     return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${arch}${f.stock?stockCardHtml(i,f.stock):''}</div>`;
   }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
+  try{renderUploadHistory()}catch(e){}
   const npend=(B.files||[]).filter(f=>f.arch&&f.arch.st==='pending').length;
   if(npend>=2&&host)host.innerHTML=`<p class="note" style="padding:6px 0 10px"><button class="btn" onclick="archiveNow()">⬆ 会計フォルダにまとめてアップロード（${npend}件）</button></p>`+host.innerHTML;
   const xs=document.getElementById('inXrm');
