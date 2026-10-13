@@ -23,14 +23,14 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-13d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-13e";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
   return out({ ok: true, service: "crane-nippo-api", version: 2, build: CODE_BUILD,
                loader: viaLoader ? LOADER_BUILD : "", codeSource: viaLoader ? (p.codeSource || "") : "pasted", codeFetchedAt: viaLoader ? (p.codeFetchedAt || "") : "",
                codeError: viaLoader ? (p.codeError || "") : "",
-               deployedAt: p.deployedAt || "", deployedVersion: p.deployedVersion || "", selfUpdateLast: p.selfUpdateLast || "", time: nowIso() });
+               deployedAt: viaLoader ? "" : (p.deployedAt || ""), deployedVersion: viaLoader ? "" : (p.deployedVersion || ""), selfUpdateLast: viaLoader ? "" : (p.selfUpdateLast || ""), time: nowIso() });
 }
 
 function doPost(e) {
