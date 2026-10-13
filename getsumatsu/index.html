@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面54';
+const APP_BUILD='2026-10-13 新画面55';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9808,6 +9808,7 @@ function runMatch(){
     }
     progLine('判定完了');
     setTimeout(()=>{renderResults();go(2)},350);
+    setTimeout(autoSaveOuts,1200);   /* 出力を作って会計フォルダへ（ダウンロードしなくても残る） */
   }catch(ex){progLine('エラー: '+ex.message,'err');console.error(ex)}
 }
 
@@ -11448,10 +11449,12 @@ function uniqueName(name,used){
   while(used.has(n)){n=name.replace(/(\.[a-z0-9]+)$/i,`(${i})$1`);i++}
   used.add(n);return n;
 }
-async function buildAll(){
+/* 出力を組み立てる（ダウンロードはしない）。実行が終わった直後にも silent で呼び、会計フォルダへ自動保存する（2026-10-13 菊地さん「直し方のおすすめで」） */
+async function buildOuts(opts){
+  opts=opts||{};
   const jobs=B.jobs.filter(j=>j.status==='ok');
-  if(!jobs.length){toast('出力できる結果がありません');return}
-  const btn=document.getElementById('outBtn');btn.disabled=true;btn.textContent='作成中…';
+  if(!jobs.length){if(!opts.silent)toast('出力できる結果がありません');return null}
+  const btn=document.getElementById('outBtn');if(btn&&!opts.silent){btn.disabled=true;btn.textContent='作成中…'}
   const outs=[],results=[],used=new Set();
   try{
     for(const job of jobs){
@@ -11461,27 +11464,67 @@ async function buildAll(){
         const meta=computeOutput();
         const wb=m.buildWb();appendVerifySheet(wb);
         const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
-        outs.push({name:uniqueName(S._fname||`${productOf(m)}.xlsx`,used),data:new Uint8Array(buf),desc:`${m.title}: ${meta.sub||''}`});
+        outs.push({name:uniqueName(S._fname||`${productOf(m)}.xlsx`,used),data:new Uint8Array(buf),desc:`${m.title}: ${meta.sub||''}`,kind:'prod',job});
         results.push({job,meta,partners:(S.outPartners||[]).slice(),checks:(S.checks||[]).slice()});
       }catch(ex){console.error('output',job.key,ex);results.push({job,err:(ex&&ex.message)||String(ex)})}
       await tick();
     }
     const payJobs=jobs.filter(j=>MODULES[j.key].kind!=='audit');
     const st=await makeAllStatements(payJobs);
-    st.outs.forEach(o=>outs.push({name:uniqueName(o.name,used),data:o.data,desc:o.desc}));
+    st.outs.forEach(o=>outs.push({name:uniqueName(o.name,used),data:o.data,desc:o.desc,kind:'stmt'}));
     B.stmt=st;
     const pwb=payWb();
-    if(pwb)outs.push({name:uniqueName(`AI作成中_支払漏れ追加分_${B.month||thisYm()}.xlsx`,used),data:new Uint8Array(XLSX.write(pwb,{type:'array',bookType:'xlsx'})),desc:'支払漏れで「追加」にした案件（パートナー別）'});
+    if(pwb)outs.push({name:uniqueName(`AI作成中_支払漏れ追加分_${B.month||thisYm()}.xlsx`,used),data:new Uint8Array(XLSX.write(pwb,{type:'array',bookType:'xlsx'})),desc:'支払漏れで「追加」にした案件（パートナー別）',kind:'pay'});
     const lgj=JSON.stringify(ledgerExportObj());
-    outs.push({name:uniqueName(`ルール台帳_${B.month||stamp()}.json`,used),data:new TextEncoder().encode(lgj),desc:'ルール台帳（別端末では「ルール台帳 → 台帳を読み込む」）'});
+    outs.push({name:uniqueName(`ルール台帳_${B.month||stamp()}.json`,used),data:new TextEncoder().encode(lgj),desc:'ルール台帳（別端末では「ルール台帳 → 台帳を読み込む」）',kind:'ledger'});
     B.outs=outs;B.results=results;
     S.maxStep=4;
-    if(outs.length===1)deliverFile(outs[0].name,new Blob([outs[0].data],{type:/\.json$/i.test(outs[0].name)?'application/json':XLSX_MIME}));
-    else deliverFile(`AI作成中_月末処理一式_${B.month||stamp()}.zip`,new Blob([buildZip(outs.map(o=>({name:o.name,data:o.data})))],{type:'application/zip'}));
-    toast(`${outs.length}ファイルを zip にまとめてダウンロードしました`);
-    if(st.miss.length)setTimeout(()=>toast('未作成の支払明細書: '+st.miss.join(' / ')),3600);
-  }finally{btn.disabled=false}
-  renderOut();
+    if(!opts.silent&&st.miss.length)setTimeout(()=>toast('未作成の支払明細書: '+st.miss.join(' / ')),3600);
+    return outs;
+  }catch(ex){console.error('buildOuts',ex);if(!opts.silent)toast('出力の作成に失敗: '+((ex&&ex.message)||ex));return null}
+  finally{if(btn&&!opts.silent)btn.disabled=false;try{renderOut()}catch(e){}}
+}
+async function buildAll(){
+  const outs=await buildOuts();
+  if(!outs)return;
+  if(outs.length===1)deliverFile(outs[0].name,new Blob([outs[0].data],{type:/\.json$/i.test(outs[0].name)?'application/json':XLSX_MIME}));
+  else deliverFile(`AI作成中_月末処理一式_${B.month||stamp()}.zip`,new Blob([buildZip(outs.map(o=>({name:o.name,data:o.data})))],{type:'application/zip'}));
+  toast(`${outs.length}ファイルを zip にまとめてダウンロードしました`);
+  saveOutsToDrive(outs).catch(e=>console.warn('outSave',e));
+}
+/* ---- 出力を会計フォルダへ（Drive の data/out/ 経由。Mac の同期が 会計/<YYYY年M月会計資料>/… に写す。2026-10-13 菊地さん「直し方のおすすめで」） ----
+   パートナー支払明細書の下書き・支払漏れ追加分 → EX/支払明細書/
+   商材ごとの処理結果（内訳・未払い一覧） → 元の上位店明細があるフォルダ（保存先の索引で判定。分からなければ EX/支払明細書/）
+   ルール台帳 JSON は別端末用なので置かない。内容が変わっていなければ送り直さない */
+function outHash(u8){let h=2166136261;const step=Math.max(1,u8.length>>16);for(let i=0;i<u8.length;i+=step)h=Math.imul(h^u8[i],16777619);return (h>>>0).toString(16)+'-'+u8.length}
+function outDirOf(o){
+  if(o.kind==='stmt'||o.kind==='pay')return 'EX/支払明細書';
+  if(o.kind==='prod'){const f=o.job&&o.job.file&&o.job.file.name;const g=f?archiveGuess(f):null;return (g&&g.dir)||'EX/支払明細書'}
+  return null;
+}
+async function saveOutsToDrive(outs){
+  const set=v=>{B.outSave=v;try{renderOut()}catch(e){}};
+  if(!outs||!outs.length)return;
+  if(typeof syncReady!=='function'||!syncReady()){set({st:'err',why:'Drive と同期の設定がこの端末にありません（「同期」から設定）'});return}
+  set({st:'saving'});
+  try{
+    await ensurePlaceIndex();
+    const c=syncCfg();c.outsSaved=c.outsSaved||{};const ym=thisYm();const items=[];let sent=0,skipped=0;
+    for(const o of outs){
+      const dir=outDirOf(o);if(!dir)continue;
+      let name=o.name;if(o.kind==='prod'&&!/^AI作成中/.test(name))name='AI作成中_内訳_'+name;
+      const path=`${ym}/${dir}/${name}`;const h=outHash(o.data);
+      if(c.outsSaved[path]===h){skipped++;items.push({name,dir,same:true});continue}
+      const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(new Blob([o.data]))});
+      const r=await syncPost({action:'saveFile',path,b64,mime:XLSX_MIME});
+      if(!(r&&r.ok))throw new Error((r&&r.error)||'不明');
+      c.outsSaved[path]=h;saveSyncCfg(c);sent++;items.push({name,dir});
+    }
+    set({st:'saved',sent,skipped,items,ym,at:new Date().toISOString()});
+  }catch(e){console.warn('outSave',e);set({st:'err',why:(e&&e.message)||String(e)})}
+}
+async function autoSaveOuts(){
+  try{const outs=await buildOuts({silent:true});if(outs)await saveOutsToDrive(outs)}catch(e){console.warn('autoSaveOuts',e)}
 }
 function reDownloadOut(i){
   const o=B.outs&&B.outs[i];if(!o)return;
@@ -11519,7 +11562,11 @@ function renderOut(){
   if(btn)btn.textContent='⬇ もう一度まとめてダウンロード（zip）';
   btn.onclick=reDownloadZip;
   const st=B.stmt||{done:[],miss:[]};
-  if(res)res.innerHTML=
+  const os=B.outSave;const ymK=thisYm();const kaikei=`会計/${+ymK.slice(0,4)}年${+ymK.slice(4)}月会計資料/`;
+  const saveLine=!os?'':os.st==='saving'?`<div class="ck"><span class="tick">…</span>会計フォルダに保存しています</div>`
+    :os.st==='err'?`<div class="ck ng"><span class="tick">⚠</span>会計フォルダに保存できませんでした: ${esc(os.why||'')}</div>`
+    :`<div class="ck"><span class="tick">✓</span><b>会計フォルダに保存済み</b> ${os.items.length}件（${esc(kaikei)}）: ${[...new Set(os.items.map(x=>x.dir))].map(esc).join('・')}${os.skipped&&!os.sent?'（内容は前回と同じ）':''}。Mac の同期で1時間以内にフォルダに入ります</div>`;
+  if(res)res.innerHTML=saveLine+
     (st.done.length?`<div class="ck"><span class="tick">✓</span>支払明細書 ${st.done.length}社: ${st.done.map(d=>`${esc(d.partner)}（${d.info.join(' / ')}）`).join('、')}</div>`:'')
     +(st.miss.length?`<div class="ck ng"><span class="tick">⚠</span>未作成の支払明細書: ${st.miss.map(esc).join(' / ')}</div>`:'')
     +B.results.map(r=>{
