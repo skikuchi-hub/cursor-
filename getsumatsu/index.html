@@ -1205,7 +1205,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
     </div>
     <div class="in-btns" id="inDrive" hidden></div>
-    <input type="file" id="inIn" accept=".xlsx,.xls,.csv,.json" multiple style="display:none">
+    <input type="file" id="inIn" accept=".xlsx,.xls,.csv,.json,.pdf" multiple style="display:none">
     <input type="file" id="inDir" webkitdirectory multiple style="display:none">
   </div>
   <div class="in-xrm" id="inXrm"></div>
@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面49';
+const APP_BUILD='2026-10-13 新画面50';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10703,25 +10703,39 @@ async function ensureSalesList(){
   if(SALES_LIST.length||typeof syncReady!=='function'||!syncReady())return;
   try{const man=await syncGet({action:'manifest'});if(Array.isArray(man.sales)&&man.sales.length){SALES_LIST=man.sales;try{renderSalesButtons()}catch(e){}}}catch(e){console.warn('salesList',e)}
 }
-async function archiveUpload(f,ent){
+function archiveWanted(f,ent){
+  if(!/\.(xlsx|xlsm|xls|csv|pdf)$/i.test(f.name))return false;
+  if(['xrm','json','pay','error'].includes(ent.kind))return false;
+  if(/^AI作成中|【\s*\d{4}\s*年\s*\d{1,2}\s*月度明細】/.test(String(f.name).normalize('NFC')))return false;
+  if(f.size>20*1024*1024)return false;
+  return true;
+}
+/* 同時に入れたファイルはまとめて保存先を決める。PDF の請求書のように名前だけでは上位店が分からないものは、
+   一緒に入れた明細（同じ上位店から同じメールで届くことが多い）の上位店に合わせる（上位店が1つに決まるときだけ） */
+async function archiveBatch(items){
+  if(typeof syncReady!=='function'||!syncReady())return;
+  await ensureSalesList();
+  const list=items.filter(x=>archiveWanted(x.f,x.ent));
+  list.forEach(x=>{x.g=archiveGuess(x.f.name)});
+  const ups=[...new Set(list.filter(x=>x.g).map(x=>x.g.payer+'|'+x.g.up))];
+  if(ups.length===1){const g=list.find(x=>x.g).g;list.forEach(x=>{if(!x.g)x.g={payer:g.payer,up:g.up,byBatch:true}})}
+  for(const x of list){try{await archiveUpload(x.f,x.ent,x.g)}catch(e){console.warn('archive',x.f.name,e)}}
+}
+async function archiveUpload(f,ent,g){
   const addNote=t=>{ent.note=(ent.note?ent.note+' ／ ':'')+t;try{renderIn()}catch(e){}};
   try{
     if(typeof syncReady!=='function'||!syncReady())return;
-    await ensureSalesList();
-    if(!/\.(xlsx|xlsm|xls|csv|pdf)$/i.test(f.name))return;
-    if(['xrm','json','pay','error'].includes(ent.kind))return;
-    if(/^AI作成中|【\s*\d{4}\s*年\s*\d{1,2}\s*月度明細】/.test(String(f.name).normalize('NFC')))return;
-    if(f.size>20*1024*1024)return;
+    if(!archiveWanted(f,ent))return;
     const c=syncCfg();c.archived=c.archived||{};const sig=f.name+'|'+f.size;
     if(c.archived[sig])return;
     if(SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);return}
-    const g=archiveGuess(f.name);
+    if(g===undefined)g=archiveGuess(f.name);
     const ym=thisYm(),payer=(g&&g.payer)||'EX',up=(g&&g.up)||'_未分類（アプリから）';
     const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
     const r=await syncPost({action:'saveFile',path:`${ym}/${payer}/売上明細書/${up}/${f.name}`,b64,mime:f.type||'application/octet-stream'});
     if(!(r&&r.ok))throw new Error((r&&r.error)||'不明');
     c.archived[sig]=1;saveSyncCfg(c);
-    addNote(`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${payer}/売上明細書/${up}/ に保存します（Mac の同期で1時間以内）${g?'':'。上位店が分からなかったので _未分類 です。フォルダを移してください'}`);
+    addNote(`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${payer}/売上明細書/${up}/ に保存します（Mac の同期で1時間以内）${g?(g.byBatch?'。一緒に入れた明細と同じ上位店にしました':''):'。上位店が分からなかったので _未分類 です。フォルダを移してください'}`);
   }catch(e){console.warn('archive',f.name,e);addNote('会計フォルダへの保存に失敗: '+((e&&e.message)||e)+'（同期の設定を確認）')}
 }
 async function batchRoute(files,opts){
@@ -10729,6 +10743,7 @@ async function batchRoute(files,opts){
   const list=Array.from(files||[]).filter(f=>f&&f.name&&!/^\./.test(f.name));
   if(!list.length)return;
   B.busy++;renderIn();
+  const toArchive=[];
   try{
     for(const f of list){
       const ent={name:f.name,size:f.size,kind:'',note:'',jobs:[],err:'',order:B.files.length};
@@ -10774,10 +10789,11 @@ async function batchRoute(files,opts){
         if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
         ent.jobs=jobs;
       }catch(ex){ent.kind='error';ent.err=(ex&&ex.message)||String(ex);console.error(f.name,ex)}
-      finally{if(!opts.fromDrive)ARCHIVE_Q=ARCHIVE_Q.then(()=>archiveUpload(f,ent)).catch(()=>{})}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
+      finally{if(!opts.fromDrive)toArchive.push({f,ent})}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
     }
   }finally{B.busy--}
   rebuildJobs();renderIn();
+  if(toArchive.length)ARCHIVE_Q=ARCHIVE_Q.then(()=>archiveBatch(toArchive)).catch(e=>console.warn('archive',e));
 }
 function removeInFile(i){
   const f=B.files[i];if(!f)return;
