@@ -23,8 +23,11 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
+var CODE_BUILD = "2026-10-13b";   // 動いているコードの版。selfUpdate が反映できたかを URL を開くだけで確かめるための目印
 function doGet(e) {
-  return out({ ok: true, service: "crane-nippo-api", version: 1, time: nowIso() });
+  var p = PropertiesService.getScriptProperties();
+  return out({ ok: true, service: "crane-nippo-api", version: 2, build: CODE_BUILD,
+               deployedAt: p.getProperty("deployedAt") || "", deployedVersion: p.getProperty("deployedVersion") || "", time: nowIso() });
 }
 
 function doPost(e) {
