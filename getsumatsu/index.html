@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面56';
+const APP_BUILD='2026-10-13 新画面57';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7850,11 +7850,7 @@ async function syncNow(opts){
           const mem=S.memory||(S.memory=emptyMem());mem.stockOut=mem.stockOut||{};mem.stockOut[k+'|'+st.target]={at:new Date().toISOString(),file:it.name,total:st.total,partners:st.partners.map(x=>({name:x.name,n:x.n,amt:x.amt}))};await saveMemory();
           syncLog(`ライフサポート（${k==='R'?'ロボペイ':'SBPS'}）${fmtYmJa(st.target.replace('-',''))}度の内訳を作りました: 合計 ${yen(st.total)}`);
           /* Excel にして Drive の data/out/ に保存 → Mac の同期が 会計/<YYYY年M月会計資料>/WST/売上明細書/<SBPS|ロボペイ>/ に写す（2026-10 菊地さん） */
-          try{const ym=st.target.replace('-','');const sig=st.total+'|'+st.partners.map(x=>x.n).join(',')+'|'+st.check.length;c.stockSaved=c.stockSaved||{};
-            if(c.stockSaved[k+'|'+ym]!==sig){const sub=k==='R'?'ロボペイ':'SBPS';const name=`AI作成中_ライフサポート内訳_${sub}_${ym}度.xlsx`;
-              const r=await syncPost({action:'saveFile',path:`${ym}/WST/売上明細書/${sub}/${name}`,b64:XLSX.write(stockWb(st),{type:'base64',bookType:'xlsx'})});
-              if(r&&r.ok){c.stockSaved[k+'|'+ym]=sig;saveSyncCfg(c);syncLog(`→ ${name} を Drive に保存しました（Mac の同期で 会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/WST/売上明細書/${sub} に入ります）`)}
-              else syncLog('内訳の保存に失敗しました: '+((r&&r.error)||'不明'),'err')}}catch(e){console.warn('stockSave',e)}
+          try{const sv=await stockSaveToDrive(k,st);if(sv.saved)syncLog(`→ ${sv.name} を Drive に保存しました（Mac の同期で ${sv.where} に入ります）`);else if(sv.err)syncLog('内訳の保存に失敗しました: '+sv.err,'err')}catch(e){console.warn('stockSave',e)}
         }catch(e){console.warn('stockAuto',e)}}
       if(typeof renderIn==='function')renderIn()}catch(e){console.warn('stockAuto',e)}
     /* ショット先出OP: 会社別の計画（36ヶ月シミュレーション）と、WST の MatoPass 課金明細（実績）を同期で自動で読み込む（入れる画面に入れなくてよい） */
@@ -10705,6 +10701,21 @@ function detectJobs(wb,name){
 }
 
 /* ---- まとめて投入: 中身で XRM / 支払明細書 / 上位店明細 に振り分け、商材を判定 ---- */
+/* ライフサポートの内訳 Excel を Drive の data/out/<YYYYMM>/WST/売上明細書/<SBPS|ロボペイ>/ に置く（同期の自動作成と「入れる」の両方から使う。内容が同じなら送り直さない） */
+async function stockSaveToDrive(k,st){
+  if(!st||st.err||typeof syncReady!=='function'||!syncReady())return {saved:false};
+  const c=syncCfg();const ym=st.target.replace('-','');const sig=st.total+'|'+st.partners.map(x=>x.n).join(',')+'|'+st.check.length;c.stockSaved=c.stockSaved||{};
+  const sub=k==='R'?'ロボペイ':'SBPS';const name=`AI作成中_ライフサポート内訳_${sub}_${ym}度.xlsx`;
+  const where=`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/WST/売上明細書/${sub}`;
+  if(c.stockSaved[k+'|'+ym]===sig)return {saved:false,same:true,name,where};
+  const r=await syncPost({action:'saveFile',path:`${ym}/WST/売上明細書/${sub}/${name}`,b64:XLSX.write(stockWb(st),{type:'base64',bookType:'xlsx'})});
+  if(!(r&&r.ok))return {saved:false,err:(r&&r.error)||'不明',name,where};
+  c.stockSaved[k+'|'+ym]=sig;saveSyncCfg(c);return {saved:true,name,where};
+}
+/* 「入れる」で作ったライフサポート内訳の Excel も会計フォルダへ（2026-10-13 菊地さん「アップしたらすぐ内訳ができるように」） */
+function stockSaveNote(ent,k){
+  stockSaveToDrive(k,ent.stock).then(sv=>{if(sv.saved||sv.same){ent.note+=` ／ 内訳 Excel（${sv.name}）を ${sv.where} に${sv.same?'保存済み':'保存します（Mac の同期で1時間以内）'}`;renderIn()}else if(sv.err){ent.note+=' ／ 内訳 Excel の保存に失敗: '+sv.err;renderIn()}}).catch(e=>console.warn('stockSave',e));
+}
 /* ---- アプリに入れた明細を会計フォルダへ（2026-10-13 菊地さん「アプリにアップしたものを会計フォルダに保存してくれるパターン」） ----
    「入れる」に直接入れたファイル（Drive から入れたものは除く）を、Drive の data/out/<今月YYYYMM>/<会計フォルダ内の場所>/<元の名前> にそのまま置く。
    Mac の同期（毎時）がそれを 会計/<YYYY年M月会計資料>/<場所>/ に写す（sync_out_files）。
@@ -10785,6 +10796,8 @@ async function archiveNow(sig){
   for(const ent of targets){const f=ARCHIVE_FILES[ent.arch.sig];try{await archiveUpload(f,ent,ent.arch.g)}catch(e){console.warn('archive',f.name,e)}}
   const ok=targets.filter(f=>f.arch&&f.arch.st==='saved').length;
   toast(ok?`${ok}件を会計フォルダ（Drive）にアップロードしました。Mac の同期で1時間以内にフォルダに入ります`:'アップロードできませんでした。通信と「同期」の設定を確認してください');
+  /* アップロードしたら、そのまま実行してパートナーへの支払内訳を作る（2026-10-13 菊地さん「アップしたらすぐやってほしい」）。出力は実行後に会計フォルダへ自動保存 */
+  if(ok&&B.jobs.some(j=>!j.done)&&!B.busy){toast('続けて実行します（支払内訳を作って会計フォルダへ保存）');setTimeout(()=>{try{runBatch()}catch(e){console.warn('autoRun',e)}},1200)}
 }
 async function archiveUpload(f,ent,g){
   const setArch=a=>{ent.arch=a;try{renderIn()}catch(e){}};
@@ -10831,14 +10844,14 @@ async function batchRoute(files,opts){
           if(/SBPS|収納/i.test(f.name)){ent.kind='csv';ent.note='収納明細 → 収支推移に反映します';loadRevenueFiles([f]);
             /* 同じ CSV からライフサポートのパートナー支払内訳（LS(PS)）を作る */
             try{const p=parseSbpsCsv(await f.text());ent.stockSrc=p;ent.stock=stockBuild(p);
-              if(!ent.stock.err)ent.note=`収支推移に反映・${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート支払内訳を作りました（下のカード）`}
+              if(!ent.stock.err){ent.note=`収支推移に反映・${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート支払内訳を作りました（下のカード）`;stockSaveNote(ent,'PS')}}
             catch(ex){console.error(ex);ent.stock={err:(ex&&ex.message)||String(ex)}}
           }
           else{
             /* ロボペイの決済 CSV（文字コードは Shift_JIS のことが多い） */
             const buf=new Uint8Array(await f.arrayBuffer());let txt=new TextDecoder('utf-8').decode(buf);if(!/^\uFEFF?決済番号/.test(txt))txt=new TextDecoder('shift_jis').decode(buf);
             const p=/^\uFEFF?決済番号/.test(txt)?parseRobopayCsv(txt):null;
-            if(p){ent.kind='csv';ent.stockSrc=p;try{ent.stock=stockBuild(p);ent.note=ent.stock.err?ent.stock.err:`${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート（ロボペイ）支払内訳を作りました（下のカード）`}catch(ex){console.error(ex);ent.stock={err:(ex&&ex.message)||String(ex)}}}
+            if(p){ent.kind='csv';ent.stockSrc=p;try{ent.stock=stockBuild(p);ent.note=ent.stock.err?ent.stock.err:`${fmtYmJa(ent.stock.target.replace('-',''))}度のライフサポート（ロボペイ）支払内訳を作りました（下のカード）`;if(!ent.stock.err)stockSaveNote(ent,'R')}catch(ex){console.error(ex);ent.stock={err:(ex&&ex.message)||String(ex)}}}
             else{ent.kind='skip';ent.note='CSV は SBPS の売上明細内訳とロボペイの決済 CSV に対応しています'}
           }
           continue;
