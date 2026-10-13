@@ -1908,9 +1908,20 @@ function prevSlotNames(){
 }
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
 function prevStock(k){ const pr=prevRoom(k); return pr ? Math.max(0, num(pr.before)+num(pr.add)-num(pr.take)) : null; }   // 前回訪問のあとに機械に入っていた数
+const roomNameOf = pr => (pr.addPrize && num(pr.add)>0) ? clean(pr.addPrize) : clean(pr.prize);
+/* 4人機：部屋 k の景品名が入っている直前の訪問の部屋（景品名が空のまま保存された記録が間にあっても、その前をたどる） */
+function prevRoomNamed(k){
+  if(!F.store || !F.machine) return null;
+  const vs = Store.data.weekly
+    .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||[]).length && beforeEdit(r))
+    .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")));
+  for (const v of vs){ const pr=(v.rooms||[]).find(x=>x.k===k); if (pr && roomNameOf(pr)) return pr; }
+  return null;
+}
 function prevPrize(k){
   const pr=prevRoom(k); if(!pr) return "";
-  return (pr.addPrize && num(pr.add)>0) ? pr.addPrize : (pr.prize||"");
+  const nm = roomNameOf(pr); if (nm) return nm;
+  const older = prevRoomNamed(k); return older ? roomNameOf(older) : "";
 }
 const addPrizeOf = rm => clean(rm.addPrize) || clean(rm.prize);
 /* 景品名が空の部屋／枠に、直前の訪問の中身を入れ直す（入力済みの数は触らない）。

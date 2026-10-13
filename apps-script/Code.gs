@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-13f";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-13g";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -742,7 +742,15 @@ function addPhoto(me, id, data, mime, kind) {
      "items": [ { "fid": "<DriveファイルID>", "emptyRooms": [5,6], "emptyCount": 2, "reportedPays": 2, "match": "一致|不一致|不明",
                   "popCount": 9, "score": 4, "note": "…", "competitor": "…" } ] }
    取り込んだファイルは名前の先頭に done_ を付ける（何度実行しても二重にならない） */
+/* 一度だけ自動で行う保守（ローダー経由で push だけで走らせるため。済んだらスクリプト プロパティに記録して二度と走らない） */
+function maintenanceOnce_() {
+  var pr = PropertiesService.getScriptProperties();
+  if (!pr.getProperty("repairChainAt")) {           // 2026-10-13：景品名が空のまま保存された記録（10/9 下山門ミニSP など）の復元
+    try { var m = repairChain(); pr.setProperty("repairChainAt", nowIso() + " " + String(m).slice(0, 200)); } catch (e) { Logger.log("repairChain: " + e); }
+  }
+}
 function importPhotoChecks() {
+  try { maintenanceOnce_(); } catch (e) {}
   var dir = photoCheckDir();
   var files = dir.getFiles(), n = 0, m = 0;
   var ps = photoSheet();
