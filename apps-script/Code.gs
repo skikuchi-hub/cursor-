@@ -187,6 +187,7 @@ function addDoc(me, col, rec) {
   materialize(col, rec, docs);
   dbSheet().appendRow([col, rec.id, rec.createdAt, now, me.name, JSON.stringify(stripId(rec))]);
   if (col === "prizes") dropCache("sheet_master");
+  if (col === "prizes" || col === "weekly") markMetricsDirty_();
   return { ok: true, rec: rec };
 }
 
@@ -264,6 +265,7 @@ function recomputeSalesDeltas() {
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
 function patchDoc(me, col, id, obj) {
+  if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
   var row = findDbRow(col, id);
   if (!row) throw new Error("記録が見つかりません");
@@ -275,6 +277,7 @@ function patchDoc(me, col, id, obj) {
   return { ok: true, rec: rec };
 }
 function removeDoc(me, col, id) {
+  if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
   var row = findDbRow(col, id);
   if (row && me.role !== "admin") {                     // 削除は登録した本人か管理者だけ
@@ -296,6 +299,7 @@ function removeDoc(me, col, id) {
    同じ店舗・機械のあとの訪問は「前回」が変わるので、差分と行を同じように作り直す（写真タブの行はそのまま） */
 var REFRESH_TABS = ["巡回ログ", "部屋別ログ", "景品実績"];
 function updateDoc(me, col, id, obj) {
+  if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (col !== "weekly") throw new Error("この記録は修正できません");
   var row = findDbRow(col, id);
   if (!row) throw new Error("記録が見つかりません");
@@ -441,6 +445,7 @@ function materialize(col, rec, docs) {
       var row = appendValues(ps, [rec.name || "", rec.vendor || "", rec.use || "", num(rec.cost), rate, rec.qty ? num(rec.qty) : ""], rec.id);
       if (rate !== "") ps.getRange(row, 5).setNumberFormat("0.00%");
       if (rec.memo) ps.getRange(row, 11).setValue(clean(rec.memo));            // K列：メモ（G〜J は数式）
+      try { writePrizeExtras_(ps, row, rec); } catch (e) { Logger.log("景品マスタの追加項目: " + e); }   // 仕入日・納品日・店舗・購入者（右端の列）
     }
   } else if (col === "expenses") {
     var es = ss().getSheetByName("経費台帳");
@@ -752,6 +757,7 @@ function importPhotoChecks() {
     f.setName("done_" + name); n++;
   }
   PropertiesService.getScriptProperties().setProperty("photoChecksAt", String(Date.now()));
+  updateMetricsIfDue();   // 必要指標（在庫）の作り直しも 10 分ごとのトリガーで
   var msg = "チェック結果を取り込みました：" + n + " ファイル / " + m + " 枚";
   Logger.log(msg); return msg;
 }
@@ -1151,6 +1157,172 @@ function repairChain() {
    一回きりの準備：(a) https://script.google.com/home/usersettings で「Google Apps Script API」をオン
    (b) appsscript.json の oauthScopes に script.projects / script.deployments / script.external_request を追加（HANDOVER 参照）
    (c) エディタから selfUpdate を 1 回実行して権限を許可 */
+/* ===================== 在庫・必要指標（2026-10-13 菊地さん「景品マスタに在庫管理表の項目を追加し、必要指標を計測したい」） =====================
+   景品マスタの右端に「クレーン在庫管理表.xlsx」の項目を足す（既存の列は動かさない）：
+     仕入日・納品日・店舗・購入者（アプリの景品登録で入る）／仕入単価（税込）・仕入額（税抜/税込）・棚卸残高（税抜/税込）・販売確認（数式）／確認日（残りが0になった日）
+   棚卸残高 ＝ 残り在庫（買った数 − 補充 ＋ 回収）× 仕入単価。販売確認は残りが0になると〇。
+   「必要指標」タブ（月ごと・全店／倉庫／店舗別）：
+     全店：①期首棚卸高 ＋ ②仕入高（仕入日の月）− ③期末棚卸高 ＝ ④売上原価。③＝倉庫の在庫 ＋ 機械の中の景品（各店の最後の巡回時の残り数）
+     倉庫（店に出していない在庫）：②仕入高、④＝店に出した分
+     店舗：①③＝その店の機械の中の景品、②＝その店に入れた景品（補充 − 回収）、④＝その店で出た景品の原価
+   金額は税抜で計算し、税込（×1.1）も並べる。10 分ごとのトリガー（importPhotoChecks）で必要なときに作り直す */
+var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日"];
+var TAX_RATE = 0.1;
+var METRICS_SHEET = "必要指標";
+function colLetter_(c) { var s = ""; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
+function hdrKey_(x) { return String(x == null ? "" : x).replace(/\s/g, ""); }
+function headerMap_(sh) { var lc = Math.max(1, sh.getLastColumn()); var h = sh.getRange(1, 1, 1, lc).getValues()[0]; var m = {}; h.forEach(function (x, i) { var k = hdrKey_(x); if (k && !(k in m)) m[k] = i + 1; }); return m; }
+function hcol_(m, name) { var k = hdrKey_(name); if (m[k]) return m[k]; for (var x in m) if (x.indexOf(k) === 0) return m[x]; return 0; }
+function normKey_(s) { return String(s == null ? "" : s).normalize("NFKC").replace(/[\s　・･]/g, "").toLowerCase(); }
+function ensurePrizeColumns() {
+  var sh = ss().getSheetByName("景品マスタ"); if (!sh) return 0;
+  var m = headerMap_(sh), added = 0;
+  PRIZE_EXTRA_HEADERS.forEach(function (h) {
+    if (m[hdrKey_(h)]) return;
+    var c = sh.getLastColumn() + 1;
+    if (c > sh.getMaxColumns()) sh.insertColumnsAfter(sh.getMaxColumns(), 1);
+    sh.getRange(1, c).setValue(h).setFontWeight("bold");
+    added++; m = headerMap_(sh);
+  });
+  var D = colLetter_(hcol_(m, "仕入単価（税抜）")), F = colLetter_(hcol_(m, "買った数量")), J = colLetter_(hcol_(m, "残り在庫"));
+  var R = function (L) { return L + "2:" + L + "1000"; };
+  var f = {
+    "仕入単価（税込）": '=ARRAYFORMULA(IF(' + R("A") + '="","",ROUND(' + R(D) + '*' + (1 + TAX_RATE) + ')))',
+    "仕入額（税抜）": '=ARRAYFORMULA(IF(' + R("A") + '="","",' + R(D) + '*' + R(F) + '))',
+    "仕入額（税込）": '=ARRAYFORMULA(IF(' + R("A") + '="","",ROUND(' + R(D) + '*' + R(F) + '*' + (1 + TAX_RATE) + ')))',
+    "棚卸残高（税抜）": '=ARRAYFORMULA(IF(' + R("A") + '="","",IF(N(+' + R(J) + ')<0,0,N(+' + R(J) + '))*' + R(D) + '))',
+    "棚卸残高（税込）": '=ARRAYFORMULA(IF(' + R("A") + '="","",ROUND(IF(N(+' + R(J) + ')<0,0,N(+' + R(J) + '))*' + R(D) + '*' + (1 + TAX_RATE) + ')))',
+    "販売確認": '=ARRAYFORMULA(IF(' + R("A") + '="","",IF((' + R(F) + '<>"")*(' + R(J) + '<>"")*(' + R(J) + '<=0),"〇","")))'
+  };
+  Object.keys(f).forEach(function (h) {
+    var c = hcol_(m, h); if (!c) return;
+    var cell = sh.getRange(2, c);
+    if (String(cell.getFormula() || "") === f[h]) return;
+    if (sh.getMaxRows() > 2) sh.getRange(3, c, sh.getMaxRows() - 2, 1).clearContent();
+    cell.setFormula(f[h]);
+    sh.getRange(2, c, Math.max(1, sh.getMaxRows() - 1), 1).setNumberFormat(h === "販売確認" ? "@" : "#,##0");
+  });
+  ["仕入日", "納品日", "確認日"].forEach(function (h) { var c = hcol_(m, h); if (c) sh.getRange(2, c, Math.max(1, sh.getMaxRows() - 1), 1).setNumberFormat("yyyy/mm/dd"); });
+  return added;
+}
+/* 景品登録（アプリ）の 仕入日・納品日・店舗・購入者 を右端の列に書く */
+function writePrizeExtras_(ps, row, rec) {
+  ensurePrizeColumns();
+  var m = headerMap_(ps);
+  var put = function (h, v, fmt) { var c = hcol_(m, h); if (!c || v === "" || v == null) return; var cell = ps.getRange(row, c); cell.setValue(v); if (fmt) cell.setNumberFormat(fmt); };
+  var bd = /^\d{4}-\d{2}-\d{2}/.test(String(rec.buyDate || "")) ? String(rec.buyDate).slice(0, 10) : String(rec.createdAt || nowIso()).slice(0, 10);
+  put("仕入日", dateOf(bd), "yyyy/mm/dd");
+  if (/^\d{4}-\d{2}-\d{2}/.test(String(rec.deliveryDate || ""))) put("納品日", dateOf(String(rec.deliveryDate).slice(0, 10)), "yyyy/mm/dd");
+  put("店舗", clean(rec.store || ""));
+  put("購入者", clean(rec.buyer || rec.staff || ""));
+}
+function ymdOf_(v, tz) {
+  if (v instanceof Date) return Utilities.formatDate(v, tz, "yyyy-MM-dd");
+  var t = String(v == null ? "" : v), m = t.match(/(20\d{2})[-\/年.]?(\d{1,2})[-\/月.]?(\d{1,2})/);
+  return m ? m[1] + "-" + ("0" + m[2]).slice(-2) + "-" + ("0" + m[3]).slice(-2) : "";
+}
+function monthEnd_(ym) { var y = +ym.slice(0, 4), mo = +ym.slice(5, 7); var d = new Date(Date.UTC(y, mo, 0)); return ym + "-" + ("0" + d.getUTCDate()).slice(-2); }
+function prevYm_(ym) { var y = +ym.slice(0, 4), mo = +ym.slice(5, 7) - 1; if (mo === 0) { y--; mo = 12; } return y + "-" + ("0" + mo).slice(-2); }
+function updateMetrics() {
+  ensurePrizeColumns();
+  var tz = sheetTz();
+  var pm = ss().getSheetByName("景品マスタ"); if (!pm) return "景品マスタがありません";
+  var v = pm.getDataRange().getValues(), m = headerMap_(pm);
+  var c = function (h) { return hcol_(m, h) - 1; };
+  var cN = c("品名"), cC = c("仕入単価（税抜）"), cQ = c("買った数量"), cBD = c("仕入日"), cST = c("店舗"), cMemo = c("メモ"), cJ = c("残り在庫"), cF = c("買った数量"), cCD = c("確認日"), cID = c("アプリID");
+  var created = {}; (readAllDocs().prizes || []).forEach(function (r) { created[r.id] = String(r.buyDate || r.createdAt || "").slice(0, 10); });
+  var purch = [], amt = {}, qty = {}, lastCost = {};
+  for (var i = 1; i < v.length; i++) {
+    var r = v[i], name = clean(r[cN]); if (!name) continue;
+    var key = normKey_(name), q = num(r[cQ]), cost = num(r[cC]);
+    var bd = cBD >= 0 ? ymdOf_(r[cBD], tz) : "";
+    if (!bd) {   // 仕入日が空の行は、アプリの登録日・メモの日付（発注No EH-YYYYMMDD／YYYY-MM-DD）で埋める
+      bd = (cID >= 0 && created[String(r[cID])]) || ymdOf_(cMemo >= 0 ? r[cMemo] : "", tz);
+      if (bd && cBD >= 0) pm.getRange(i + 1, cBD + 1).setValue(dateOf(bd)).setNumberFormat("yyyy/mm/dd");
+    }
+    purch.push({ key: key, q: q, cost: cost, date: bd, store: cST >= 0 ? clean(r[cST]) : "" });
+    amt[key] = (amt[key] || 0) + q * cost; qty[key] = (qty[key] || 0) + q; if (cost) lastCost[key] = cost;
+  }
+  var unit = function (k) { return qty[k] ? amt[k] / qty[k] : (lastCost[k] || 0); };
+  // 部屋別ログ：A 訪問日 B 店舗 C 機械 D 部屋 H 景品 I 補充前数 J 補充景品 K 補充数 L 払出数 M 回収数
+  var rs = ss().getSheetByName("部屋別ログ"), logs = [];
+  if (rs && rs.getLastRow() >= 2) rs.getRange(2, 1, rs.getLastRow() - 1, 13).getValues().forEach(function (x, idx) {
+    var d = ymdOf_(x[0], tz); if (!d) return;
+    logs.push({ i: idx, date: d, store: clean(x[1]), machine: clean(x[2]), room: clean(x[3]), prize: normKey_(x[7]), before: x[8], fill: normKey_(x[9]), add: num(x[10]), pays: num(x[11]), take: num(x[12]) });
+  });
+  logs.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : a.i - b.i; });
+  var stores = MY_STORES.slice(); logs.forEach(function (l) { if (l.store && stores.indexOf(l.store) < 0) stores.push(l.store); });
+  // 月の一覧
+  var today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd"), first = today.slice(0, 7);
+  purch.forEach(function (p) { if (p.date && p.date.slice(0, 7) < first) first = p.date.slice(0, 7); });
+  logs.forEach(function (l) { if (l.date.slice(0, 7) < first) first = l.date.slice(0, 7); });
+  var months = []; for (var ym = first; ym <= today.slice(0, 7); ym = (function (x) { var y = +x.slice(0, 4), mo = +x.slice(5, 7) + 1; if (mo === 13) { y++; mo = 1; } return y + "-" + ("0" + mo).slice(-2); })(ym)) months.push(ym);
+  // ある日の終わり時点の 倉庫在庫（景品ごと）と 店ごとの機械の中の景品（金額）
+  var snap = function (end) {
+    var wh = {};
+    purch.forEach(function (p) { if (!p.date || p.date <= end) wh[p.key] = (wh[p.key] || 0) + p.q; });
+    var rooms = {};
+    logs.forEach(function (l) {
+      if (l.date > end) return;
+      if (l.fill && l.add) wh[l.fill] = (wh[l.fill] || 0) - l.add;
+      if (l.prize && l.take) wh[l.prize] = (wh[l.prize] || 0) + l.take;
+      var k = l.store + "|" + l.machine + "|" + l.room, prev = rooms[k] || {}, aft = {};
+      if (/^枠/.test(l.room)) { if (l.fill && l.add > 0) aft[l.fill] = 1; else if (l.prize && num(l.before) > 0) aft[l.prize] = 1; }
+      else {
+        if (l.prize) { var b = (l.before === "" || l.before === null) ? Math.max(0, (prev[l.prize] || 0) - l.pays) : num(l.before); var left = Math.max(0, b - l.take); if (left) aft[l.prize] = left; }
+        if (l.fill && l.add > 0) aft[l.fill] = (aft[l.fill] || 0) + l.add;
+      }
+      rooms[k] = aft;
+    });
+    var whVal = 0, neg = 0; Object.keys(wh).forEach(function (k) { if (wh[k] > 0) whVal += wh[k] * unit(k); else if (wh[k] < 0) neg++; });
+    var st = {}; stores.forEach(function (s) { st[s] = 0; });
+    Object.keys(rooms).forEach(function (k) { var s = k.split("|")[0]; var o = rooms[k]; Object.keys(o).forEach(function (p) { st[s] = (st[s] || 0) + o[p] * unit(p); }); });
+    return { wh: whVal, st: st, neg: neg };
+  };
+  var out = [["月", "区分", "①期首棚卸高（税抜）", "②仕入高（税抜）", "③期末棚卸高（税抜）", "④売上原価（税抜）＝①＋②−③", "①税込", "②税込", "③税込", "④税込", "仕入高（この店の分として仕入れた額・税抜）", "メモ"]];
+  var tax = function (x) { return Math.round(x * (1 + TAX_RATE)); };
+  var prev = snap(monthEnd_(prevYm_(months[0])));
+  months.forEach(function (ym) {
+    var end = monthEnd_(ym), cur = snap(end), start = ym + "-01";
+    var buy = 0, buyBy = {}; purch.forEach(function (p) { if (p.date && p.date >= start && p.date <= end) { buy += p.q * p.cost; var s = p.store || "（店舗指定なし）"; buyBy[s] = (buyBy[s] || 0) + p.q * p.cost; } });
+    var recv = {}; logs.forEach(function (l) { if (l.date < start || l.date > end) return; recv[l.store] = (recv[l.store] || 0) + (l.fill ? l.add * unit(l.fill) : 0) - (l.prize ? l.take * unit(l.prize) : 0); });
+    var sum = function (o) { return Object.keys(o).reduce(function (a, k) { return a + (o[k] || 0); }, 0); };
+    var o1 = prev.wh + sum(prev.st), o3 = cur.wh + sum(cur.st);
+    var row = function (lab, a1, a2, a3, extra, memo) { var a4 = a1 + a2 - a3; out.push([ym, lab, Math.round(a1), Math.round(a2), Math.round(a3), Math.round(a4), tax(a1), tax(a2), tax(a3), tax(a4), extra == null ? "" : Math.round(extra), memo || ""]); };
+    row("全店", o1, buy, o3, buy, ym === today.slice(0, 7) ? "今月は途中（" + today + " 時点）" : "");
+    var recvAll = sum(recv);
+    row("倉庫（店に出していない在庫）", prev.wh, buy, cur.wh, null, "④＝店に出した景品（補充−回収）" + (Math.abs(prev.wh + buy - cur.wh - recvAll) > 1 ? "。差 " + Math.round(prev.wh + buy - cur.wh - recvAll) + " 円は未登録の景品・数え違いなど" : "") + (cur.neg ? "。景品マスタに無い・足りない景品 " + cur.neg + " 種類" : ""));
+    stores.forEach(function (s) { if (!(prev.st[s] || cur.st[s] || recv[s] || buyBy[s])) return; row(s, prev.st[s] || 0, recv[s] || 0, cur.st[s] || 0, buyBy[s] || 0, "①③＝機械の中の景品／②＝この店に入れた景品（補充−回収）"); });
+    if (buyBy["（店舗指定なし）"]) out.push([ym, "（店舗指定なしの仕入れ）", "", "", "", "", "", "", "", "", Math.round(buyBy["（店舗指定なし）"]), "景品登録で店舗を選ばなかった仕入れ"]);
+    prev = cur;
+  });
+  var sh = ss().getSheetByName(METRICS_SHEET) || ss().insertSheet(METRICS_SHEET);
+  sh.clearContents();
+  sh.getRange(1, 1, out.length, out[0].length).setValues(out);
+  sh.getRange(1, 1, 1, out[0].length).setFontWeight("bold").setWrap(true);
+  if (out.length > 1) sh.getRange(2, 3, out.length - 1, 9).setNumberFormat("#,##0");
+  sh.setFrozenRows(1); sh.setFrozenColumns(2);
+  sh.getRange(out.length + 2, 1).setValue("自動で作り直します（10 分ごとに確認・景品や巡回を保存したとき）。単価は景品マスタの仕入単価（同じ品名が複数行なら数量で加重平均）。更新 " + nowIso()).setFontColor("#999999");
+  // 確認日：残りが 0 以下になった景品に、最後に補充した日を入れる
+  if (cCD >= 0 && cJ >= 0) {
+    var lastFill = {}; logs.forEach(function (l) { if (l.fill && l.add) lastFill[l.fill] = l.date; });
+    var v2 = pm.getDataRange().getValues();
+    for (var j = 1; j < v2.length; j++) {
+      var nm = clean(v2[j][cN]); if (!nm || v2[j][cCD] || v2[j][cJ] === "" || num(v2[j][cF]) <= 0 || num(v2[j][cJ]) > 0) continue;
+      var d0 = lastFill[normKey_(nm)]; if (d0) pm.getRange(j + 1, cCD + 1).setValue(dateOf(d0)).setNumberFormat("yyyy/mm/dd");
+    }
+  }
+  PropertiesService.getScriptProperties().setProperties({ metricsAt: String(Date.now()), metricsDirty: "" });
+  return "必要指標を更新しました（" + months.length + " ヶ月）";
+}
+/* 保存のたびに「作り直しが必要」の印を付け、10 分ごとのトリガーで作り直す（保存を遅くしない）。1 時間たてば印が無くても作り直す */
+function markMetricsDirty_() { try { PropertiesService.getScriptProperties().setProperty("metricsDirty", "1"); } catch (e) {} }
+function updateMetricsIfDue() {
+  var pr = PropertiesService.getScriptProperties();
+  if (pr.getProperty("metricsDirty") || Date.now() - num(pr.getProperty("metricsAt")) > 60 * 60 * 1000) {
+    try { updateMetrics(); } catch (e) { Logger.log("必要指標: " + e); }
+  }
+}
 var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
 function selfUpdate() {
   var props = PropertiesService.getScriptProperties();
