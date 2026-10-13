@@ -179,32 +179,30 @@ HANDOVER.md                  この文書
 - 画面・計算：`index.html` を直して **push するだけ**。GitHub Pages が1〜2分で反映、アプリ側は自動更新。
   - 作業ブランチ＝公開ブランチ `claude/examuse-prize-handover-8s2xx8`。push すると即公開される。
   - 確認手段：`node --check` で構文、scratchpad の模擬API（Python）＋Playwright で動作。クラウド環境からは github.io / script.google.com に接続できない（ネットワークポリシー）ので、実機確認は菊地さん。
-- Apps Script（Code.gs）：リポジトリの `apps-script/Code.gs` を直して push するだけ。**自動更新（2026-10-09〜、菊地さん承認）**：Apps Script 側の `selfUpdate` が 15 分ごとに GitHub の raw Code.gs を取り込み、
-  構文チェックのうえ新バージョンを作って既存のウェブアプリのデプロイに付け替える（URL は変わらない。内容が同じなら何もしない）。急ぐときは菊地さんがエディタで `selfUpdate` を ▶ 実行。
-  push した内容がそのまま本番に流れるので、Code.gs は `new Function` で構文確認し、`doPost` を壊していないか見てから push する。
+- Apps Script（Code.gs）：リポジトリの `apps-script/Code.gs` を直して push するだけ。**ローダー方式（2026-10-13〜）**：Apps Script 側に貼ってあるのは
+  `apps-script/Loader.gs`（小さな受け皿）だけ。本物の Code.gs はローダーが GitHub の raw から読み込み（10 分キャッシュ）、`new Function` でその場で実行する。
+  だから push すれば最長 10 分で本番に反映され、Apps Script API・バージョン作成・再デプロイは一切使わない（Apps Script API は隠し GCP プロジェクトの都合で有効化できなかった）。
+  - 取ってきたコードは構文チェックに通ったものだけ使い、Drive の控え「クレーンログ_Code.gs_控え（自動・消さない）」にも保存。GitHub に届かないときは控えで動く。
+  - `selfUpdate`（エディタから／15 分ごとのトリガー）＝キャッシュを捨てていますぐ取り直す。`codeStatus` で読み込み元・時刻・最後のエラーが見える。
+  - ウェブアプリの URL（config.js の api）を GET すると `{build, loader, codeSource, codeFetchedAt, codeError, selfUpdateLast}` が返る。クラウド側からはこれで反映を確認する。
+  - 本物のコードに新しい関数を足しても、ローダーは起動時に関数名を動的に用意するのでトリガーからも呼べる。ただしエディタの関数一覧に出したいものは Loader.gs に 1 行足す（貼り替えが必要）。
+  - スクリプト プロパティ `codeUrl` を入れると読み込み元を変えられる（別ブランチ・特定コミットに固定）。
+  - **本番コード＝push した内容**なので、Code.gs は `new Function` で構文確認し、`doPost` を壊していないか見てから push する。
   保守関数（repairChain など）を実行してもらうときの案内は、**必ず「どのスプシの Apps Script か」を URL 付きで書く**（Apps Script は複数のスプシにあるため）。
   ```
   【クレーンログの Apps Script：保守関数の実行手順】
   対象：スプレッドシート「クレーンゲーム日報」
         https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs
         → 拡張機能 → Apps Script（プロジェクト名「無題のプロジェクト」）
-  1. push から 15 分以上たっていればコードは自動で最新。急ぐなら 関数 selfUpdate を選んで ▶ 実行（実行ログに「更新しました」か「変更なし」）
-  2. 指定した関数を選んで ▶ 実行
+  1. push から 10 分以上たっていればコードは自動で最新。急ぐなら 関数 selfUpdate を選んで ▶ 実行（実行ログに「更新しました」か「変更なし」）
+  2. 指定した関数を選んで ▶ 実行（一覧に無い関数は Loader.gs に 1 行足して貼り直す）
   ```
-  自動更新の一回きりの準備（済んでいなければ）：(a) https://script.google.com/home/usersettings で「Google Apps Script API」をオン、
-  (b) エディタ ⚙ プロジェクトの設定 → 「appsscript.json」マニフェストファイルをエディタで表示 → appsscript.json に下の `oauthScopes` を追加して保存、
-  (c) 最後に 1 回だけ手動で Copy raw file → コード.gs を置き換え → `setup`（トリガー登録）→ `selfUpdate` を ▶ 実行して権限を許可。
-  ```
-  "oauthScopes": [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive",
-    "https://www.googleapis.com/auth/script.external_request",
-    "https://www.googleapis.com/auth/script.scriptapp",
-    "https://www.googleapis.com/auth/script.projects",
-    "https://www.googleapis.com/auth/script.deployments"
-  ]
-  ```
-  手動で更新する場合（自動更新が止まっているとき）：Copy raw file → コード.gs を全部置き換えて保存 → デプロイ → デプロイを管理 → 鉛筆 → 「新バージョン」→ デプロイ。
+  ローダーの導入手順（一回きり。済み＝2026-10-13 に案内）：
+  (a) エディタ ⚙ プロジェクトの設定 →「appsscript.json」をエディタで表示 → リポジトリの `apps-script/appsscript.json` の内容に置き換えて保存（oauthScopes を明示。ローダー経由だと Apps Script がスコープを自動判定できないため）。
+  (b) コード.gs の中身を `apps-script/Loader.gs`（GitHub の Copy raw file）に置き換えて保存。
+  (c) デプロイ → デプロイを管理 → 鉛筆 → 「新バージョン」→ デプロイ（これが最後の再デプロイ。URL は変わらない）。
+  (d) 関数 `setup` を ▶ 実行（権限の許可が出るので許可。トリガー登録まで入る）→ `codeStatus` を ▶ 実行して「読み込み元 github」を確認。
+  以前の方式（Apps Script API で自分を書き換える `selfUpdate_`）は Code.gs に残してあるが、ローダー経由では使われない。
   チャット本文からのコピーは引用符が変わって構文エラーになるので、必ず GitHub の Copy raw file。「新しいデプロイ」を作ると URL が変わるので、その場合は config.js も更新して push。
   ※ EXAmuse 発注システムの Apps Script（仕入れ想定商品スプシ 1c2dDei3-… に紐づく）は別物。コードは Mac 上（gen_gs.py が生成）にあり、このリポジトリでは扱わない。
 - スプシのセル内容はクラウド環境から直接書けない。直す必要があるときは Code.gs に関数を足して菊地さんに実行してもらう（下記 5 の方式）。
