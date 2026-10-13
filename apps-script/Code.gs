@@ -1340,7 +1340,7 @@ function selfUpdate() {
     if (payload) { o.contentType = "application/json"; o.payload = JSON.stringify(payload); }
     var r = UrlFetchApp.fetch(url, o), c = r.getResponseCode(), t = r.getContentText();
     if (c >= 300) {
-      if (c === 403 && /not been used|is disabled|accessNotConfigured/i.test(t)) throw new Error("Apps Script API がオフです。https://script.google.com/home/usersettings でオンにしてください");
+      if (c === 403 && /not been used|is disabled|accessNotConfigured/i.test(t)) throw new Error("Apps Script API がオフです。https://script.google.com/home/usersettings でオンにしてください（オンにした直後は反映に数分かかるので、少し待ってから再実行）。Google の応答：" + t.replace(/\s+/g, " ").slice(0, 200));
       if (c === 403 && /insufficient|scope/i.test(t)) throw new Error("権限が足りません。appsscript.json の oauthScopes に script.projects / script.deployments を足して、selfUpdate をエディタから 1 回実行してください");
       throw new Error("API エラー " + c + "：" + t.slice(0, 300));
     }
