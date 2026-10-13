@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面53';
+const APP_BUILD='2026-10-13 新画面54';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10747,17 +10747,43 @@ function archiveWanted(f,ent){
   return true;
 }
 /* 同時に入れたファイルはまとめて場所を決める。PDF の請求書のように名前だけでは分からないものは、
-   一緒に入れた明細（同じ上位店から同じメールで届くことが多い）と同じ場所にする（場所が1つに決まるときだけ） */
-async function archiveBatch(items){
+   一緒に入れた明細（同じ上位店から同じメールで届くことが多い）と同じ場所にする（場所が1つに決まるときだけ）。
+   ここでは保存先を決めて「未アップロード」と表示するだけ。実際に送るのは「会計フォルダにアップロード」ボタン（archiveNow）。
+   （2026-10-13 菊地さん「CSV を入れてアップロードボタンを押す仕様にしてほしい。わかりにくい」） */
+const ARCHIVE_FILES={};
+const archiveSig=f=>f.name+'|'+f.size;
+async function archivePrepare(items){
   const setArch=(ent,a)=>{ent.arch=a;try{renderIn()}catch(e){}};
   if(typeof syncReady!=='function'||!syncReady()){items.forEach(x=>setArch(x.ent,{st:'err',why:'Drive と同期の設定がこの端末にありません（「同期」から設定）'}));return}
-  items.forEach(x=>setArch(x.ent,archiveWanted(x.f,x.ent)?{st:'saving'}:{st:'none'}));
+  items.forEach(x=>setArch(x.ent,archiveWanted(x.f,x.ent)?{st:'checking'}:{st:'none'}));
   await ensurePlaceIndex();
+  const pi=PLACE_INDEX;const c=syncCfg();c.archived=c.archived||{};
   const list=items.filter(x=>archiveWanted(x.f,x.ent));
   list.forEach(x=>{x.g=archiveGuess(x.f.name)});
   const dirs=[...new Set(list.filter(x=>x.g).map(x=>x.g.dir))];
   if(dirs.length===1)list.forEach(x=>{if(!x.g)x.g={dir:dirs[0],sure:false,byBatch:true,others:[]}});
-  for(const x of list){try{await archiveUpload(x.f,x.ent,x.g)}catch(e){console.warn('archive',x.f.name,e)}}
+  const ym=thisYm();
+  for(const x of list){
+    const f=x.f,ent=x.ent,sig=archiveSig(f);ARCHIVE_FILES[sig]=f;
+    const curKey=String(f.name).normalize('NFC')+'|'+f.size;const curDir=pi&&pi.cur?pi.cur[curKey]:undefined;
+    if(curDir!==undefined||SALES_LIST.some(y=>y.name===f.name&&y.size===f.size)){setArch(ent,{st:'skip',where:curDir?`（${curDir}/）`:'',why:'同じ名前と大きさのファイルが会計フォルダにあるので送りません'});continue}
+    if(c.archived[sig]){setArch(ent,{st:'saved',why:'この端末からすでに送ってあります（Mac の同期で会計フォルダへ）'});continue}
+    const g=x.g,dir=(g&&g.dir)||'_未分類（アプリから）';
+    const where=`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${dir}/`;
+    let why='';
+    if(!g)why='過去に同じ名前のファイルが無く、場所が分かりません。_未分類 に入れるので、あとで Mac でフォルダを移してください';
+    else if(g.byBatch)why='一緒に入れたファイルと同じ場所にします';
+    else if(!g.sure)why=`過去の置き場所からの推定です（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）`;
+    setArch(ent,{st:'pending',where,why,g,sig});
+  }
+}
+/* 「会計フォルダにアップロード」ボタン。sig を渡せばその1件、無ければ未アップロードの全部 */
+async function archiveNow(sig){
+  const targets=(B.files||[]).filter(f=>f.arch&&(f.arch.st==='pending'||f.arch.st==='err')&&f.arch.sig&&ARCHIVE_FILES[f.arch.sig]&&(!sig||f.arch.sig===sig));
+  if(!targets.length){toast('アップロードするものがありません');return}
+  for(const ent of targets){const f=ARCHIVE_FILES[ent.arch.sig];try{await archiveUpload(f,ent,ent.arch.g)}catch(e){console.warn('archive',f.name,e)}}
+  const ok=targets.filter(f=>f.arch&&f.arch.st==='saved').length;
+  toast(ok?`${ok}件を会計フォルダ（Drive）にアップロードしました。Mac の同期で1時間以内にフォルダに入ります`:'アップロードできませんでした。通信と「同期」の設定を確認してください');
 }
 async function archiveUpload(f,ent,g){
   const setArch=a=>{ent.arch=a;try{renderIn()}catch(e){}};
@@ -10770,6 +10796,7 @@ async function archiveUpload(f,ent,g){
     const curDir=pi&&pi.cur?pi.cur[curKey]:undefined;
     if(curDir!==undefined||SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);setArch({st:'skip',where:curDir?`（${curDir}/）`:'',why:'同じ名前と大きさのファイルが会計フォルダにあるので送りません'});return}
     if(c.archived[sig]){setArch({st:'saved',why:'この端末からすでに送ってあります（Mac の同期で会計フォルダへ）'});return}
+    setArch({st:'saving',sig,g});
     if(g===undefined)g=archiveGuess(f.name);
     const ym=thisYm(),dir=(g&&g.dir)||'_未分類（アプリから）';
     const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
@@ -10782,7 +10809,7 @@ async function archiveUpload(f,ent,g){
     else if(g.byBatch)why='一緒に入れたファイルと同じ場所にしました。Mac の同期で1時間以内に入ります';
     else if(!g.sure)why=`過去の置き場所から推定しました（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）。違えば Mac で移してください`;
     setArch({st:'saved',where,why});
-  }catch(e){console.warn('archive',f.name,e);setArch({st:'err',why:((e&&e.message)||String(e))+'（「同期」の設定と通信を確認して、もう一度入れてください）'})}
+  }catch(e){console.warn('archive',f.name,e);setArch({st:'err',sig:archiveSig(f),g,why:((e&&e.message)||String(e))+'（通信と「同期」の設定を確認して、もう一度ボタンを押してください）'})}
 }
 async function batchRoute(files,opts){
   opts=opts||{};
@@ -10839,7 +10866,7 @@ async function batchRoute(files,opts){
     }
   }finally{B.busy--}
   rebuildJobs();renderIn();
-  if(toArchive.length)ARCHIVE_Q=ARCHIVE_Q.then(()=>archiveBatch(toArchive)).catch(e=>console.warn('archive',e));
+  if(toArchive.length)ARCHIVE_Q=ARCHIVE_Q.then(()=>archivePrepare(toArchive)).catch(e=>console.warn('archive',e));
 }
 function removeInFile(i){
   const f=B.files[i];if(!f)return;
@@ -10950,11 +10977,14 @@ function renderIn(){
     let arch='';
     if(f.arch&&f.arch.st&&f.arch.st!=='none'){
       const a=f.arch;
-      const p2=a.st==='saved'?pill('ok','会計フォルダに保存済み'):a.st==='saving'?pill('flat','会計フォルダに保存中…'):a.st==='skip'?pill('flat','会計フォルダにあります'):pill('bad','会計フォルダに保存できず');
-      arch=`<span class="d">${p2} ${esc((a.where?a.where+' ':'')+(a.why||''))}</span>`;
+      const p2=a.st==='saved'?pill('ok','会計フォルダに保存済み'):a.st==='saving'?pill('flat','アップロード中…'):a.st==='checking'?pill('flat','保存先を調べています…'):a.st==='pending'?pill('warn','未アップロード'):a.st==='skip'?pill('flat','会計フォルダにあります'):pill('bad','会計フォルダに保存できず');
+      const btn=(a.st==='pending'||a.st==='err')&&a.sig?` <button class="btn btn-sm" onclick="archiveNow(${JSON.stringify(a.sig).replace(/"/g,'&quot;')})">⬆ 会計フォルダにアップロード</button>`:'';
+      arch=`<span class="d">${p2} ${esc((a.where?'保存先 '+a.where+'　':'')+(a.why||''))}${btn}</span>`;
     }
     return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${arch}${f.stock?stockCardHtml(i,f.stock):''}</div>`;
   }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
+  const npend=(B.files||[]).filter(f=>f.arch&&f.arch.st==='pending').length;
+  if(npend>=2&&host)host.innerHTML=`<p class="note" style="padding:6px 0 10px"><button class="btn" onclick="archiveNow()">⬆ 会計フォルダにまとめてアップロード（${npend}件）</button></p>`+host.innerHTML;
   const xs=document.getElementById('inXrm');
   if(xs){
     if(S.xrmWb&&!S.xrmStub){
