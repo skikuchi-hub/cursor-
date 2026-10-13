@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面50';
+const APP_BUILD='2026-10-13 新画面51';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7811,7 +7811,7 @@ async function syncNow(opts){
     try{const na=await ledgerAcceptStable({silent:true});if(na)syncLog(`明細から覚えた単価 ${na}件を台帳に採用しました（3ヶ月以上同じ単価のもの）`)}catch(e){console.warn(e)}
     syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
-    SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();
+    SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();PLACE_INDEX=null;   /* 保存先の索引は次に使うとき取り直す */
     /* ライフサポートの内訳（SBPS・ロボペイ）: Drive にある最新月の決済 CSV から同期で自動で作り、入れる画面にカードを出す（アップロード不要・2026-10 菊地さん）。
        結果は記憶にも残す（mem.stockOut: 支払先ごとの件数・金額）。明細書の仕上げの材料にする */
     try{const csvs=SALES_LIST.filter(x=>x.payer==='WST'&&/\.csv$/i.test(String(x.name||''))&&/SBPS|PAY_/i.test(String(x.name||'')));
@@ -10682,43 +10682,56 @@ function detectJobs(wb,name){
 
 /* ---- まとめて投入: 中身で XRM / 支払明細書 / 上位店明細 に振り分け、商材を判定 ---- */
 /* ---- アプリに入れた明細を会計フォルダへ（2026-10-13 菊地さん「アプリにアップしたものを会計フォルダに保存してくれるパターン」） ----
-   「入れる」に直接入れたファイル（Drive から入れたものは除く）を、Drive の data/out/<今月YYYYMM>/<会社>/売上明細書/<上位店>/ にそのまま置く。
-   Mac の同期（毎時）がそれを 会計/<YYYY年M月会計資料>/<会社>/売上明細書/<上位店>/ に写す（sync_out_files）。
-   上位店は、Drive にある過去の売上明細書で「年月だけ違う同じ名前」のものから決める（HTB の「2026年8月分（2026年9月集計）支払い対象＆戻入リスト」など）。
-   決まらなければ _未分類（アプリから）/ に入れて菊地さんに知らせる。
-   対象外: XRM・JSON・自社が作るパートナー支払明細書・AI作成中_・読めなかったもの・もう会計フォルダにあるもの（Drive の一覧に同じ名前と大きさ） */
+   「入れる」に直接入れたファイル（Drive から入れたものは除く）を、Drive の data/out/<今月YYYYMM>/<会計フォルダ内の場所>/<元の名前> にそのまま置く。
+   Mac の同期（毎時）がそれを 会計/<YYYY年M月会計資料>/<場所>/ に写す（sync_out_files）。
+   場所は Mac が作る「保存先の索引」（place_index.json: 直近12ヶ月の会計フォルダで、年月だけ違う同じ名前のファイルがどこにあったか）で決める。
+   例: 「2026年8月分（2026年9月集計）支払い対象＆戻入リスト.xlsx」→ EX/売上明細書/HTBエナジー株式会社、「【○○御中】2026年9月度 御請求書.xlsx」→ EX/【出し】請求書。
+   （2026-10-13 菊地さん「全部 EX/売上明細書 に保存されても困る。前月までのファイルからでもいいから保存先は間違わないで」）
+   索引に無いものは、一緒に入れたファイルの場所が1つに決まればそこへ。それでも決まらなければ月フォルダ直下の _未分類（アプリから）/ に入れて知らせる。
+   対象外: XRM・JSON・AI作成中_・読めなかったもの・もう会計フォルダにあるもの（索引の今月/先月の名前と大きさ） */
 let ARCHIVE_Q=Promise.resolve();
+let PLACE_INDEX=null;
 function archiveNameKey(n){return String(n||'').normalize('NFKC').toLowerCase().replace(/\.[a-z0-9]+$/,'').replace(/\d+/g,'#').replace(/[\s　]+/g,'')}
-function archiveGuess(name){
-  const key=archiveNameKey(name);
-  const hit=SALES_LIST.filter(x=>archiveNameKey(x.name)===key).sort((a,b)=>String(b.month).localeCompare(String(a.month)))[0];
-  if(hit)return {payer:hit.payer||'EX',up:hit.upstream||''};
-  const n=String(name).normalize('NFC');
-  const known=SALES_LIST.filter(x=>x.upstream&&x.upstream.length>=3&&n.includes(x.upstream)).sort((a,b)=>b.upstream.length-a.upstream.length)[0];
-  if(known)return {payer:known.payer||'EX',up:known.upstream};
-  return null;
+/* 索引は同期のときの manifest に載る。無ければ manifest だけ先に取る（数秒） */
+async function ensurePlaceIndex(){
+  if(PLACE_INDEX)return PLACE_INDEX;
+  if(typeof syncReady!=='function'||!syncReady())return null;
+  try{
+    const man=await syncGet({action:'manifest'});
+    if(Array.isArray(man.sales)&&man.sales.length&&!SALES_LIST.length){SALES_LIST=man.sales;try{renderSalesButtons()}catch(e){}}
+    const pi=man.placeIndex;if(!pi||!pi.path)return null;
+    const f=await syncFile(pi.path,null,{size:pi.size});
+    PLACE_INDEX=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
+  }catch(e){console.warn('placeIndex',e)}
+  return PLACE_INDEX;
 }
-/* Drive の売上明細書の一覧（SALES_LIST）は同期のときに入る。アプリを開いた直後に入れたときは、一覧だけ先に取る（manifest は 70KB・数秒） */
-async function ensureSalesList(){
-  if(SALES_LIST.length||typeof syncReady!=='function'||!syncReady())return;
-  try{const man=await syncGet({action:'manifest'});if(Array.isArray(man.sales)&&man.sales.length){SALES_LIST=man.sales;try{renderSalesButtons()}catch(e){}}}catch(e){console.warn('salesList',e)}
+function archiveGuess(name){
+  const pi=PLACE_INDEX;if(!pi||!pi.items)return null;
+  const it=pi.items[archiveNameKey(name)];
+  if(it&&it.dir)return {dir:it.dir,sure:it.n*2>it.total||it.n>=3,others:it.others||[]};
+  /* 名前に上位店名が入っていれば、その上位店の売上明細書フォルダ */
+  const n=String(name).normalize('NFC').toLowerCase().replace(/\s/g,'');
+  const dirs=[...new Set(Object.values(pi.items).map(x=>x.dir))].filter(d=>/売上明細書\//.test(d));
+  const hit=dirs.map(d=>({d,up:d.split('/').pop().replace(/株式会社|合同会社|有限会社/g,'').toLowerCase().replace(/\s/g,'')})).filter(x=>x.up.length>=3&&n.includes(x.up)).sort((a,b)=>b.up.length-a.up.length)[0];
+  if(hit)return {dir:hit.d,sure:false,others:[]};
+  return null;
 }
 function archiveWanted(f,ent){
   if(!/\.(xlsx|xlsm|xls|csv|pdf)$/i.test(f.name))return false;
-  if(['xrm','json','pay','error'].includes(ent.kind))return false;
-  if(/^AI作成中|【\s*\d{4}\s*年\s*\d{1,2}\s*月度明細】/.test(String(f.name).normalize('NFC')))return false;
+  if(['xrm','json','error'].includes(ent.kind))return false;
+  if(/^AI作成中/.test(String(f.name).normalize('NFC')))return false;
   if(f.size>20*1024*1024)return false;
   return true;
 }
-/* 同時に入れたファイルはまとめて保存先を決める。PDF の請求書のように名前だけでは上位店が分からないものは、
-   一緒に入れた明細（同じ上位店から同じメールで届くことが多い）の上位店に合わせる（上位店が1つに決まるときだけ） */
+/* 同時に入れたファイルはまとめて場所を決める。PDF の請求書のように名前だけでは分からないものは、
+   一緒に入れた明細（同じ上位店から同じメールで届くことが多い）と同じ場所にする（場所が1つに決まるときだけ） */
 async function archiveBatch(items){
   if(typeof syncReady!=='function'||!syncReady())return;
-  await ensureSalesList();
+  await ensurePlaceIndex();
   const list=items.filter(x=>archiveWanted(x.f,x.ent));
   list.forEach(x=>{x.g=archiveGuess(x.f.name)});
-  const ups=[...new Set(list.filter(x=>x.g).map(x=>x.g.payer+'|'+x.g.up))];
-  if(ups.length===1){const g=list.find(x=>x.g).g;list.forEach(x=>{if(!x.g)x.g={payer:g.payer,up:g.up,byBatch:true}})}
+  const dirs=[...new Set(list.filter(x=>x.g).map(x=>x.g.dir))];
+  if(dirs.length===1)list.forEach(x=>{if(!x.g)x.g={dir:dirs[0],sure:false,byBatch:true,others:[]}});
   for(const x of list){try{await archiveUpload(x.f,x.ent,x.g)}catch(e){console.warn('archive',x.f.name,e)}}
 }
 async function archiveUpload(f,ent,g){
@@ -10728,14 +10741,21 @@ async function archiveUpload(f,ent,g){
     if(!archiveWanted(f,ent))return;
     const c=syncCfg();c.archived=c.archived||{};const sig=f.name+'|'+f.size;
     if(c.archived[sig])return;
-    if(SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);return}
+    const pi=PLACE_INDEX||await ensurePlaceIndex();
+    const curKey=String(f.name).normalize('NFC')+'|'+f.size;
+    if((pi&&pi.cur&&pi.cur[curKey]!==undefined)||SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);return}
     if(g===undefined)g=archiveGuess(f.name);
-    const ym=thisYm(),payer=(g&&g.payer)||'EX',up=(g&&g.up)||'_未分類（アプリから）';
+    const ym=thisYm(),dir=(g&&g.dir)||'_未分類（アプリから）';
     const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
-    const r=await syncPost({action:'saveFile',path:`${ym}/${payer}/売上明細書/${up}/${f.name}`,b64,mime:f.type||'application/octet-stream'});
+    const r=await syncPost({action:'saveFile',path:`${ym}/${dir}/${f.name}`,b64,mime:f.type||'application/octet-stream'});
     if(!(r&&r.ok))throw new Error((r&&r.error)||'不明');
     c.archived[sig]=1;saveSyncCfg(c);
-    addNote(`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${payer}/売上明細書/${up}/ に保存します（Mac の同期で1時間以内）${g?(g.byBatch?'。一緒に入れた明細と同じ上位店にしました':''):'。上位店が分からなかったので _未分類 です。フォルダを移してください'}`);
+    const where=`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${dir}/`;
+    let why='';
+    if(!g)why='。過去に同じ名前のファイルが無く、場所が分からなかったので _未分類 です。フォルダを移してください';
+    else if(g.byBatch)why='。一緒に入れたファイルと同じ場所にしました';
+    else if(!g.sure)why=`。過去の置き場所から推定（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）。違えば移してください`;
+    addNote(`${where} に保存します（Mac の同期で1時間以内）${why}`);
   }catch(e){console.warn('archive',f.name,e);addNote('会計フォルダへの保存に失敗: '+((e&&e.message)||e)+'（同期の設定を確認）')}
 }
 async function batchRoute(files,opts){
