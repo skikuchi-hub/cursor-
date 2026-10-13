@@ -3091,6 +3091,11 @@ function guideTarget(){
   if (!PHOTOS.some(p=>p.kind==="before") && !GUIDE.skip.before && !PHOTO_SKIP.before) return {sec:2, el:pf("before"), txt:"補充前の写真をとる（1枚）", skip:"before"};
   if (R.type==="4p"){
     for (const rm of R.rooms){
+      // 景品名が空の部屋は、数より先に名前（在庫管理は景品名が無いと何も数えられない）。空の部屋なら「とばす」
+      if (!clean(rm.prize) && !GUIDE.skip["name"+rm.k] && (prevStock(rm.k)===null || prevStock(rm.k)>0 || rm.counter!=="" || num(rm.before)>0 || num(rm.taken)>0)){
+        const b = document.querySelector(`#roomGrid .pname[data-k="${rm.k}"]`);
+        return {sec:2, el: b, cell:rm.k, txt:`${rm.k} の「景品を選ぶ」で、入っている景品を選ぶ（空の部屋なら「とばす」）`, skip:"name"+rm.k};
+      }
       const first = prevStock(rm.k)===null, f = first ? "before" : "taken";
       const v = rm[f];
       if (v==="" || v===undefined || v===null){
@@ -3265,6 +3270,9 @@ function validateVisit(){
       // 取られた数（初回は いま入っている数）は必須。空だと払出 0 のまま記録され、原価率・在庫が合わなくなる
       if (st!==null && (rm.taken===""||rm.taken===undefined||rm.taken===null) && (clean(rm.prize)||st>0)) block.push(`部屋${rm.k} の「取られた数」が空です（出ていなければ 0 を入れる）`);
       if (st===null && clean(rm.prize) && (rm.before===""||rm.before===undefined||rm.before===null)) block.push(`部屋${rm.k} の「いま入っている数」が空です（この部屋に入っている個数）`);
+      // 景品名が空のまま数だけ入っている＝在庫・払出・原価率がその部屋だけ数えられない。名前を選ぶまで保存不可
+      if (!clean(rm.prize) && (num(rm.before)>0 || num(rm.taken)>0 || num(rm.add)>0 || (st!==null && st>0))) block.push(`部屋${rm.k} の景品名が空です。「景品を選ぶ」で入っている景品を選んでください（空の部屋なら個数は入れない）`);
+      else if (!clean(rm.prize) && rm.counter!=="" && rm.counter!==undefined) ask.push(`部屋${rm.k}：カウンターは入っていますが景品名が空です。空の部屋ですか？（景品が入っているなら「景品を選ぶ」）`);
       if (rm.counter!=="" && pr && pr.counter!=="" && pr.counter!==undefined){
         const diff = num(rm.counter)-num(pr.counter);
         if (diff < 0) ask.push(`部屋${rm.k} のカウンター ${rm.counter} が前回 ${pr.counter} より小さい（カウンターは減りません）`);
