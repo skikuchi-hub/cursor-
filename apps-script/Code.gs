@@ -23,11 +23,12 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-13b";   // 動いているコードの版。selfUpdate が反映できたかを URL を開くだけで確かめるための目印
+var CODE_BUILD = "2026-10-13c";   // 動いているコードの版。selfUpdate が反映できたかを URL を開くだけで確かめるための目印
 function doGet(e) {
   var p = PropertiesService.getScriptProperties();
   return out({ ok: true, service: "crane-nippo-api", version: 2, build: CODE_BUILD,
-               deployedAt: p.getProperty("deployedAt") || "", deployedVersion: p.getProperty("deployedVersion") || "", time: nowIso() });
+               deployedAt: p.getProperty("deployedAt") || "", deployedVersion: p.getProperty("deployedVersion") || "",
+               selfUpdateLast: p.getProperty("selfUpdateLast") || "", time: nowIso() });
 }
 
 function doPost(e) {
@@ -1328,8 +1329,19 @@ function updateMetricsIfDue() {
   }
 }
 var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
+/* 最後に走った結果を ScriptProperties に残し、doGet で見えるようにする（トリガーのログを開かなくても外から確かめられる） */
 function selfUpdate() {
   var props = PropertiesService.getScriptProperties();
+  try {
+    var msg = selfUpdate_(props);
+    props.setProperty("selfUpdateLast", nowIso() + " OK " + msg);
+    return msg;
+  } catch (e) {
+    props.setProperty("selfUpdateLast", nowIso() + " ERR " + String(e && e.message || e).slice(0, 400));
+    throw e;
+  }
+}
+function selfUpdate_(props) {
   var res = UrlFetchApp.fetch(SELF_UPDATE_URL + "?t=" + Date.now(), { muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) return "GitHub から取得できません（HTTP " + res.getResponseCode() + "）";
   var code = res.getContentText("UTF-8");
@@ -1356,17 +1368,22 @@ function selfUpdate() {
   if (!target) throw new Error("置き換えるスクリプトファイルが特定できません（SERVER_JS が " + js.length + " 個）");
   var files = cur.files.map(function (f) { return { name: f.name, type: f.type, source: (f.name === target.name && f.type === "SERVER_JS") ? code : f.source }; });
   call("put", base + "/content", { files: files });
-  // 2) 新バージョン
-  var ver = call("post", base + "/versions", { description: "auto " + nowIso() });
-  var vn = ver.versionNumber;
-  // 3) ウェブアプリのデプロイ（HEAD 以外で WEB_APP の入口を持つもの。複数なら最近更新したもの）を新バージョンへ
-  var deps = (call("get", base + "/deployments").deployments || []).filter(function (d) {
-    return d.deploymentConfig && d.deploymentConfig.versionNumber && (d.entryPoints || []).some(function (e) { return e.entryPointType === "WEB_APP"; });
-  });
-  if (!deps.length) throw new Error("ウェブアプリのデプロイが見つかりません。先に 1 回だけ手動で「デプロイ」してください");
-  deps.sort(function (a, b) { return String(b.updateTime || "").localeCompare(String(a.updateTime || "")); });
-  var dep = deps[0];
-  call("put", base + "/deployments/" + dep.deploymentId, { deploymentConfig: { scriptId: id, versionNumber: vn, manifestFileName: "appsscript", description: "auto " + nowIso() } });
+  // 2) ウェブアプリのデプロイを探す（WEB_APP の入口を持つもの。複数ならバージョン付きを優先し、最近更新したもの）
+  var all = call("get", base + "/deployments").deployments || [];
+  var web = all.filter(function (d) { return (d.entryPoints || []).some(function (e) { return e.entryPointType === "WEB_APP"; }); });
+  var versioned = web.filter(function (d) { return d.deploymentConfig && d.deploymentConfig.versionNumber; });
+  versioned.sort(function (a, b) { return String(b.updateTime || "").localeCompare(String(a.updateTime || "")); });
+  var vn = "HEAD";
+  if (versioned.length) {
+    // 3) 新バージョンを作って、そのデプロイに割り当てる
+    var ver = call("post", base + "/versions", { description: "auto " + nowIso() });
+    vn = ver.versionNumber;
+    var dep = versioned[0];
+    call("put", base + "/deployments/" + dep.deploymentId, { deploymentConfig: { scriptId: id, versionNumber: vn, manifestFileName: "appsscript", description: "auto " + nowIso() } });
+  } else if (!web.length) {
+    throw new Error("ウェブアプリのデプロイが見つかりません（デプロイ " + all.length + " 件）。先に 1 回だけ手動で「デプロイ」してください");
+  }
+  // バージョン付きが無ければ HEAD で公開されているので、コードの置き換えだけで反映される
   props.setProperties({ deployedHash: hash, deployedAt: nowIso(), deployedVersion: String(vn) });
   var msg = "更新しました：バージョン " + vn + " を反映（" + nowIso() + "）";
   Logger.log(msg); try { SpreadsheetApp.getActive().toast(msg); } catch (e) {}
