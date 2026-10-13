@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面51';
+const APP_BUILD='2026-10-13 新画面52';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7735,7 +7735,23 @@ function syncLedgerSoon(){
     catch(e){console.warn('ledger push',e)}
   },2500);
 }
+/* アプリの新しい版が出ていたら自分で読み込み直す（ホーム画面に置いた iPhone/iPad は古い版を開いたままになりやすい。2026-10-13 新画面46 のまま同期が失敗した再発防止） */
+async function checkAppUpdate(){
+  try{
+    if(!/^https?:/.test(location.protocol))return;
+    const r=await fetch('index.html?u='+Date.now(),{cache:'no-store'});if(!r.ok)return;
+    const m=(await r.text()).match(/const APP_BUILD='([^']+)'/);
+    if(!m||m[1]===APP_BUILD)return;
+    const k='reloadedFor:'+m[1];
+    if(sessionStorage.getItem(k))return;   /* 同じ版で何度も読み直さない */
+    sessionStorage.setItem(k,'1');
+    try{toast(`新しい版（${m[1]}）に更新します`)}catch(e){}
+    setTimeout(()=>location.reload(),900);
+  }catch(e){}
+}
+setTimeout(checkAppUpdate,1500);
 async function syncNow(opts){
+  await checkAppUpdate();
   opts=opts||{};
   if(SYNC_BUSY)return;
   if(!syncReady()){if(!opts.silent)openSync();return}
@@ -7799,13 +7815,20 @@ async function syncNow(opts){
     if(man.history&&man.history.path&&(man.history.mtime!==c.historyMtime||!lgH||!Object.keys(lgH).length)){
       const hm=man.history.months||[];
       syncLog(`過去${hm.length}ヶ月分（${fmtYmJa(hm[0])||'?'}〜${fmtYmJa(hm[hm.length-1])||'?'}）の単価の推移を取得しています`);
-      const f=await syncFile(man.history.path,null,{size:man.history.size,onFrac:fr=>syncProg(80,88,fr*0.8,'単価の推移を受信中')});
-      /* 圧縮版（history.json.gz）のときは展開する（2026-10-13: iMac の同期は Apps Script 経由で 28MB までしか送れないため） */
-      const hb=/\.gz$/i.test(man.history.path)||man.history.gz?await gunzipBytes(new Uint8Array(f.buf)):new Uint8Array(f.buf);
-      const h=JSON.parse(new TextDecoder().decode(hb));
-      const r=applyHistory(h);await saveMemory();
-      c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
-      syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
+      try{
+        const f=await syncFile(man.history.path,null,{size:man.history.size,onFrac:fr=>syncProg(80,88,fr*0.8,'単価の推移を受信中')});
+        /* 圧縮版（history.json.gz）のときは展開する（2026-10-13: iMac の同期は Apps Script 経由で 28MB までしか送れないため）。
+           gzip の印（1f 8b）で見分けるので、manifest の書き方が変わっても読める */
+        let hb=new Uint8Array(f.buf);
+        if((hb[0]===0x1f&&hb[1]===0x8b)||/\.gz$/i.test(man.history.path)||man.history.gz)hb=await gunzipBytes(hb);
+        const h=JSON.parse(new TextDecoder().decode(hb));
+        const r=applyHistory(h);await saveMemory();
+        c.historyMtime=man.history.mtime;saveSyncCfg(c);sum.hist=r.keys;
+        syncLog(`過去${hm.length}ヶ月分を学習しました: 単価の組み合わせ ${r.keys}件・案件 ${Object.keys(h.cases||{}).length.toLocaleString()}件 → 台帳の変更候補 ${r.changes}件`);
+      }catch(e){
+        /* 単価の推移が読めなくても同期は止めない（古い版のアプリが圧縮版を読めずに全部止まった 2026-10-13 の再発防止） */
+        console.warn('history',e);syncLog(`単価の推移は読めませんでした（${(e&&e.message)||e}）。ほかの同期は続けます`,'err');
+      }
     }
     /* 毎月の明細から学習: 同じ単価が3ヶ月以上・8割以上続いている変更点は自動で台帳に採用（食い違い・入れ替わりは人が判断） */
     try{const na=await ledgerAcceptStable({silent:true});if(na)syncLog(`明細から覚えた単価 ${na}件を台帳に採用しました（3ヶ月以上同じ単価のもの）`)}catch(e){console.warn(e)}
