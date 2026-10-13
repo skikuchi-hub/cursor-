@@ -620,14 +620,36 @@ td:first-child{font-family:var(--fs-body)}
   font-size:10.5px;font-weight:700;line-height:1.3;text-align:center;word-break:break-all;
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
 }
-.slot.empty{background:var(--surface-sunk);border-style:dashed}
-.slot.empty .nm{color:var(--ink-3);font-weight:500}
+.slot .st{font-size:9px;line-height:1.2;color:var(--ink-2);margin-top:3px;font-weight:700;text-align:center;white-space:nowrap}
+.slot.empty,.slot.gone{background:var(--surface-sunk);border-style:dashed}
+.slot.empty .nm,.slot.gone .nm{color:var(--ink-3);font-weight:500}
 .slot.out{background:var(--rose-wash);border-color:var(--rose)}
 .slot.out .nm{opacity:.6;text-decoration:line-through}
+.slot.out .st{color:var(--rose)}
+.slot.ret{background:var(--surface-sunk);border-color:var(--ink-3)}
+.slot.ret .nm{opacity:.6;text-decoration:line-through}
 .slot.new{background:var(--aqua-wash);border-color:var(--aqua)}
 .slot.moved{background:var(--violet-wash);border-color:var(--violet)}
 .slot.sel{box-shadow:0 0 0 3px color-mix(in srgb,var(--violet) 45%,transparent);border-color:var(--violet)}
 .slot:active{transform:scale(.96)}
+/* 枠をタップしたときの質問カード */
+.sh-card{padding-top:14px}
+.sh-q{font-size:17px;font-weight:800;margin:0 0 4px;line-height:1.35}
+.sh-sub{font-size:12px;color:var(--ink-2);margin:0 0 10px;line-height:1.5}
+.sh-btn{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;margin-top:8px;border-radius:14px;
+  border:1.5px solid var(--line);background:var(--surface-2);font:inherit;color:inherit}
+.sh-btn .ic{font-size:22px;width:30px;text-align:center;flex:none}
+.sh-btn b{display:block;font-size:15px}
+.sh-btn small{display:block;font-size:11px;color:var(--ink-3);margin-top:2px}
+.sh-btn.plain{background:transparent}
+.sh-btn:active{transform:scale(.98)}
+.sh-chips{margin:8px 0 10px;max-height:38vh;overflow:auto}
+.sh-chips .chip[aria-pressed="true"]{outline:2px solid var(--ink)}
+.nosales{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 10px}
+.pair.off{opacity:.45}
+.pair.off input{pointer-events:none}
+.ph-skip{margin-top:6px;font-weight:600}
+.ph-skip[aria-pressed="true"]{background:var(--rose-wash);border-color:var(--rose)}
 .moverow{background:var(--violet-wash);border:1.5px solid color-mix(in srgb,var(--violet) 35%,transparent);
   border-radius:var(--r-m);padding:10px 11px;margin-top:9px;font-size:12px;line-height:1.55}
 .slotbar{display:flex;align-items:center;gap:8px;margin:10px 0 2px;flex-wrap:wrap}
@@ -678,6 +700,7 @@ body{font-variant-numeric:tabular-nums}
 .warnbox.bad{background:var(--danger-wash);border-color:color-mix(in srgb,var(--danger) 45%,transparent)}
 .tag.todo{background:var(--gold-wash);color:var(--gold-text)}
 .slot.out{background:var(--gold-wash);border-color:var(--gold-ink)}
+.slot.out .st{color:var(--gold-ink)}
 .hdr-btn .cnt{color:var(--navy)}
 .hdr-btn[data-zero="0"]{background:var(--navy)}
 .tab[aria-selected="true"]{color:var(--navy)}
@@ -1008,6 +1031,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="photo-field">
           <button type="button" class="photo-btn" data-kind="before"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>① 補充前の写真</b><small>着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）</small></span></button>
           <div class="photo-row" data-row="before"></div>
+          <button type="button" class="chip mini ph-skip" data-skip="before" hidden>撮り忘れた（写真なしで進む）</button>
         </div>
         <input type="file" id="photoIn" accept="image/*" multiple hidden>
         <div id="roomGrid"></div>
@@ -1027,6 +1051,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="photo-field" style="margin-top:12px">
           <button type="button" class="photo-btn" data-kind="after"><svg viewBox="0 0 24 24"><path d="M4 8.5a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6.5h2a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.6"/></svg><span><b>② 補充後の写真</b><small>補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）</small></span></button>
           <div class="photo-row" data-row="after"></div>
+          <button type="button" class="chip mini ph-skip" data-skip="after" hidden>撮り忘れた（写真なしで進む）</button>
         </div>
       </div>
 
@@ -1878,7 +1903,7 @@ function lastVisitWithSlots(){
 function prevSlotNames(){
   const lv = lastVisit(); if (!lv || !(lv.slots||[]).length) return null;
   const src = (lv.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) ? lv : (lastVisitWithSlots() || lv);
-  const m = {}; (src.slots||[]).forEach(sl=>{ m[sl.i] = clean(sl.filled) || (sl.out ? "" : clean(sl.prize)); });
+  const m = {}; (src.slots||[]).forEach(sl=>{ m[sl.i] = clean(sl.filled) || ((sl.out||sl.ret) ? "" : clean(sl.prize)); });
   return m;
 }
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
@@ -1898,7 +1923,7 @@ function mergeRoomNames(){
   } else {
     const pm = prevSlotNames();
     if (pm && R.slots.every(sl=>!clean(sl.prize))){
-      R.slots.forEach(sl=>{ const nm = pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !clean(sl.filled)) sl.filled=nm; n++; } });
+      R.slots.forEach(sl=>{ const nm = pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !sl.ret && !clean(sl.filled)) sl.filled=nm; n++; } });
     }
   }
   return n;
@@ -1923,7 +1948,9 @@ function prevSalesRec(){
     .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0] || null;
 }
 function salesDelta(f){                       // f: "sAB" | "sCD" | "sBox" → {cur, prev, delta, reset}
-  const cur = num(R ? R[f] : 0), pr = prevSalesRec(), prev = pr ? cumOf(pr)[f] : 0;
+  const pr = prevSalesRec(), prev = pr ? cumOf(pr)[f] : 0;
+  if (R && R.noSales) return {cur:prev, prev, delta:0, reset:false, has:!!pr};   // 売上を見ていない日：今回分 0、累計は前回のまま
+  const cur = num(R ? R[f] : 0);
   const reset = pr && cur>0 && cur<prev;
   return {cur, prev, delta: pr ? (reset ? cur : cur-prev) : cur, reset, has:!!pr};
 }
@@ -1946,9 +1973,9 @@ function resetRooms(keep){
   const t = machineType(F.machine);
   const old = (keep && R && R.type===t) ? R : null;
   R = { type:t, rooms:ROOMS.map(blankRoom), slots:[], sAB:"", sCD:"", sBox:"",
-        mode:"out", fillPrize:"", swapFrom:null };
+        moveFrom:null, pick:null };                    // moveFrom＝「動かした」の元の枠、pick＝開いている質問カード {i, step}
   if (old){ R.rooms=old.rooms; R.slots=old.slots; R.sAB=old.sAB; R.sCD=old.sCD; R.sBox=old.sBox;
-            R.mode=old.mode; R.fillPrize=old.fillPrize; R.swapFrom=old.swapFrom; }
+            R.moveFrom=old.moveFrom===undefined?null:old.moveFrom; R.pick=null; }
   if (t==="4p"){
     R.rooms.forEach(rm=>{
       const pp = prevPrize(rm.k);
@@ -1959,12 +1986,11 @@ function resetRooms(keep){
   } else if (!R.slots.length){
     const lv = lastVisit(), pm = prevSlotNames();
     if (lv && lv.slots && lv.slots.length){
-      R.slots = lv.slots.map(sl=>{ const nm = (pm && pm[sl.i]) || ""; return {i:sl.i, prize:nm, out:false, filled:nm}; });
+      R.slots = lv.slots.map(sl=>{ const nm = (pm && pm[sl.i]) || ""; return {i:sl.i, prize:nm, out:false, ret:false, filled:nm}; });
     } else {
       const n = defaultSlotCount();
-      R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, filled:""}));
+      R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, ret:false, filled:""}));
     }
-    if (boxEmpty()) R.mode = "fill";                 // 何も入っていない機械（初回など）は「補充」から始める
   }
 }
 /* BOX 機で、前回の中身が 1 枠も無い（＝初回や総入れ替え後）か */
@@ -1979,18 +2005,22 @@ let builtFor = "";
 function boxRefill(slots){
   const start={}, end={}, r={};
   (slots||[]).forEach(x=>{
-    if (x.prize && !x.out) start[x.prize]=(start[x.prize]||0)+1;
-    if (x.filled)          end[x.filled]=(end[x.filled]||0)+1;
+    if (x.prize && !x.out && !x.ret) start[x.prize]=(start[x.prize]||0)+1;   // 回収した枠の景品は「残っていた数」に入れない（在庫へ戻す）
+    if (x.filled)                    end[x.filled]=(end[x.filled]||0)+1;
   });
   Object.keys(end).forEach(n=>{ const d = end[n]-(start[n]||0); if (d>0) r[n]=d; });
   return r;
+}
+/* 回収（機械から抜いて在庫へ戻した）景品の数 */
+function boxReturn(slots){
+  const r={}; (slots||[]).forEach(x=>{ if (x.ret && x.prize) r[x.prize]=(r[x.prize]||0)+1; }); return r;
 }
 function addInto(dst, src){ Object.keys(src).forEach(k=>dst[k]=(dst[k]||0)+src[k]); return dst; }
 function refillUsed(){
   const r = {};
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); if(x.prize && num(x.take)>0) r[x.prize]=(r[x.prize]||0)-num(x.take); });
-    if ((w.slots||[]).length) addInto(r, boxRefill(w.slots));
+    if ((w.slots||[]).length){ addInto(r, boxRefill(w.slots)); const bk=boxReturn(w.slots); Object.keys(bk).forEach(k=>r[k]=(r[k]||0)-bk[k]); }
   });
   return r;
 }
@@ -2040,52 +2070,90 @@ function roomCell(rm){
 function defaultSlotCount(){
   return 15;   // 機械名の数字は型番なので枠数には使わない。初回に枠数ボタンで合わせる。
 }
-function slotMoved(sl){ return !sl.out && !!sl.prize && !!sl.filled && sl.filled!==sl.prize; }
+/* 枠の状態（この訪問で何をしたか）。prize＝着いたとき入っていた景品、out＝取られた、ret＝回収した、filled＝帰るとき入っている景品 */
+function slotMoved(sl){ return !sl.out && !sl.ret && !!sl.prize && !!sl.filled && sl.filled!==sl.prize; }
+function slotGone(sl){ return !sl.out && !sl.ret && !!sl.prize && !sl.filled; }          // 別の枠へ動かして空いた
+function slotChanged(sl){ return !!sl.out || !!sl.ret || sl.filled!==(sl.prize||""); }
+function slotState(sl){
+  if (sl.out)  return sl.filled ? {c:"out",   mk:"🎉", st:"取られた → 入れた"} : {c:"out",   mk:"🎉", st:"取られた"};
+  if (sl.ret)  return sl.filled ? {c:"ret",   mk:"↩",  st:"回収 → 入れた"}    : {c:"ret",   mk:"↩",  st:"回収した"};
+  if (!sl.prize && sl.filled)   return {c:"new",   mk:"＋", st:"入れた"};
+  if (slotMoved(sl))            return {c:"moved", mk:"↔", st:"中身が変わった"};
+  if (slotGone(sl))             return {c:"gone",  mk:"↗", st:"動かした"};
+  if (!sl.filled)               return {c:"empty", mk:"",  st:""};
+  return {c:"", mk:"", st:""};
+}
 function slotClass(sl){
-  let c = "slot";
-  if (!sl.filled)            c = sl.out ? "slot out" : "slot empty";
-  else if (sl.out)           c = "slot out";
-  else if (!sl.prize)        c = "slot new";
-  else if (slotMoved(sl))    c = "slot moved";
-  if (R && R.swapFrom===sl.i) c += " sel";
+  const s = slotState(sl); let c = "slot" + (s.c ? " "+s.c : "");
+  if (R && R.moveFrom===sl.i) c += " sel";
+  if (R && R.pick && R.pick.i===sl.i) c += " sel";
   return c;
 }
 function slotLabel(sl){
-  if (sl.out && !sl.filled) return `<span class="nm">${esc(sl.prize||"")}</span>`;
-  return `<span class="nm">${esc(sl.filled||"空き")}</span>`;
+  const s = slotState(sl);
+  const name = sl.filled || ((sl.out||sl.ret) ? sl.prize : (slotGone(sl) ? "空き" : (sl.prize||"空き")));
+  return `<span class="nm">${esc(name||"空き")}</span>${s.st?`<span class="st">${s.st}</span>`:""}`;
 }
-function slotMark(sl){
-  if (sl.out && sl.filled) return "🔁";
-  if (sl.out) return "🎉";
-  if (!sl.prize && sl.filled) return "＋";
-  if (slotMoved(sl)) return "↔";
-  return "";
-}
+function slotMark(sl){ return slotState(sl).mk; }
 function drawSlots(){
   const g = $("#slotGrid"); if(!g) return;
   g.innerHTML = R.slots.map(sl=>`
-    <button class="${slotClass(sl)}" data-act="slot" data-i="${sl.i}">
+    <button class="${slotClass(sl)}" data-act="slot" data-i="${sl.i}" aria-label="枠${sl.i}">
       <span class="no">${sl.i}</span><span class="mk">${slotMark(sl)}</span>${slotLabel(sl)}
     </button>`).join("");
   $("#slotCount").textContent = R.slots.length;
-  $$("#roomGrid .modes .chip").forEach(c=>c.setAttribute("aria-pressed", String(c.dataset.mode===R.mode)));
-  const fr = $("#fillRow"); if (fr) fr.hidden = R.mode!=="fill";
-  const mr = $("#moveRow"); if (mr) mr.hidden = R.mode!=="move";
-  if (R.mode==="fill"){
+  const mv = $("#moveBar");
+  if (mv){ const from = R.moveFrom!==null ? R.slots.find(x=>x.i===R.moveFrom) : null;
+    mv.hidden = !from;
+    if (from) mv.innerHTML = `枠${from.i} の「${esc(from.filled||from.prize)}」を <b>どこに動かした？</b> 動かした先の枠をタップ　<button type="button" class="chip mini" data-act="sh-cancelmove">やめる</button>`; }
+  renderSlotSheet();
+  if (typeof renderGuide === "function") renderGuide();
+}
+/* 枠をタップしたときの質問カード。ステップ what＝「どうした？」／put＝「何を入れた？」 */
+function openSlotSheet(i, step){
+  const sl = R.slots.find(x=>x.i===i); if (!sl) return;
+  if (!step){
+    // いま景品が入っていて、この訪問でまだ何もしていない枠 → どうした？／それ以外（空き・この訪問で変えた枠）→ 何を入れた？
+    step = (sl.filled && !slotChanged(sl)) ? "what" : "put";
+  }
+  R.pick = {i, step}; drawSlots();
+}
+function closeSlotSheet(){ if (R) R.pick=null; const ov=$("#slotSheet"); if (ov) ov.remove(); drawSlots(); }
+function renderSlotSheet(){
+  let ov = $("#slotSheet");
+  if (!R || !R.pick){ if (ov) ov.remove(); return; }
+  const sl = R.slots.find(x=>x.i===R.pick.i); if (!sl){ R.pick=null; if (ov) ov.remove(); return; }
+  if (!ov){ ov=document.createElement("div"); ov.id="slotSheet"; ov.className="cf-ov sh-ov"; document.body.appendChild(ov);
+            ov.addEventListener("click", e=>{ if (e.target===ov) closeSlotSheet(); }); }
+  const s = slotState(sl);
+  const have = sl.filled || ((sl.out||sl.ret) ? "" : sl.prize);
+  let body = "";
+  if (R.pick.step==="what"){
+    body = `
+      <div class="sh-q">枠 ${sl.i} の「${esc(have)}」は どうした？</div>
+      <button type="button" class="sh-btn" data-act="sh-out"><span class="ic">🎉</span><span><b>取られた</b><small>お客さんが取った（払出に数える）</small></span></button>
+      <button type="button" class="sh-btn" data-act="sh-ret"><span class="ic">↩</span><span><b>回収した</b><small>機械から抜いて、在庫にもどした</small></span></button>
+      <button type="button" class="sh-btn" data-act="sh-move"><span class="ic">↔</span><span><b>別の枠に動かした</b><small>このあと、動かした先の枠をタップ</small></span></button>
+      <button type="button" class="sh-btn plain" data-act="sh-close"><span class="ic">✓</span><span><b>そのまま（何もしていない）</b></span></button>`;
+  } else {
     const ord = orderByHints(Array.from(new Set(
       allPrizes().filter(p=>p.use!=="4人機用").map(p=>p.name).concat(R.slots.map(x=>x.prize).filter(Boolean))
     )).filter(Boolean), F.store);
     const names = ord.names;
-    $("#fillChips").innerHTML = names.length
-      ? names.map(n=>{ const st=stockOf(n);
-          return `<button class="chip mini" data-act="fillprize" data-v="${esc(n)}" aria-pressed="${n===R.fillPrize}">${esc(n)}${ord.tag(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`;
-        }).join("")
-      : `<span class="hint" style="margin:0">「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`;
-    const fn = $("#fillNote");
-    if (fn){ const k = sheetRows().length;
-      fn.innerHTML = k ? `📗 スプレッドシートの景品マスタ <b>${k}件</b> を含みます（${esc(sheetStamp())} 取り込み）` : ""; }
+    const done = sl.out ? `🎉 取られた` : sl.ret ? `↩ 回収した` : slotGone(sl) ? `↗ 別の枠へ動かした` : "";
+    const now = sl.filled ? `いま入れてあるもの：<b>${esc(sl.filled)}</b>` : `いま：<b>空き</b>`;
+    body = `
+      <div class="sh-q">枠 ${sl.i} に 何を入れた？</div>
+      <div class="sh-sub">${done?`${done}　`:""}${now}</div>
+      <div class="chips sh-chips">${names.length
+        ? names.map(n=>{ const st=stockOf(n);
+            return `<button type="button" class="chip mini" data-act="sh-put" data-v="${esc(n)}" aria-pressed="${n===sl.filled}">${esc(n)}${ord.tag(n)}${st!==null?`<span class="stockpill">残${st}</span>`:""}</button>`; }).join("")
+        : `<span class="hint" style="margin:0">「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると、ここから選べます</span>`}</div>
+      <button type="button" class="sh-btn plain" data-act="sh-none"><span class="ic">▢</span><span><b>何も入れない（空きのまま）</b></span></button>
+      ${slotChanged(sl) ? `<button type="button" class="sh-btn plain" data-act="sh-reset"><span class="ic">⟲</span><span><b>まちがえた：この枠を元にもどす</b><small>着いたときの状態「${esc(sl.prize||"空き")}」に戻す</small></span></button>` : ""}
+      <button type="button" class="sh-btn plain" data-act="sh-close"><span class="ic">×</span><span><b>閉じる</b></span></button>`;
   }
-  if (typeof renderGuide === "function") renderGuide();        // モード・入れる景品が変わったらガイドも進める
+  ov.innerHTML = `<div class="cf-card sh-card" role="dialog" aria-modal="true">${body}</div>`;
 }
 
 function buildRooms(force){
@@ -2101,7 +2169,7 @@ function buildRooms(force){
   }
   builtFor = key;
   const grid=$("#roomGrid");
-  if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; GUIDE.skip={}; }
+  if (changed){ paysTouched=false; costTouched=false; $("#manualBox").hidden=true; GUIDE.skip={}; PHOTO_SKIP={before:false, after:false}; renderPhotoRow(); }
   if (!F.machine){
     grid.innerHTML = `<p class="hint" style="margin:0">先に店舗と機械を選んでください</p>`;
     $("#mType").textContent=""; $("#zhint").textContent=""; $("#sumLine").innerHTML="";
@@ -2117,12 +2185,12 @@ function buildRooms(force){
   $("#zhint").innerHTML = (t==="4p"
     ? `<b>A→B→C→D</b> の順に「取られた数」→ <b>A＋B・C＋D</b> の累計売上。黄色の枠が「つぎはここ」。`
     : boxEmpty()
-      ? `何も入っていない機械です。<b>① 補充</b> で入れる景品を選んで入れた枠をタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`
-      : `<b>① 空いていた枠</b> → <b>② 補充した枠</b> の順にタップ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
+      ? `何も入っていない機械です。<b>景品を入れた枠をタップ</b> → 入れた景品を選ぶ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`
+      : `<b>変わった枠をタップ</b> →「取られた／回収した／動かした」→「何を入れた？」 → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
       ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。同じ景品を足すときは「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。別の景品にするときは「⇄ 景品を入れ替える」を押して、抜いた数 → 新しい景品名 → 入れた数 の順に入れてください。✎ は景品名の訂正だけで、個数は変わりません。初回は「いま入っている数」が、その部屋の在庫になります。"
-      : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。補充を間違えたら同じ枠をもう一度タップすると取り消せます。並べ替えは「③ 並べ替え」から。過去の記録は「最近の巡回ログ」の ✎ 編集から、出た枠・補充・並べ替えを同じ操作で直せます。")
+      : "枠の中身は前回のまま出ています。変わった枠をタップすると「どうした？」と聞かれるので、取られた（お客さんが取った＝払出）／回収した（機械から抜いて在庫に戻す）／別の枠に動かした、から選びます。つづけて「何を入れた？」で入れた景品を選べば完了。空きの枠をタップすると、すぐ「何を入れた？」になります。まちがえたら、その枠をもう一度タップして「元にもどす」。過去の記録は「最近の巡回ログ」の ✎ 編集から同じ操作で直せます。")
     + `</span>`;
 
   if (t==="4p"){
@@ -2132,7 +2200,7 @@ function buildRooms(force){
         <span class="pk">${a}＋${b} 累計売上</span>
         <input class="yen" type="text" inputmode="numeric" maxlength="8" data-f="${f}" placeholder="0" aria-label="${a}と${b}の合算売上金額">
         <span class="u">円</span><span class="pp" data-p="${f}"></span>
-      </div>`).join("");
+      </div>`).join("") + noSalesRow();
     setVal('[data-f="sAB"]', R.sAB); setVal('[data-f="sCD"]', R.sCD);
     R.rooms.forEach(rm=>{
       setVal(`[data-k="${rm.k}"][data-f="counter"]`, rm.counter);
@@ -2148,31 +2216,31 @@ function buildRooms(force){
         <input class="yen" type="text" inputmode="numeric" maxlength="8" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
         <span class="u">円</span><span class="pp" data-p="sBox"></span>
       </div>
-      <div class="modes">
-        ${boxEmpty()
-          ? `<button class="chip" data-act="mode" data-mode="fill">① 補充</button><button class="chip" data-act="mode" data-mode="out">② 出た枠</button>`
-          : `<button class="chip" data-act="mode" data-mode="out">① 出た枠</button><button class="chip" data-act="mode" data-mode="fill">② 補充</button>`}
-        <button class="chip" data-act="mode" data-mode="move">③ 並べ替え</button>
-      </div>
+      ${noSalesRow()}
+      <p class="hint boxhow" style="margin:0 0 8px">${boxEmpty()
+        ? `何も入っていない機械です。<b>景品を入れた枠をタップ</b> → 入れた景品を選ぶ、をくり返してください。`
+        : `変わった枠を<b>タップ</b>して、質問に答えるだけ。「取られた」「回収した」「動かした」→「何を入れた？」`}</p>
       <div class="slots" id="slotGrid"></div>
-      <div class="fillrow" id="fillRow" hidden>
-        <span class="lbl">入れる景品を選んでから、枠をタップ（間違えたら同じ枠をもう一度タップで取り消し）</span>
-        <div class="chips" id="fillChips"></div>
-        <p class="hint" id="fillNote" style="margin:7px 0 0"></p>
-      </div>
-      <div class="moverow" id="moveRow" hidden>
-        <b>動かす枠</b> → <b>移動先の枠</b> の順にタップすると入れ替わります。<br>
-        空いている枠に動かせば「移動」、景品が入っている枠なら「交換」になります。在庫は減りません。
-      </div>
+      <div class="moverow" id="moveBar" hidden></div>
       <div class="slotbar">
-        <span class="hint" style="margin:0">🎉＝出た　🔁＝補充した　＋＝空き枠に追加　↔＝中身が変わった</span>
+        <span class="hint" style="margin:0">枠の下の小さい文字が、この訪問でしたこと（取られた・回収した・入れた・動かした）。まちがえたら、その枠をもう一度タップ →「元にもどす」</span>
         <span class="stepper"><span class="mini" style="display:inline">枠数</span>
           <button data-act="slots-" aria-label="枠を減らす">−</button><b id="slotCount">0</b><button data-act="slots+" aria-label="枠を増やす">＋</button></span>
       </div>`;
     setVal('[data-f="sBox"]', R.sBox);
     drawSlots();
   }
+  applyNoSales();
   updateDerived();
+}
+/* 「売上は見ていない（補充だけ）」：売上欄を使わず、今回分 0 円・累計は前回のままで保存できる */
+const noSalesRow = () => `<div class="nosales"><button type="button" class="chip mini" data-act="nosales" aria-pressed="${!!(R&&R.noSales)}">💴 売上は見ていない（補充だけ）</button><span class="hint" style="margin:0">お金を数えない日はこれを押すと、売上なしで保存できます</span></div>`;
+function applyNoSales(){
+  if (!R) return;
+  const on = !!R.noSales;
+  $$("#roomGrid .pair").forEach(p=>p.classList.toggle("off", on));
+  $$("#roomGrid .pair input").forEach(i=>i.disabled=on);
+  const b=$('#roomGrid [data-act="nosales"]'); if (b) b.setAttribute("aria-pressed", String(on));
 }
 function setVal(sel,v){ const el=document.querySelector("#roomGrid "+sel); if(!el) return; const isYen = /data-f="s(AB|CD|Box)"/.test(sel); el.value = v===undefined||v===null||v===""?"":(isYen ? Number(String(v).replace(/[^\d]/g,"")||0).toLocaleString("ja-JP") : v); }
 
@@ -2304,50 +2372,49 @@ function onRoomClick(e){
   if (a==="open-take") return openTake(b.dataset.k);
   if (a==="swap")     return openSwap(b.dataset.k);
   if (a==="swap2")    return openSwapAll(b.dataset.k);
-  if (a==="mode"){ R.mode = b.dataset.mode; R.swapFrom=null; drawSlots(); return updateDerived(); }
-  if (a==="fillprize"){ R.fillPrize = (R.fillPrize===b.dataset.v ? "" : b.dataset.v); drawSlots(); return; }
   if (a==="slots+" || a==="slots-"){
     const n = R.slots.length + (a==="slots+"?1:-1);
     if (n<1 || n>40) return;
     if (n<R.slots.length) R.slots.pop();
-    else R.slots.push({i:n, prize:"", out:false, filled:""});
+    else R.slots.push({i:n, prize:"", out:false, ret:false, filled:""});
     R.slots.forEach((sl,ix)=>sl.i=ix+1);
     drawSlots(); return updateDerived();
   }
+  if (a==="sh-cancelmove"){ R.moveFrom=null; drawSlots(); return; }
+  if (a==="nosales"){
+    R.noSales = !R.noSales;
+    if (R.noSales){ R.sAB=""; R.sCD=""; R.sBox=""; $$("#roomGrid .pair input").forEach(i=>i.value=""); }
+    applyNoSales(); saveDraft(); updateDerived();
+    toast(R.noSales ? "売上なし（補充だけ）で保存できます" : "売上を入れてください"); return;
+  }
   if (a==="slot"){
     const sl = R.slots.find(x=>x.i===+b.dataset.i); if(!sl) return;
-    if (R.mode==="out"){
-      if (sl.prize){
-        sl.out = !sl.out;
-        // 補充を先に登録してある枠（修正中など）は、出た⇄戻すで補充の登録を消さない
-        if (sl.out){ if (sl.filled===sl.prize) sl.filled = ""; }
-        else if (!sl.filled) sl.filled = sl.prize;
-      }
-      else toast(EDIT ? "この枠は前回の記録でも空でした（出た景品を登録できません）" : "空いている枠です。②の補充で景品を入れてください");
-    } else if (R.mode==="move"){
-      if (R.swapFrom===null){
-        if (!sl.filled){ toast("動かす景品が入っている枠を選んでください"); return; }
-        R.swapFrom = sl.i;
-      } else if (R.swapFrom===sl.i){
-        R.swapFrom = null;
-      } else {
-        const from = R.slots.find(x=>x.i===R.swapFrom);
-        const tmp = from.filled; from.filled = sl.filled; sl.filled = tmp;
-        R.swapFrom = null;
-        toast(`枠${from.i} ↔ 枠${sl.i} を入れ替えました`);
-      }
-    } else {
-      const orig = sl.out ? "" : (sl.prize||"");                 // 補充する前の、その枠の状態
-      const changed = sl.filled!==orig;                          // この訪問で補充・入れ替えを登録済み
-      if (changed && (!R.fillPrize || R.fillPrize===sl.filled)){ // もう一度タップ＝登録を取り消す
-        sl.filled = orig; toast(`枠${sl.i} の補充を取り消しました`);
-      } else if (!R.fillPrize){ toast("先に入れる景品を選んでください"); return; }
-      else if (R.fillPrize===orig){ toast(`枠${sl.i} には「${R.fillPrize}」がすでに入っています`); return; }
-      else sl.filled = R.fillPrize;
+    if (R.moveFrom!==null){                                     // 「動かした」の 2 タップ目＝動かした先
+      const from = R.slots.find(x=>x.i===R.moveFrom);
+      if (!from || from.i===sl.i){ R.moveFrom=null; drawSlots(); return; }
+      const moving = from.filled, there = sl.filled;
+      from.filled = there; sl.filled = moving;                  // 先に景品があれば入れ替え、空きなら移動
+      R.moveFrom = null;
+      toast(there ? `枠${from.i} と 枠${sl.i} の中身を入れ替えました` : `枠${from.i} の「${moving}」を 枠${sl.i} へ動かしました`);
+      drawSlots(); return updateDerived();
     }
-    drawSlots(); return updateDerived();
+    openSlotSheet(sl.i); return;
   }
 }
+/* 質問カードのボタン（document に付ける。カードは body 直下） */
+function onSheetClick(e){
+  const b = e.target.closest("#slotSheet [data-act]"); if(!b || !R || !R.pick) return;
+  e.preventDefault();
+  const a = b.dataset.act, sl = R.slots.find(x=>x.i===R.pick.i); if (!sl) return closeSlotSheet();
+  if (a==="sh-close"){ return closeSlotSheet(); }
+  if (a==="sh-out"){ sl.out=true; sl.ret=false; sl.filled=""; R.pick.step="put"; drawSlots(); return updateDerived(); }
+  if (a==="sh-ret"){ sl.ret=true; sl.out=false; sl.filled=""; R.pick.step="put"; drawSlots(); return updateDerived(); }
+  if (a==="sh-move"){ R.moveFrom=sl.i; R.pick=null; const ov=$("#slotSheet"); if (ov) ov.remove(); drawSlots(); toast(`動かした先の枠をタップしてください`); return; }
+  if (a==="sh-put"){ sl.filled = b.dataset.v; closeSlotSheet(); toast(`枠${sl.i} に「${sl.filled}」`); return updateDerived(); }
+  if (a==="sh-none"){ sl.filled=""; closeSlotSheet(); return updateDerived(); }
+  if (a==="sh-reset"){ sl.out=false; sl.ret=false; sl.filled=sl.prize||""; closeSlotSheet(); toast(`枠${sl.i} を元にもどしました`); return updateDerived(); }
+}
+document.addEventListener("click", onSheetClick);
 function onRoomInput(e){
   const el = e.target.closest("input"); if(!el || !el.dataset.f) return;
   const f = el.dataset.f, k = el.dataset.k;
@@ -2386,9 +2453,9 @@ function totals(){
   if (R.type==="box"){
     const sales = salesDelta("sBox").delta, out = R.slots.filter(sl=>sl.out);
     const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0), 0);
-    const rf = boxRefill(R.slots);
-    const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0);
-    return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill};
+    const rf = boxRefill(R.slots), bk = boxReturn(R.slots);
+    const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0), ret = Object.keys(bk).reduce((a,k)=>a+bk[k],0);
+    return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill, ret};
   }
   const sales = salesDelta("sAB").delta + salesDelta("sCD").delta;
   let pays=0, known=false, cost=0, refill=0;
@@ -2417,13 +2484,14 @@ function autoMemo(){
   if (R.type==="box"){
     const out={};
     R.slots.forEach(sl=>{ if (sl.out && sl.prize) out[sl.prize]=(out[sl.prize]||0)+1; });
-    const fil = boxRefill(R.slots);
+    const fil = boxRefill(R.slots), bk = boxReturn(R.slots);
     const o = Object.keys(out).map(k=>`${k}${out[k]}`).join(" ");
     const f = Object.keys(fil).map(k=>`${k}${fil[k]}`).join(" ");
+    const k2 = Object.keys(bk).map(k=>`${k}${bk[k]}`).join(" ");
     const seats = R.slots.filter(sl=>sl.out).map(sl=>sl.i).join(",");
-    const mv = R.slots.filter(slotMoved).length;
+    const mv = R.slots.filter(sl=>slotMoved(sl)||slotGone(sl)).length;
     const sb = salesDelta("sBox");
-    return [`売上${yen(sb.delta)}円${sb.has?`（累計${yen(sb.cur)}円）`:""}`, o?`出 ${o}`:"", f?`補充 ${f}`:"",
+    return [`売上${yen(sb.delta)}円${sb.has?`（累計${yen(sb.cur)}円）`:""}`, o?`出 ${o}`:"", f?`補充 ${f}`:"", k2?`回収 ${k2}`:"",
             mv?`配置変更 ${mv}枠`:"", seats?`出た枠 ${seats}`:""].filter(Boolean).join(" ｜ ");
   }
   const dab = salesDelta("sAB"), dcd = salesDelta("sCD");
@@ -2481,7 +2549,7 @@ function updateDerived(){
     : [];
   $("#sumLine").innerHTML = `
     <span>${R.type==="box"?"出た":"払出"} <b>${num($("#paysIn").value)}</b> 個</span>
-    ${R.type==="box"?`<span>補充 <b>${t.refill}</b> 個</span>`:""}
+    ${R.type==="box"?`<span>補充 <b>${t.refill}</b> 個</span>${t.ret?`<span>回収 <b>${t.ret}</b> 個</span>`:""}`:""}
     <span>景品原価 <b>${yen(num($("#costIn").value))}</b> 円</span>
     ${t.known?"":`<span class="hint" style="margin:0;flex-basis:100%">初回は「いま入っている数」を入れると、次回から残りが自動で追いかけられます。</span>`}
     ${noMaster?`<span class="hint" style="margin:0;flex-basis:100%">景品マスタに無い景品があるので、原価は0で計算しています。</span>`:""}
@@ -2577,14 +2645,16 @@ function renderLogStatus(){
 
 function updateReadouts(){
   const t = totals();
-  const ok = F.store && F.machine && t.sales>0;
+  const noSales = !!(R && R.noSales);
+  const ok = F.store && F.machine && (t.sales>0 || noSales);
   $("#saveLog").disabled = !ok;
   const missing = [];
   if (!F.store) missing.push("①で店舗を選ぶ");
   else if (!F.machine) missing.push("①で機械を選ぶ");
-  if (F.machine && !(t.sales>0)) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の累計売上を入れる（前回より増えている額）" : "②で累計売上を入れる（前回より増えている額）");
+  if (F.machine && !(t.sales>0) && !noSales) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の累計売上を入れる（前回より増えている額）。売上を見ない日は「売上は見ていない（補充だけ）」を押す" : "②で累計売上を入れる（前回より増えている額）。売上を見ない日は「売上は見ていない（補充だけ）」を押す");
   $("#saveNote").textContent = ok
-    ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　今回分の売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`
+    ? (noSales ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　補充だけ（売上なし）として保存します`
+               : `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　今回分の売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`)
     : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
     : (F.machine && R && R.type==="4p") ? ""
     : "押せるようになるまで：" + missing.join(" → ");
@@ -2914,6 +2984,7 @@ function restorePanel(key){
    端末で長辺 1600px の JPEG に縮小してから送る（1枚 300〜600KB）。保存した記録の id に紐づけて Drive へ。
    PHOTOS：まだ送っていない写真（{blob, url}）。送信は報告の保存が成功したあと 1 枚ずつ */
 let PHOTOS = [], PHOTO_BUSY = false, PHOTO_TARGET = null, PHOTO_KIND = "before";   // PHOTO_TARGET：既存の記録に足すときの id
+let PHOTO_SKIP = {before:false, after:false};   // 「撮り忘れた」を押した種別。写真 2 枚は保存の必須条件だが、撮り忘れで配置を変えてしまったあとでも記録を残せる逃げ道
 const PHOTO_MAX = 3, PHOTO_EDGE = 1600, PHOTO_Q = 0.82;                             // 種別ごとに 3 枚まで
 const PHOTO_KINDS = {before:"補充前", after:"補充後"};
 const thumbUrl = fid => `https://drive.google.com/thumbnail?id=${encodeURIComponent(fid)}&sz=w240`;
@@ -2937,6 +3008,9 @@ function renderPhotoRow(){
     el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
     const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
     btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
+    const sk = document.querySelector(`.ph-skip[data-skip="${k}"]`);
+    if (sk){ sk.hidden = list.length>0 || !!EDIT || !F.machine; sk.setAttribute("aria-pressed", String(!!PHOTO_SKIP[k]));
+             sk.textContent = PHOTO_SKIP[k] ? "撮り忘れ として記録します（押すと取り消し）" : "撮り忘れた（写真なしで進む）"; }
     renderGuide();
     const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）" : "補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）");
   });
@@ -3003,7 +3077,7 @@ function guideTarget(){
   if (!F.machine) return {sec:1, el:$("#machineRow"), txt:"機械をえらぶ"};
   if (!R) return null;
   const pf = k => { const b=document.querySelector(`.photo-btn[data-kind="${k}"]`); return b ? b.closest(".photo-field") : null; };
-  if (!PHOTOS.some(p=>p.kind==="before") && !GUIDE.skip.before) return {sec:2, el:pf("before"), txt:"補充前の写真をとる（1枚）", skip:"before"};
+  if (!PHOTOS.some(p=>p.kind==="before") && !GUIDE.skip.before && !PHOTO_SKIP.before) return {sec:2, el:pf("before"), txt:"補充前の写真をとる（1枚）", skip:"before"};
   if (R.type==="4p"){
     for (const rm of R.rooms){
       const first = prevStock(rm.k)===null, f = first ? "before" : "taken";
@@ -3019,19 +3093,16 @@ function guideTarget(){
       if (ap && !clean(ap.value) && (rm.swap || num(rm.add)>0)) return {sec:2, el: ap.parentElement, focus:ap, cell:rm.k, txt:`${rm.k} に入れた「新しい景品名」を選ぶ`};
       if (ad && !(num(ad.value)>0)) return {sec:2, el: ad.parentElement, focus:ad, cell:rm.k, txt:`${rm.k} の「入れた数」（補充した個数）`};
     }
-    if (R.sAB==="") { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
-    if (R.sCD==="") { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
+    if (R.sAB==="" && !R.noSales) { const el=$('#roomGrid [data-f="sAB"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"A＋B の累計売上（機械の表示どおり）"}; }
+    if (R.sCD==="" && !R.noSales) { const el=$('#roomGrid [data-f="sCD"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"C＋D の累計売上（機械の表示どおり）"}; }
   } else {
-    if (!GUIDE.skip.slots && !R.slots.some(sl=>sl.out||(sl.filled&&sl.filled!==sl.prize))){
-      if (boxEmpty()){                                 // 空の機械：まず補充
-        if (R.mode!=="fill") return {sec:2, el:$('#roomGrid .modes [data-mode="fill"]'), txt:"「① 補充」を押す（空の機械なので先に補充）", skip:"slots"};
-        return {sec:2, el: R.fillPrize ? $("#slotGrid") : $("#fillRow"), txt: R.fillPrize ? `「${R.fillPrize}」を入れた枠をタップ` : "入れる景品を選んで、入れた枠をタップ", skip:"slots"};
-      }
-      return {sec:2, el:$("#slotGrid"), txt:"空いていた枠 → 補充した枠 をタップ", skip:"slots"};
+    if (!GUIDE.skip.slots && !R.slots.some(slotChanged)){
+      if (boxEmpty()) return {sec:2, el:$("#slotGrid"), txt:"景品を入れた枠をタップ → 入れた景品を選ぶ", skip:"slots"};
+      return {sec:2, el:$("#slotGrid"), txt:"変わった枠をタップ →「取られた」→ 入れた景品を選ぶ", skip:"slots"};
     }
-    if (R.sBox==="") { const el=$('#roomGrid [data-f="sBox"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"累計売上（機械の表示どおり）"}; }
+    if (R.sBox==="" && !R.noSales) { const el=$('#roomGrid [data-f="sBox"]'); return {sec:2, el: el && el.closest(".pair"), focus:el, txt:"累計売上（機械の表示どおり）"}; }
   }
-  if (!PHOTOS.some(p=>p.kind==="after") && !GUIDE.skip.after) return {sec:2, el:pf("after"), txt:"補充後の写真をとる（1枚）", skip:"after"};
+  if (!PHOTOS.some(p=>p.kind==="after") && !GUIDE.skip.after && !PHOTO_SKIP.after) return {sec:2, el:pf("after"), txt:"補充後の写真をとる（1枚）", skip:"after"};
   return {sec:3, el:$("#saveLog"), nob:true, txt:"「巡回を報告」を押す（内容の確認が出ます）"};
 }
 let GT = null;
@@ -3110,9 +3181,9 @@ let DRAFTS = {}; try { DRAFTS = JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}"
 const draftKey = () => F.store && F.machine ? `${F.store}|${F.machine}|${F.week}` : "";
 function rHasInput(r){
   if (!r) return false;
-  if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="") return true;
+  if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="" || r.noSales) return true;
   if ((r.rooms||[]).some(rm=>rm.counter!=="" || rm.taken!=="" || rm.before!=="" || num(rm.add)>0 || num(rm.take)>0 || (rm.prizeWas!==undefined && rm.prize!==rm.prizeWas))) return true;
-  if ((r.slots||[]).some(sl=>sl.out || (sl.filled && sl.filled!==sl.prize))) return true;
+  if ((r.slots||[]).some(slotChanged)) return true;
   return false;
 }
 let draftT;
@@ -3133,8 +3204,9 @@ function visitSummaryHtml(warns){
     ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
         return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
     : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
-        return `<tr><td class="k">出た</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">補充</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>`; })();
-  const sales = ["sAB","sCD","sBox"].filter(f=> R.type==="4p" ? f!=="sBox" : f==="sBox").map(f=>{ const d=salesDelta(f); return `<tr><td class="k">${FN[f]}</td><td>累計 ${yen(d.cur)}円${d.has?`（前回 ${yen(d.prev)}円）`:""}</td><td>今回分 <b>${yen(d.delta)}円</b>${d.reset?' <span class="warn">リセット扱い</span>':""}</td></tr>`; }).join("");
+        const rt=R.slots.filter(sl=>sl.ret&&sl.prize); const mv=R.slots.filter(sl=>slotMoved(sl)||slotGone(sl)).length;
+        return `<tr><td class="k">取られた</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">入れた</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>${rt.length?`<tr><td class="k">回収</td><td colspan="2">${rt.map(sl=>`${sl.i}番 ${esc(sl.prize)}`).join("、")}（在庫に戻す）</td></tr>`:""}${mv?`<tr><td class="k">動かした</td><td colspan="2">${mv} 枠</td></tr>`:""}`; })();
+  const sales = R.noSales ? `<tr><td class="k">売上</td><td colspan="2">見ていない（補充だけ）。累計は前回のまま</td></tr>` : ["sAB","sCD","sBox"].filter(f=> R.type==="4p" ? f!=="sBox" : f==="sBox").map(f=>{ const d=salesDelta(f); return `<tr><td class="k">${FN[f]}</td><td>累計 ${yen(d.cur)}円${d.has?`（前回 ${yen(d.prev)}円）`:""}</td><td>今回分 <b>${yen(d.delta)}円</b>${d.reset?' <span class="warn">リセット扱い</span>':""}</td></tr>`; }).join("");
   const nB=PHOTOS.filter(p=>p.kind==="before").length, nA=PHOTOS.filter(p=>p.kind==="after").length;
   const when = `${jpDate(F.week)} ${$("#timeIn").value || nowHM()}`;
   return `<div class="cf-h">${esc(F.store)}　<span>${esc(F.machine)}</span></div>
@@ -3162,6 +3234,12 @@ function validateVisit(){
   const today = todayStr();
   if (F.week > today) block.push(`訪問日 ${jpDate(F.week)} は未来の日付です`);
   else if (daysSince(F.week) > 60) ask.push(`訪問日 ${jpDate(F.week)} は 60 日以上前です`);
+  // 写真は 補充前・補充後 の 2 枚が必須。撮り忘れたときは「撮り忘れた」を押せば、そのことを記録して保存できる
+  if (!EDIT) ["before","after"].forEach(k=>{
+    if (PHOTOS.some(p=>p.kind===k)) return;
+    if (PHOTO_SKIP[k]) ask.push(`${PHOTO_KINDS[k]}の写真なし（撮り忘れ）として記録します`);
+    else block.push(`${PHOTO_KINDS[k]}の写真がありません。撮れなかったときは、写真ボタンの下の「撮り忘れた」を押してください`);
+  });
   // 累計が前回より少ない＝リセット扱い。「今回分」を入れてしまったミスが多い
   ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`); });
   // 同じ日に同じ機械の記録
@@ -3208,14 +3286,14 @@ function validateVisit(){
 const SALES_SANITY = 100000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
 async function saveLog(){
   const t = totals();
-  if (!F.store || !F.machine || t.sales<=0) return;
+  if (!F.store || !F.machine || (t.sales<=0 && !(R && R.noSales))) return;
   const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
   const warns = v.ask.slice();
   if (t.sales > SALES_SANITY){
     const big = ["sAB","sCD","sBox"].map(f=>({f, d:salesDelta(f)})).filter(x=>x.d.delta>SALES_SANITY);
     warns.unshift(`今回分の売上が ${yen(t.sales)}円。` + big.map(x=>`${FN[x.f]} 累計 ${yen(x.d.cur)}円（前回 ${yen(x.d.prev)}円）`).join("、") + "。累計の入力ミス（桁が多い・カウンターの数字を入れた）ではありませんか？");
   }
-  if (!EDIT && !PHOTOS.some(p=>p.kind==="before")) warns.push("補充前の写真がありません（撮り忘れ？）");
+  if (R.noSales) warns.push("売上は見ていない（補充だけ）として保存します。売上 0 円、累計は前回のまま");
   if (!$("#timeIn").value) $("#timeIn").value = nowHM();                       // 時刻は保存時の「いま」
   if (!(await confirmSheet(visitSummaryHtml(warns), EDIT ? "修正を保存する" : "保存する"))) return;
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
@@ -3224,17 +3302,19 @@ async function saveLog(){
     pays: roomPays(rm)
   })) : [];
   const slots = R.type==="box" ? R.slots.map(sl=>({
-    i:sl.i, prize:clean(sl.prize), out:!!sl.out, filled:clean(sl.filled)
+    i:sl.i, prize:clean(sl.prize), out:!!sl.out, ret:!!sl.ret, filled:clean(sl.filled)
   })) : [];
   const rec = {
     week:F.week, store:F.store, machine:F.machine, mtype:R.type,
     rooms, slots,
     sAB:salesDelta("sAB").delta, sCD:salesDelta("sCD").delta, sBox:salesDelta("sBox").delta,   // 今回分（前回累計との差）
-    cum:{sAB:num(R.sAB), sCD:num(R.sCD), sBox:num(R.sBox)},                                   // 入力した今月の累計
+    cum:{sAB:salesDelta("sAB").cur, sCD:salesDelta("sCD").cur, sBox:salesDelta("sBox").cur},   // 入力した今月の累計（補充だけの日は前回の累計をそのまま引き継ぐ）
     prevId:(prevSalesRec()||{}).id||"",
     sales:t.sales, plays:t.plays,
+    noSales: !!R.noSales,                                                                        // 売上を見ていない（補充だけ）
+    photoMiss: EDIT ? undefined : ["before","after"].filter(k=>PHOTO_SKIP[k] && !PHOTOS.some(p=>p.kind===k)),   // 撮り忘れた写真の種別
     pays:num($("#paysIn").value), cost:num($("#costIn").value),
-    prize:mainPrize(), auto:autoMemo(),
+    prize:mainPrize(), auto:[R.noSales?"補充だけ（売上なし）":"", autoMemo(), ...(EDIT?[]:["before","after"].filter(k=>PHOTO_SKIP[k] && !PHOTOS.some(p=>p.kind===k)).map(k=>`📷${PHOTO_KINDS[k]}の写真なし（撮り忘れ）`))].filter(Boolean).join(" ｜ "),
     time:$("#timeIn").value||"", staff:clean($("#staffIn").value), memo:clean($("#memoIn").value)
   };
   const btn=$("#saveLog"); btn.disabled=true;
@@ -3293,6 +3373,7 @@ function startEdit(id){
   renderStoreRow(); renderMachineRow(); buildRooms(true);
   if (R){
     const cum=cumOf(r); R.sAB=cum.sAB||""; R.sCD=cum.sCD||""; R.sBox=cum.sBox||"";   // 入力欄は累計
+    R.noSales = !!r.noSales;
     if (!cum.sAB && !cum.sCD && !cum.sBox && num(r.sales)>0){ if (R.type==="box") R.sBox=num(r.sales); else R.sAB=num(r.sales); }   // 旧データ（合計だけ）の救済
     if (R.type==="4p"){
       (r.rooms||[]).forEach(x=>{ const rm=R.rooms.find(y=>y.k===x.k); if(!rm) return;
@@ -3302,14 +3383,14 @@ function startEdit(id){
         rm.before = x.before===undefined||x.before===null ? "" : x.before;
         rm.addPrize = x.addPrize||rm.prize; rm.add = num(x.add)>0 ? num(x.add) : ""; rm.take = num(x.take)>0 ? num(x.take) : ""; });
     } else if ((r.slots||[]).length){
-      R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, filled:sl.filled||""}));
+      R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, ret:!!sl.ret, filled:sl.filled||""}));
       // 前回の中身が読めないまま保存された記録（枠の景品名が全部空）は、それより前の訪問の中身を入れ直してから直す
       if (R.slots.every(sl=>!clean(sl.prize))){
         const pm = prevSlotNames(); let n=0;
-        if (pm) R.slots.forEach(sl=>{ const nm=pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !clean(sl.filled)) sl.filled=nm; n++; } });
-        if (n>0) toast("前回入っていた景品名を読み込みました。出た枠をタップしてください");
+        if (pm) R.slots.forEach(sl=>{ const nm=pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !sl.ret && !clean(sl.filled)) sl.filled=nm; n++; } });
+        if (n>0) toast("前回入っていた景品名を読み込みました。変わった枠をタップして直してください");
       }
-      R.mode = boxEmpty() ? "fill" : "out"; R.fillPrize=""; R.swapFrom=null;
+      R.moveFrom=null; R.pick=null;
     }
     buildRooms(true);
   }
@@ -3339,8 +3420,10 @@ function renderLogList(){
     let roomLine;
     if (r.mtype==="box" || (r.slots||[]).length){
       const out={}; (r.slots||[]).forEach(x=>{ if(x.out&&x.prize) out[x.prize]=(out[x.prize]||0)+1; });
-      const names = Object.keys(out);
-      roomLine = names.length ? "出た："+names.map(n=>`${esc(n)}×${out[n]}`).join("　") : "";
+      const names = Object.keys(out), rf = boxRefill(r.slots), bk = boxReturn(r.slots);
+      roomLine = [names.length ? "出た："+names.map(n=>`${esc(n)}×${out[n]}`).join("　") : "",
+                  Object.keys(rf).length ? "入れた："+Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("　") : "",
+                  Object.keys(bk).length ? "回収："+Object.keys(bk).map(n=>`${esc(n)}×${bk[n]}`).join("　") : ""].filter(Boolean).join("　／　");
     } else {
       roomLine = (r.rooms||[]).filter(x=>x.prize||x.counter!=="").map(x=>
         `${x.k==="-"?"":x.k+":"}${esc(x.prize||"—")}${x.before===""?"":" "+x.before}${num(x.add)>0?` +${esc(x.addPrize)}${x.add}`:""}${num(x.take)>0?` −回収${num(x.take)}`:""}`).join("　");
@@ -3349,7 +3432,7 @@ function renderLogList(){
       <span class="sw"></span>
       <div class="bd">
         <div class="t1">${esc(r.store)}　<span style="font-weight:400;color:var(--ink-3)">${esc(r.machine)}</span></div>
-        <div class="t2">${jpDate(r.week)}${r.time?" "+esc(r.time):""}　${yen(sales)}円＝${yen(r.plays)}プレイ　払出${yen(r.pays)}</div>
+        <div class="t2">${jpDate(r.week)}${r.time?" "+esc(r.time):""}　${r.noSales?"補充だけ（売上なし）":`${yen(sales)}円＝${yen(r.plays)}プレイ`}　払出${yen(r.pays)}</div>
         ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
         ${photoThumbs(r)}
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -4777,6 +4860,7 @@ function wire(){
     await addPhotoFiles(files, kind);
   };
   $$(".photo-row[data-row]").forEach(el=>el.onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); });
+  $$(".ph-skip").forEach(b=>b.onclick = () => { const k=b.dataset.skip; PHOTO_SKIP[k]=!PHOTO_SKIP[k]; if (PHOTO_SKIP[k]) GUIDE.skip[k]=true; renderPhotoRow(); toast(PHOTO_SKIP[k] ? `${PHOTO_KINDS[k]}の写真は「撮り忘れ」として記録します` : "取り消しました"); });
   document.addEventListener("click", e=>{
     const b=e.target.closest("[data-addph]"); if(!b) return;
     if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }

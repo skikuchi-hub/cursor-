@@ -510,8 +510,9 @@ function roomLines(r, all) {
   var out = [];
   var wk = dateOf(r.week);
   (r.slots || []).forEach(function (x) {
-    if (!x.out && (x.filled || "") === (x.prize || "")) return;            // 動きのあった枠だけ
-    out.push([wk, r.store, r.machine, "枠" + x.i, "", "", num(r.sBox), x.prize || "", (x.prize && !x.out) ? 1 : 0, x.filled || "", x.filled ? 1 : 0, x.out ? 1 : 0]);
+    if (!x.out && !x.ret && (x.filled || "") === (x.prize || "")) return;   // 動きのあった枠だけ
+    out.push([wk, r.store, r.machine, "枠" + x.i, "", "", num(r.sBox), x.prize || "", (x.prize && !x.out) ? 1 : 0, x.filled || "", x.filled ? 1 : 0, x.out ? 1 : 0,
+      (x.ret && x.prize) ? 1 : 0]);                                        // M列 回収数（BOX：機械から抜いて在庫へ戻した枠＝1）
   });
   (r.rooms || []).forEach(function (x) {
     var pair = r.mtype === "4p" ? ((x.k === "A" || x.k === "B") ? r.sAB : r.sCD) : r.sBox;
