@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-13e";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-13f";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -1309,7 +1309,7 @@ function updateMetrics() {
   sh.getRange(1, 1, 1, out[0].length).setFontWeight("bold").setWrap(true);
   if (out.length > 1) sh.getRange(2, 3, out.length - 1, 9).setNumberFormat("#,##0");
   sh.setFrozenRows(1); sh.setFrozenColumns(2);
-  sh.getRange(out.length + 2, 1).setValue("自動で作り直します（10 分ごとに確認・景品や巡回を保存したとき）。単価は景品マスタの仕入単価（同じ品名が複数行なら数量で加重平均）。更新 " + nowIso()).setFontColor("#999999");
+  sh.getRange(out.length + 2, 1).setValue("自動で作り直します（1 日 1 回・深夜 0 時すぎ。すぐ見たいときは Apps Script で updateMetrics を実行）。単価は景品マスタの仕入単価（同じ品名が複数行なら数量で加重平均）。更新 " + nowIso()).setFontColor("#999999");
   // 確認日：残りが 0 以下になった景品に、最後に補充した日を入れる
   if (cCD >= 0 && cJ >= 0) {
     var lastFill = {}; logs.forEach(function (l) { if (l.fill && l.add) lastFill[l.fill] = l.date; });
@@ -1324,10 +1324,13 @@ function updateMetrics() {
 }
 /* 保存のたびに「作り直しが必要」の印を付け、10 分ごとのトリガーで作り直す（保存を遅くしない）。1 時間たてば印が無くても作り直す */
 function markMetricsDirty_() { try { PropertiesService.getScriptProperties().setProperty("metricsDirty", "1"); } catch (e) {} }
+/* 必要指標は 1 日 1 回（日付が変わって最初の 10 分トリガー＝深夜 0 時すぎ）に作り直す（2026-10-13 菊地さん「1 日ごとでいい」）。
+   すぐ見たいときはエディタで updateMetrics を実行 */
 function updateMetricsIfDue() {
   var pr = PropertiesService.getScriptProperties();
-  if (pr.getProperty("metricsDirty") || Date.now() - num(pr.getProperty("metricsAt")) > 60 * 60 * 1000) {
-    try { updateMetrics(); } catch (e) { Logger.log("必要指標: " + e); }
+  var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
+  if (pr.getProperty("metricsDay") !== today) {
+    try { updateMetrics(); pr.setProperty("metricsDay", today); } catch (e) { Logger.log("必要指標: " + e); }
   }
 }
 var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
