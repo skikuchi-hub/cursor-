@@ -1111,6 +1111,27 @@ body{font-variant-numeric:tabular-nums}
             <input class="txt" id="pzQty" type="number" inputmode="numeric" min="0" placeholder="30">
           </div>
         </div>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">仕入日</span>
+            <input class="txt" id="pzBuyDate" type="date">
+          </div>
+          <div class="field">
+            <span class="lbl">納品日</span>
+            <input class="txt" id="pzDelivDate" type="date">
+          </div>
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <span class="lbl">どの店の分？</span>
+            <select class="txt" id="pzStore"></select>
+          </div>
+          <div class="field">
+            <span class="lbl">購入者</span>
+            <input class="txt" id="pzBuyer" placeholder="名前">
+          </div>
+        </div>
+        <p class="hint" style="margin-top:-2px">仕入日の月で「必要指標」（期首・仕入高・期末・売上原価）に入ります。店を決めずに買ったときは「共通」。</p>
         <div class="field">
           <span class="lbl">原価率（この景品で狙う％）<span class="req">*</span></span>
           <div class="chips" id="pzRateRow"></div>
@@ -3366,6 +3387,10 @@ function renderPrizeForm(){
   chipRow($("#pzRateRow"), PZ_RATES.map(n=>`${n}%`), `${pzCostRate}%`, v=>{
     pzCostRate = +v.replace("%",""); $("#pzRateN").value = pzCostRate; renderPrizeForm(); updatePzGauge();
   }, "mini");
+  /* 仕入日（初期値は今日）・店舗・購入者（初期値は自分）。在庫管理と必要指標用（2026-10-13） */
+  if (!$("#pzBuyDate").value) $("#pzBuyDate").value = todayStr();
+  { const st=$("#pzStore"), cs=st.value; st.innerHTML = `<option value="">共通（店舗を決めていない）</option>` + STORES.map(x=>`<option value="${esc(x.n)}">${esc(x.n)}</option>`).join(""); if (cs) st.value=cs; }
+  if (!$("#pzBuyer").value) $("#pzBuyer").value = me()||"";
   const vendor = sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value;
   $("#savePrize").disabled = !(clean($("#pzName").value) && vendor && num($("#pzCost").value)>0 && pzCostRate>0);
 }
@@ -3396,7 +3421,8 @@ async function savePrize(){
     name:clean($("#pzName").value),
     vendor: sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value,
     cost:num($("#pzCost").value), qty:num($("#pzQty").value), use:$("#pzUse").value,
-    costRate:pzCostRate, rateN:n||0, retail:0, proof:"", memo:clean($("#pzMemo").value), staff:me()
+    costRate:pzCostRate, rateN:n||0, retail:0, proof:"", memo:clean($("#pzMemo").value), staff:me(),
+    buyDate:$("#pzBuyDate").value||todayStr(), deliveryDate:$("#pzDelivDate").value||"", store:$("#pzStore").value||"", buyer:clean($("#pzBuyer").value)||me()
   };
   $("#savePrize").disabled=true;
   if (await Store.add("prizes", rec)){
