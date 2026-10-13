@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面47';
+const APP_BUILD='2026-10-13 新画面48';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -8118,7 +8118,7 @@ async function loadSalesMonth(ym){
   if(S.single&&typeof setSingle==='function')setSingle(false);
   go(1);
   toast(`${fmtYmJa(ym)}の売上明細書 ${files.length}件を入れました${err?`（取得できなかった ${err}件）`:''}。判別結果を確認してください`);
-  await batchRoute(files,{noXrm:true});
+  await batchRoute(files,{noXrm:true,fromDrive:true});
 }
 /* ---- 収支推移: 売上明細書から集計した上位店別の入金（参考） ---- */
 function renderSalesRef(){
@@ -10681,6 +10681,43 @@ function detectJobs(wb,name){
 }
 
 /* ---- まとめて投入: 中身で XRM / 支払明細書 / 上位店明細 に振り分け、商材を判定 ---- */
+/* ---- アプリに入れた明細を会計フォルダへ（2026-10-13 菊地さん「アプリにアップしたものを会計フォルダに保存してくれるパターン」） ----
+   「入れる」に直接入れたファイル（Drive から入れたものは除く）を、Drive の data/out/<今月YYYYMM>/<会社>/売上明細書/<上位店>/ にそのまま置く。
+   Mac の同期（毎時）がそれを 会計/<YYYY年M月会計資料>/<会社>/売上明細書/<上位店>/ に写す（sync_out_files）。
+   上位店は、Drive にある過去の売上明細書で「年月だけ違う同じ名前」のものから決める（HTB の「2026年8月分（2026年9月集計）支払い対象＆戻入リスト」など）。
+   決まらなければ _未分類（アプリから）/ に入れて菊地さんに知らせる。
+   対象外: XRM・JSON・自社が作るパートナー支払明細書・AI作成中_・読めなかったもの・もう会計フォルダにあるもの（Drive の一覧に同じ名前と大きさ） */
+let ARCHIVE_Q=Promise.resolve();
+function archiveNameKey(n){return String(n||'').normalize('NFKC').toLowerCase().replace(/\.[a-z0-9]+$/,'').replace(/\d+/g,'#').replace(/[\s　]+/g,'')}
+function archiveGuess(name){
+  const key=archiveNameKey(name);
+  const hit=SALES_LIST.filter(x=>archiveNameKey(x.name)===key).sort((a,b)=>String(b.month).localeCompare(String(a.month)))[0];
+  if(hit)return {payer:hit.payer||'EX',up:hit.upstream||''};
+  const n=String(name).normalize('NFC');
+  const known=SALES_LIST.filter(x=>x.upstream&&x.upstream.length>=3&&n.includes(x.upstream)).sort((a,b)=>b.upstream.length-a.upstream.length)[0];
+  if(known)return {payer:known.payer||'EX',up:known.upstream};
+  return null;
+}
+async function archiveUpload(f,ent){
+  const addNote=t=>{ent.note=(ent.note?ent.note+' ／ ':'')+t;try{renderIn()}catch(e){}};
+  try{
+    if(typeof syncReady!=='function'||!syncReady())return;
+    if(!/\.(xlsx|xlsm|xls|csv|pdf)$/i.test(f.name))return;
+    if(['xrm','json','pay','error'].includes(ent.kind))return;
+    if(/^AI作成中|【\s*\d{4}\s*年\s*\d{1,2}\s*月度明細】/.test(String(f.name).normalize('NFC')))return;
+    if(f.size>20*1024*1024)return;
+    const c=syncCfg();c.archived=c.archived||{};const sig=f.name+'|'+f.size;
+    if(c.archived[sig])return;
+    if(SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);return}
+    const g=archiveGuess(f.name);
+    const ym=thisYm(),payer=(g&&g.payer)||'EX',up=(g&&g.up)||'_未分類（アプリから）';
+    const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
+    const r=await syncPost({action:'saveFile',path:`${ym}/${payer}/売上明細書/${up}/${f.name}`,b64,mime:f.type||'application/octet-stream'});
+    if(!(r&&r.ok))throw new Error((r&&r.error)||'不明');
+    c.archived[sig]=1;saveSyncCfg(c);
+    addNote(`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${payer}/売上明細書/${up}/ に保存します（Mac の同期で1時間以内）${g?'':'。上位店が分からなかったので _未分類 です。フォルダを移してください'}`);
+  }catch(e){console.warn('archive',f.name,e);addNote('会計フォルダへの保存に失敗: '+((e&&e.message)||e)+'（同期の設定を確認）')}
+}
 async function batchRoute(files,opts){
   opts=opts||{};
   const list=Array.from(files||[]).filter(f=>f&&f.name&&!/^\./.test(f.name));
@@ -10731,6 +10768,7 @@ async function batchRoute(files,opts){
         if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
         ent.jobs=jobs;
       }catch(ex){ent.kind='error';ent.err=(ex&&ex.message)||String(ex);console.error(f.name,ex)}
+      finally{if(!opts.fromDrive)ARCHIVE_Q=ARCHIVE_Q.then(()=>archiveUpload(f,ent)).catch(()=>{})}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
     }
   }finally{B.busy--}
   rebuildJobs();renderIn();
