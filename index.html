@@ -1846,6 +1846,20 @@ function lastVisit(){
     .filter(r => r.store===F.store && r.machine===F.machine && (r.rooms||r.slots) && beforeEdit(r))
     .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")))[0] || null;   // 直前の訪問（同じ週でもよい）
 }
+/* BOX 機：枠の中身が 1 つでも残っている直前の訪問（空のまま保存された記録が間に挟まっていても、その前の中身をたどる） */
+function lastVisitWithSlots(){
+  if(!F.store || !F.machine) return null;
+  return Store.data.weekly
+    .filter(r => r.store===F.store && r.machine===F.machine && (r.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) && beforeEdit(r))
+    .sort((a,b)=>String(b.createdAt||b.week||"").localeCompare(String(a.createdAt||a.week||"")))[0] || null;
+}
+/* 直前の訪問が終わった時点で各枠に入っていた景品名（空の記録しか無ければ空） */
+function prevSlotNames(){
+  const lv = lastVisit(); if (!lv || !(lv.slots||[]).length) return null;
+  const src = (lv.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) ? lv : (lastVisitWithSlots() || lv);
+  const m = {}; (src.slots||[]).forEach(sl=>{ m[sl.i] = clean(sl.filled) || (sl.out ? "" : clean(sl.prize)); });
+  return m;
+}
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
 function prevStock(k){ const pr=prevRoom(k); return pr ? Math.max(0, num(pr.before)+num(pr.add)-num(pr.take)) : null; }   // 前回訪問のあとに機械に入っていた数
 function prevPrize(k){
@@ -1861,9 +1875,9 @@ function mergeRoomNames(){
   if (R.type==="4p"){
     R.rooms.forEach(rm=>{ if (!clean(rm.prize)){ const pp=prevPrize(rm.k); if (pp){ rm.prize=pp; rm.prizeWas=pp; if (!clean(rm.addPrize) || rm.addPrize===rm.prize) rm.addPrize=pp; n++; } } });
   } else {
-    const lv = lastVisit();
-    if (lv && lv.slots && lv.slots.length && R.slots.every(sl=>!clean(sl.prize))){
-      R.slots.forEach(sl=>{ const ps=lv.slots.find(q=>q.i===sl.i); const nm = ps ? (clean(ps.filled)||clean(ps.prize)) : ""; if (nm){ sl.prize=nm; n++; } });
+    const pm = prevSlotNames();
+    if (pm && R.slots.every(sl=>!clean(sl.prize))){
+      R.slots.forEach(sl=>{ const nm = pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !clean(sl.filled)) sl.filled=nm; n++; } });
     }
   }
   return n;
@@ -1922,9 +1936,9 @@ function resetRooms(keep){
       if (!rm.addPrize) rm.addPrize = rm.prize;
     });
   } else if (!R.slots.length){
-    const lv = lastVisit();
+    const lv = lastVisit(), pm = prevSlotNames();
     if (lv && lv.slots && lv.slots.length){
-      R.slots = lv.slots.map(sl=>({i:sl.i, prize:sl.filled||"", out:false, filled:sl.filled||""}));
+      R.slots = lv.slots.map(sl=>{ const nm = (pm && pm[sl.i]) || ""; return {i:sl.i, prize:nm, out:false, filled:nm}; });
     } else {
       const n = defaultSlotCount();
       R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, filled:""}));
@@ -2087,7 +2101,7 @@ function buildRooms(force){
     + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
     + (t==="4p"
       ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。取られた数は機械の払出表示。同じ景品を足すときは「＋補充」、機械から抜いて在庫に戻すときは「− 回収」。別の景品にするときは「⇄ 景品を入れ替える」を押して、抜いた数 → 新しい景品名 → 入れた数 の順に入れてください。✎ は景品名の訂正だけで、個数は変わりません。初回は「いま入っている数」が、その部屋の在庫になります。"
-      : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。並べ替えは「③ 並べ替え」から。")
+      : "枠の中身は前回のまま出ています。空いていた枠をタップすると「出た景品」、補充した枠をタップすると「補充」として記録されます。補充を間違えたら同じ枠をもう一度タップすると取り消せます。並べ替えは「③ 並べ替え」から。過去の記録は「最近の巡回ログ」の ✎ 編集から、出た枠・補充・並べ替えを同じ操作で直せます。")
     + `</span>`;
 
   if (t==="4p"){
@@ -2121,7 +2135,7 @@ function buildRooms(force){
       </div>
       <div class="slots" id="slotGrid"></div>
       <div class="fillrow" id="fillRow" hidden>
-        <span class="lbl">入れる景品を選んでから、枠をタップ</span>
+        <span class="lbl">入れる景品を選んでから、枠をタップ（間違えたら同じ枠をもう一度タップで取り消し）</span>
         <div class="chips" id="fillChips"></div>
         <p class="hint" id="fillNote" style="margin:7px 0 0"></p>
       </div>
@@ -2282,8 +2296,13 @@ function onRoomClick(e){
   if (a==="slot"){
     const sl = R.slots.find(x=>x.i===+b.dataset.i); if(!sl) return;
     if (R.mode==="out"){
-      if (sl.prize){ sl.out = !sl.out; sl.filled = sl.out ? "" : sl.prize; }
-      else toast("空いている枠です。②の補充で景品を入れてください");
+      if (sl.prize){
+        sl.out = !sl.out;
+        // 補充を先に登録してある枠（修正中など）は、出た⇄戻すで補充の登録を消さない
+        if (sl.out){ if (sl.filled===sl.prize) sl.filled = ""; }
+        else if (!sl.filled) sl.filled = sl.prize;
+      }
+      else toast(EDIT ? "この枠は前回の記録でも空でした（出た景品を登録できません）" : "空いている枠です。②の補充で景品を入れてください");
     } else if (R.mode==="move"){
       if (R.swapFrom===null){
         if (!sl.filled){ toast("動かす景品が入っている枠を選んでください"); return; }
@@ -2297,8 +2316,13 @@ function onRoomClick(e){
         toast(`枠${from.i} ↔ 枠${sl.i} を入れ替えました`);
       }
     } else {
-      if (!R.fillPrize){ toast("先に入れる景品を選んでください"); return; }
-      sl.filled = (sl.filled===R.fillPrize) ? "" : R.fillPrize;
+      const orig = sl.out ? "" : (sl.prize||"");                 // 補充する前の、その枠の状態
+      const changed = sl.filled!==orig;                          // この訪問で補充・入れ替えを登録済み
+      if (changed && (!R.fillPrize || R.fillPrize===sl.filled)){ // もう一度タップ＝登録を取り消す
+        sl.filled = orig; toast(`枠${sl.i} の補充を取り消しました`);
+      } else if (!R.fillPrize){ toast("先に入れる景品を選んでください"); return; }
+      else if (R.fillPrize===orig){ toast(`枠${sl.i} には「${R.fillPrize}」がすでに入っています`); return; }
+      else sl.filled = R.fillPrize;
     }
     drawSlots(); return updateDerived();
   }
@@ -3258,6 +3282,13 @@ function startEdit(id){
         rm.addPrize = x.addPrize||rm.prize; rm.add = num(x.add)>0 ? num(x.add) : ""; rm.take = num(x.take)>0 ? num(x.take) : ""; });
     } else if ((r.slots||[]).length){
       R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, filled:sl.filled||""}));
+      // 前回の中身が読めないまま保存された記録（枠の景品名が全部空）は、それより前の訪問の中身を入れ直してから直す
+      if (R.slots.every(sl=>!clean(sl.prize))){
+        const pm = prevSlotNames(); let n=0;
+        if (pm) R.slots.forEach(sl=>{ const nm=pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !clean(sl.filled)) sl.filled=nm; n++; } });
+        if (n>0) toast("前回入っていた景品名を読み込みました。出た枠をタップしてください");
+      }
+      R.mode = boxEmpty() ? "fill" : "out"; R.fillPrize=""; R.swapFrom=null;
     }
     buildRooms(true);
   }
