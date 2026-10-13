@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面58';
+const APP_BUILD='2026-10-14 新画面59';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7834,7 +7834,7 @@ async function syncNow(opts){
     try{const na=await ledgerAcceptStable({silent:true});if(na)syncLog(`明細から覚えた単価 ${na}件を台帳に採用しました（3ヶ月以上同じ単価のもの）`)}catch(e){console.warn(e)}
     syncProg(80,88,1,'売上明細書を確認しています');
     /* 2c) 売上明細書: Drive にある月の一覧（中身は「入れる」ボタンを押したときに取りに行く） */
-    SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();PLACE_INDEX=null;   /* 保存先の索引は次に使うとき取り直す */
+    SALES_LIST=Array.isArray(man.sales)?man.sales:[];renderSalesButtons();PLACE_INDEX=null;UPLOAD_LOG=(man.uploadLog&&man.uploadLog.items)||[];try{renderUploadHistory()}catch(e){}   /* 保存先の索引は次に使うとき取り直す */
     /* ライフサポートの内訳（SBPS・ロボペイ）: Drive にある最新月の決済 CSV から同期で自動で作り、入れる画面にカードを出す（アップロード不要・2026-10 菊地さん）。
        結果は記憶にも残す（mem.stockOut: 支払先ごとの件数・金額）。明細書の仕上げの材料にする */
     try{const csvs=SALES_LIST.filter(x=>x.payer==='WST'&&/\.csv$/i.test(String(x.name||''))&&/SBPS|PAY_/i.test(String(x.name||'')));
@@ -10719,6 +10719,7 @@ function stockSaveNote(ent,k){
 /* ---- 読み込んだ履歴（2026-10-13 菊地さん「アップして読み込んだ履歴も下に残してほしい【上位店名】商材名」） ----
    この端末に残す（localStorage、新しい順に 200件）。アップロードしたとき・Drive の売上明細書を入れたときに記録する */
 const UPLOAD_HIST_KEY='getsumatsu_upload_history';
+let UPLOAD_LOG=[];   /* 全端末共通の分（Mac の同期が Drive に置かれたファイルから作る manifest.uploadLog） */
 function uploadHistory(){try{return JSON.parse(localStorage.getItem(UPLOAD_HIST_KEY)||'[]')||[]}catch(e){return []}}
 function uploadHistorySave(list){try{localStorage.setItem(UPLOAD_HIST_KEY,JSON.stringify(list.slice(0,200)))}catch(e){}}
 function entUpstream(ent){
@@ -10748,10 +10749,13 @@ function renderUploadHistory(){
   const files=document.getElementById('inFiles');if(!files)return;
   let host=document.getElementById('inHistory');
   if(!host){host=document.createElement('div');host.id='inHistory';files.insertAdjacentElement('afterend',host)}
-  const list=uploadHistory();
-  if(!list.length){host.innerHTML='';return}
+  /* この端末の記録と、全端末共通（Drive に置かれたもの）を合わせる。同じファイルは1行 */
+  const local=uploadHistory();const seen=new Set(local.map(x=>x.name+'|'+x.size));
+  const remote=(UPLOAD_LOG||[]).filter(x=>!seen.has(x.name+'|'+x.size)).map(x=>({at:x.at,name:x.name,size:x.size,up:x.up,prod:(x.prods||[]).join('・')||'—',how:'アップロード（ほかの端末）',where:x.dir}));
+  const list=local.concat(remote).sort((a,b)=>String(b.at).localeCompare(String(a.at)));
   const fmt=iso=>{const d=new Date(iso);return isNaN(d)?'':`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
-  host.innerHTML=`<details class="adv" style="margin-top:14px" open><summary><span>読み込んだ履歴（この端末・${list.length}件）</span><span class="adv-sub"><a href="#" onclick="uploadHistoryClear();return false" style="font-size:12px">消す</a></span></summary>
+  if(!list.length){host.innerHTML=`<details class="adv" style="margin-top:14px" open><summary><span>読み込んだ履歴</span></summary><p class="note" style="padding:6px 0">まだありません。アップロードするか、Drive の売上明細書を入れると、ここに【上位店名】商材名で残ります</p></details>`;return}
+  host.innerHTML=`<details class="adv" style="margin-top:14px" open><summary><span>読み込んだ履歴（${list.length}件）</span><span class="adv-sub"><a href="#" onclick="uploadHistoryClear();return false" style="font-size:12px">この端末の分を消す</a></span></summary>
     <div class="tbl-wrap" style="padding:6px 0"><table><thead><tr><th>日時</th><th>【上位店名】商材名</th><th>ファイル</th><th>どこから</th></tr></thead><tbody>
     ${list.slice(0,30).map(x=>`<tr><td style="white-space:nowrap">${esc(fmt(x.at))}</td><td><b>${esc(x.up?`【${x.up}】`:'')}</b>${esc(x.prod||'')}</td><td title="${esc(x.name)}">${esc(x.name.length>40?x.name.slice(0,38)+'…':x.name)}</td><td>${esc(x.how||'')}</td></tr>`).join('')}
     </tbody></table></div>${list.length>30?`<p class="note">ほか ${list.length-30}件</p>`:''}</details>`;
@@ -10774,6 +10778,7 @@ async function ensurePlaceIndex(){
   try{
     const man=await syncGet({action:'manifest'});
     if(Array.isArray(man.sales)&&man.sales.length&&!SALES_LIST.length){SALES_LIST=man.sales;try{renderSalesButtons()}catch(e){}}
+    if(man.uploadLog&&man.uploadLog.items){UPLOAD_LOG=man.uploadLog.items;try{renderUploadHistory()}catch(e){}}
     const pi=man.placeIndex;if(!pi||!pi.path)return null;
     const f=await syncFile(pi.path,null,{size:pi.size});
     PLACE_INDEX=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
