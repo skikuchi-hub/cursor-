@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-13 新画面52';
+const APP_BUILD='2026-10-13 新画面53';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10749,7 +10749,9 @@ function archiveWanted(f,ent){
 /* 同時に入れたファイルはまとめて場所を決める。PDF の請求書のように名前だけでは分からないものは、
    一緒に入れた明細（同じ上位店から同じメールで届くことが多い）と同じ場所にする（場所が1つに決まるときだけ） */
 async function archiveBatch(items){
-  if(typeof syncReady!=='function'||!syncReady())return;
+  const setArch=(ent,a)=>{ent.arch=a;try{renderIn()}catch(e){}};
+  if(typeof syncReady!=='function'||!syncReady()){items.forEach(x=>setArch(x.ent,{st:'err',why:'Drive と同期の設定がこの端末にありません（「同期」から設定）'}));return}
+  items.forEach(x=>setArch(x.ent,archiveWanted(x.f,x.ent)?{st:'saving'}:{st:'none'}));
   await ensurePlaceIndex();
   const list=items.filter(x=>archiveWanted(x.f,x.ent));
   list.forEach(x=>{x.g=archiveGuess(x.f.name)});
@@ -10758,15 +10760,16 @@ async function archiveBatch(items){
   for(const x of list){try{await archiveUpload(x.f,x.ent,x.g)}catch(e){console.warn('archive',x.f.name,e)}}
 }
 async function archiveUpload(f,ent,g){
-  const addNote=t=>{ent.note=(ent.note?ent.note+' ／ ':'')+t;try{renderIn()}catch(e){}};
+  const setArch=a=>{ent.arch=a;try{renderIn()}catch(e){}};
   try{
-    if(typeof syncReady!=='function'||!syncReady())return;
-    if(!archiveWanted(f,ent))return;
+    if(typeof syncReady!=='function'||!syncReady()){setArch({st:'err',why:'Drive と同期の設定がこの端末にありません'});return}
+    if(!archiveWanted(f,ent)){setArch({st:'none'});return}
     const c=syncCfg();c.archived=c.archived||{};const sig=f.name+'|'+f.size;
-    if(c.archived[sig])return;
     const pi=PLACE_INDEX||await ensurePlaceIndex();
     const curKey=String(f.name).normalize('NFC')+'|'+f.size;
-    if((pi&&pi.cur&&pi.cur[curKey]!==undefined)||SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);return}
+    const curDir=pi&&pi.cur?pi.cur[curKey]:undefined;
+    if(curDir!==undefined||SALES_LIST.some(x=>x.name===f.name&&x.size===f.size)){c.archived[sig]=1;saveSyncCfg(c);setArch({st:'skip',where:curDir?`（${curDir}/）`:'',why:'同じ名前と大きさのファイルが会計フォルダにあるので送りません'});return}
+    if(c.archived[sig]){setArch({st:'saved',why:'この端末からすでに送ってあります（Mac の同期で会計フォルダへ）'});return}
     if(g===undefined)g=archiveGuess(f.name);
     const ym=thisYm(),dir=(g&&g.dir)||'_未分類（アプリから）';
     const b64=await new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result).split(',')[1]||'');r.onerror=()=>rej(r.error);r.readAsDataURL(f)});
@@ -10774,12 +10777,12 @@ async function archiveUpload(f,ent,g){
     if(!(r&&r.ok))throw new Error((r&&r.error)||'不明');
     c.archived[sig]=1;saveSyncCfg(c);
     const where=`会計/${+ym.slice(0,4)}年${+ym.slice(4)}月会計資料/${dir}/`;
-    let why='';
-    if(!g)why='。過去に同じ名前のファイルが無く、場所が分からなかったので _未分類 です。フォルダを移してください';
-    else if(g.byBatch)why='。一緒に入れたファイルと同じ場所にしました';
-    else if(!g.sure)why=`。過去の置き場所から推定（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）。違えば移してください`;
-    addNote(`${where} に保存します（Mac の同期で1時間以内）${why}`);
-  }catch(e){console.warn('archive',f.name,e);addNote('会計フォルダへの保存に失敗: '+((e&&e.message)||e)+'（同期の設定を確認）')}
+    let why='Mac の同期で1時間以内にフォルダに入ります';
+    if(!g)why='過去に同じ名前のファイルが無く場所が分からなかったので _未分類 に入れました。Mac でフォルダを移してください';
+    else if(g.byBatch)why='一緒に入れたファイルと同じ場所にしました。Mac の同期で1時間以内に入ります';
+    else if(!g.sure)why=`過去の置き場所から推定しました（${g.others&&g.others.length?'ほかに '+g.others.join('・')+' にもあった':'件数が少ない'}）。違えば Mac で移してください`;
+    setArch({st:'saved',where,why});
+  }catch(e){console.warn('archive',f.name,e);setArch({st:'err',why:((e&&e.message)||String(e))+'（「同期」の設定と通信を確認して、もう一度入れてください）'})}
 }
 async function batchRoute(files,opts){
   opts=opts||{};
@@ -10832,7 +10835,7 @@ async function batchRoute(files,opts){
         if(!jobs.length){ent.kind='unknown';ent.note='該当する商材が見つかりません（シート: '+wb.SheetNames.slice(0,6).join(' / ')+(wb.SheetNames.length>6?' …':'')+'）';continue}
         ent.jobs=jobs;
       }catch(ex){ent.kind='error';ent.err=(ex&&ex.message)||String(ex);console.error(f.name,ex)}
-      finally{if(!opts.fromDrive)toArchive.push({f,ent})}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
+      finally{if(!opts.fromDrive)toArchive.push({f,ent});else ent.arch={st:'skip',why:'会計フォルダ（Drive）から入れたものです'}}   /* 入れたものは会計フォルダへ（Drive から入れたものは除く） */
     }
   }finally{B.busy--}
   rebuildJobs();renderIn();
@@ -10943,7 +10946,14 @@ function renderIn(){
     else if(f.kind==='csv'){tag=pill('flat','収納明細');d=f.note}
     else if(!f.kind){tag=pill('flat','読込中…');d=''}
     else{tag=pill('flat','対象外');d=f.note}
-    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${f.stock?stockCardHtml(i,f.stock):''}</div>`;
+    /* 会計フォルダへの保存の状態（2026-10-13 菊地さん「アップロードするみたいなボタンがないとできてるかわからん」→ 一目で分かる行を出す） */
+    let arch='';
+    if(f.arch&&f.arch.st&&f.arch.st!=='none'){
+      const a=f.arch;
+      const p2=a.st==='saved'?pill('ok','会計フォルダに保存済み'):a.st==='saving'?pill('flat','会計フォルダに保存中…'):a.st==='skip'?pill('flat','会計フォルダにあります'):pill('bad','会計フォルダに保存できず');
+      arch=`<span class="d">${p2} ${esc((a.where?a.where+' ':'')+(a.why||''))}</span>`;
+    }
+    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${arch}${f.stock?stockCardHtml(i,f.stock):''}</div>`;
   }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
   const xs=document.getElementById('inXrm');
   if(xs){
