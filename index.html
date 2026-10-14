@@ -3696,7 +3696,8 @@ function renderStock(){
         <div class="stk-opt"><label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
       </div>`).join("") || `<p class="hint" style="padding:10px 12px">該当する景品がありません</p>`}</div>
     <div class="stk-foot"><button type="button" class="save" id="stkSave" ${typed?"":"disabled"}>数えた分を保存（${typed} 件）</button>
-      ${typed?`<button type="button" class="chip mini" id="stkClear">入力を消す</button>`:""}</div>`;
+      ${typed?`<button type="button" class="chip mini" id="stkClear">入力を消す</button>`:""}
+      ${ME&&ME.role==="admin"?`<button type="button" class="chip" id="stkApply" style="align-self:stretch;justify-content:center">📗 景品マスタ(いじる用) を 景品マスタ へ反映（管理者）</button><p class="hint" style="margin:0">いじる用で直した 機械タイプ・買った数量 を景品マスタに写し、いじる用から消した行は景品マスタからも消します。先に内容の一覧が出ます。</p>`:""}</div>`;
 }
 async function saveStock(){
   const rows = stockRows();
@@ -3711,6 +3712,24 @@ async function saveStock(){
   const ok = await Store.add("stock", {items, memo:"", kind:"棚卸", date:todayStr()});
   if (ok){ STK.v={}; toast(`在庫を合わせました（${items.length} 景品）`); }
   render();
+}
+/* 管理者：景品マスタ(いじる用) → 景品マスタ の反映。先に一覧（dry run）を見せてから実行 */
+async function applyCleanup(){
+  const b=$("#stkApply"); if (b) b.disabled=true;
+  try {
+    const pv = await api("cleanupPreview");
+    const li = (arr, cls) => arr.length ? arr.map(x=>`<tr><td class="k ${cls||""}">${cls==="warn"?"削除":cls==="ok"?"追加":"更新"}</td><td colspan="2">${esc(x)}</td></tr>`).join("") : "";
+    const total = pv.update.length + pv.add.length + pv.remove.length;
+    const html = `<div class="cf-h">いじる用 → 景品マスタ<span>変更 ${total} 件</span></div>
+      <table class="cf-t">${li(pv.update)}${li(pv.add,"ok")}${li(pv.remove,"warn")}${total?"":'<tr><td colspan="3"><span class="dim">変更はありません（すでに同じ内容）</span></td></tr>'}</table>
+      <div class="cf-tot">反映すると景品マスタが書き換わります。残り在庫の確定はこの操作では行いません。</div>`;
+    if (!total){ await confirmSheet(html, "閉じる"); return; }
+    if (!(await confirmSheet(html, "この内容で反映する"))) return;
+    const r = await api("applyCleanup");
+    toast(`反映しました：更新 ${r.update.length}・追加 ${r.add.length}・削除 ${r.remove.length}`);
+    await Store.sync(true);
+  } catch(e){ alert(errMsg(e)); }
+  finally { if (b) b.disabled=false; render(); }
 }
 function renderPrizeList(){
   const rows = Store.rows("prizes").filter(r=>staffOf(r)===me());        // 担当（わたし）の分だけ
@@ -5071,7 +5090,8 @@ function wire(){
       });
       el.addEventListener("click", e=>{ const c=e.target.closest("[data-stkf]"); if (c){ STK.f=c.dataset.stkf; renderStock(); return; }
         if (e.target.closest("#stkSave")) return saveStock();
-        if (e.target.closest("#stkClear")){ STK.v={}; renderStock(); } }); } }
+        if (e.target.closest("#stkClear")){ STK.v={}; renderStock(); return; }
+        if (e.target.closest("#stkApply")) return applyCleanup(); }); } }
   $$(".ph-skip").forEach(b=>b.onclick = () => { const k=b.dataset.skip; PHOTO_SKIP[k]=!PHOTO_SKIP[k]; if (PHOTO_SKIP[k]) GUIDE.skip[k]=true; renderPhotoRow(); toast(PHOTO_SKIP[k] ? `${PHOTO_KINDS[k]}の写真は「撮り忘れ」として記録します` : "取り消しました"); });
   document.addEventListener("click", e=>{
     const b=e.target.closest("[data-addph]"); if(!b) return;

@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-14c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-14d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -48,6 +48,8 @@ function doPost(e) {
       case "put":    return out(withLock(function () { return putDoc(me, req.col, req.id, req.obj); }));
       case "photo":  return out(withLock(function () { return addPhoto(me, req.id, req.data, req.mime, req.kind); }));
       case "update": return out(withLock(function () { return updateDoc(me, req.col, req.id, req.obj); }));
+      case "cleanupPreview": requireAdmin_(me); return out(Object.assign({ ok: true }, cleanupMaster(me, true)));
+      case "applyCleanup":   requireAdmin_(me); return out(withLock(function () { return Object.assign({ ok: true }, cleanupMaster(me, false)); }));
       case "sourcing":       requireSourcing(me); return out(Object.assign({ ok: true }, readSourcing(!!req.force)));
       case "sourcingSet":    requireSourcing(me); return out(withLock(function () { return sourcingSet(me, req.key, req.decision, req.cases, req.machine, req.note); }));
       case "sourcingFix":    requireSourcing(me); return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
@@ -756,6 +758,37 @@ function maintenanceOnce_() {
   if (!pr.getProperty("repairChainAt")) {           // 2026-10-13：景品名が空のまま保存された記録（10/9 下山門ミニSP など）の復元
     try { var m = repairChain(); pr.setProperty("repairChainAt", nowIso() + " " + String(m).slice(0, 200)); } catch (e) { Logger.log("repairChain: " + e); }
   }
+  if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
+    try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
+  }
+}
+/* 「ピカチュウセレクション」（BOX の枠に入れた名前）を「モンコレ ピカチュウセレクション①」に統一し、
+   景品ごとの設定（settings/prizeOpt）に BOX1枠＝3・両方の機械で使う を入れる。いじる用の重複 2 行（数量空）も消す。景品マスタ本体は触らない（反映ボタンで） */
+function mergePikachu_() {
+  var FROM = "ピカチュウセレクション", TO = "モンコレ ピカチュウセレクション①";
+  var sh = dbSheet(), last = sh.getLastRow(), n = 0, docs = readAllDocs();
+  if (last >= 2) {
+    var v = sh.getRange(2, 1, last - 1, 6).getValues();
+    v.forEach(function (r, i) {
+      if (String(r[0]) !== "weekly") return;
+      var rec; try { rec = JSON.parse(r[5]); } catch (e) { return; }
+      var changed = false;
+      (rec.slots || []).forEach(function (s) { if (clean(s.prize) === FROM) { s.prize = TO; changed = true; } if (clean(s.filled) === FROM) { s.filled = TO; changed = true; } });
+      (rec.rooms || []).forEach(function (x) { if (clean(x.prize) === FROM) { x.prize = TO; changed = true; } if (clean(x.addPrize) === FROM) { x.addPrize = TO; changed = true; } });
+      if (changed) { rec.id = String(r[1]); sh.getRange(i + 2, 4, 1, 3).setValues([[nowIso(), "merge", JSON.stringify(stripId(rec))]]); docs.weekly = docs.weekly.map(function (d) { return d.id === rec.id ? rec : d; }); rematerialize(rec, docs); n++; }
+    });
+  }
+  var opt = (docs.settings || []).filter(function (d) { return d.id === "prizeOpt"; })[0] || { opts: {} };
+  opt.opts = opt.opts || {}; opt.opts[TO] = Object.assign({}, opt.opts[TO] || {}, { boxSet: 3, both: true });
+  putDoc({ name: "自動" }, "settings", "prizeOpt", { opts: opt.opts });
+  var es = ss().getSheetByName(EDIT_MASTER_SHEET), d = 0;
+  if (es && es.getLastRow() >= 2) {
+    var em = headerMap_(es), eN = hcol_(em, "品名"), eQ = hcol_(em, "買った数量");
+    var ev = es.getRange(2, 1, es.getLastRow() - 1, es.getLastColumn()).getValues();
+    for (var i = ev.length - 1; i >= 0; i--) { if (clean(ev[i][eN - 1]) === FROM && (!eQ || ev[i][eQ - 1] === "" || ev[i][eQ - 1] === null)) { es.deleteRow(i + 2); d++; } }
+  }
+  if (n) { try { rebuildPrizeStats(); } catch (e) {} }
+  return "記録 " + n + " 件の名前を統一、いじる用の重複 " + d + " 行を削除、設定（BOX1枠3・両方）を保存";
 }
 function importPhotoChecks() {
   try { maintenanceOnce_(); } catch (e) {}
@@ -1485,6 +1518,52 @@ function syncStockSheet_() {
   });
   if (n) Logger.log("在庫整理タブから " + n + " 件の棚卸を取り込みました");
   return n;
+}
+/* ===================== 景品マスタ(いじる用) → 景品マスタ への反映（2026-10-14 菊地さんの運用：いじる用で直す → 反映 → 在庫を確定 → いじる用を消す） =====================
+   反映の中身（菊地さん了承）：品名を手がかりに 機械タイプ・買った数量 を上書き。いじる用から消えた品名の行は景品マスタからも消す（重複整理）。
+   いじる用にだけある品名は景品マスタに追加（仕入先・単価は空）。残り在庫の確定方法は未決（菊地さんが決める）ので、ここでは触らない。
+   dry＝true なら変更せず一覧だけ返す（アプリの確認カード用） */
+var EDIT_MASTER_SHEET = "景品マスタ(いじる用)";
+function requireAdmin_(me) { if (!me || me.role !== "admin") throw new Error("この操作は管理者だけができます"); }
+function cleanupMaster(me, dry) {
+  var es = ss().getSheetByName(EDIT_MASTER_SHEET);
+  if (!es) throw new Error("「" + EDIT_MASTER_SHEET + "」タブがありません");
+  var pm = ss().getSheetByName("景品マスタ"); if (!pm) throw new Error("景品マスタがありません");
+  var em = headerMap_(es), eN = hcol_(em, "品名"), eK = hcol_(em, "機械タイプ"), eQ = hcol_(em, "買った数量");
+  if (!eN) throw new Error("いじる用に「品名」列がありません");
+  var ev = es.getLastRow() >= 2 ? es.getRange(2, 1, es.getLastRow() - 1, es.getLastColumn()).getValues() : [];
+  var want = {}, order = [];
+  ev.forEach(function (r) {
+    var name = clean(r[eN - 1]); if (!name) return;
+    var k = normKey_(name);
+    if (!want[k]) { want[k] = { name: name, kind: clean(eK ? r[eK - 1] : ""), qty: eQ ? r[eQ - 1] : "", n: 0 }; order.push(k); }
+    want[k].n++;
+  });
+  if (order.length < 10) throw new Error("いじる用の行が " + order.length + " 行しかありません。消えていませんか？（10 行未満では反映しません）");
+  var mm = headerMap_(pm), mN = hcol_(mm, "品名"), mK = hcol_(mm, "機械タイプ"), mQ = hcol_(mm, "買った数量");
+  var mv = pm.getLastRow() >= 2 ? pm.getRange(2, 1, pm.getLastRow() - 1, pm.getLastColumn()).getValues() : [];
+  var have = {};
+  mv.forEach(function (r, i) { var name = clean(r[mN - 1]); if (!name) return; var k = normKey_(name); (have[k] = have[k] || []).push({ row: i + 2, name: name, kind: clean(r[mK - 1]), qty: r[mQ - 1] }); });
+  var upd = [], add = [], del = [];
+  order.forEach(function (k) {
+    var w = want[k], rows = have[k];
+    if (!rows) { add.push(w); return; }
+    var first = rows[0], ch = [];
+    if (w.kind && w.kind !== first.kind) ch.push("機械タイプ " + (first.kind || "空") + "→" + w.kind);
+    if (String(w.qty) !== "" && num(w.qty) !== num(first.qty)) ch.push("買った数量 " + (first.qty === "" ? "空" : first.qty) + "→" + num(w.qty));
+    if (ch.length) upd.push({ row: first.row, name: first.name, changes: ch, kind: w.kind, qty: w.qty });
+    rows.slice(1).forEach(function (d) { del.push({ row: d.row, name: d.name, why: "同じ品名の重複行" }); });
+  });
+  Object.keys(have).forEach(function (k) { if (!want[k]) have[k].forEach(function (d) { del.push({ row: d.row, name: d.name, why: "いじる用に無い" }); }); });
+  var summary = { update: upd.map(function (u) { return u.name + "：" + u.changes.join("、"); }), add: add.map(function (a) { return a.name + "（" + (a.kind || "機械タイプ空") + "・" + (a.qty === "" ? "数量空" : a.qty) + "）"; }), remove: del.map(function (d) { return d.name + "（" + d.why + "）"; }), dry: !!dry };
+  if (dry) return summary;
+  upd.forEach(function (u) { if (u.kind && mK) pm.getRange(u.row, mK).setValue(u.kind); if (String(u.qty) !== "" && mQ) pm.getRange(u.row, mQ).setValue(num(u.qty)); });
+  add.forEach(function (a) { var vals = []; vals[mN - 1] = a.name; if (mK) vals[mK - 1] = a.kind; if (mQ) vals[mQ - 1] = a.qty === "" ? "" : num(a.qty); for (var i = 0; i < Math.max(mN, mK, mQ); i++) if (vals[i] === undefined) vals[i] = ""; appendValues(pm, vals, ""); });
+  del.sort(function (a, b) { return b.row - a.row; }).forEach(function (d) { pm.deleteRow(d.row); });
+  dropCache("sheet_master"); markMetricsDirty_();
+  try { rebuildStock(); } catch (e) {}
+  PropertiesService.getScriptProperties().setProperty("cleanupAt", nowIso() + " " + (me ? me.name : ""));
+  return summary;
 }
 var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
 /* 最後に走った結果を ScriptProperties に残し、doGet で見えるようにする（トリガーのログを開かなくても外から確かめられる） */
