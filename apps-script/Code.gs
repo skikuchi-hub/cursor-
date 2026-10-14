@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-14a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-14b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -1190,7 +1190,7 @@ function repairChain() {
      倉庫（店に出していない在庫）：②仕入高、④＝店に出した分
      店舗：①③＝その店の機械の中の景品、②＝その店に入れた景品（補充 − 回収）、④＝その店で出た景品の原価
    金額は税抜で計算し、税込（×1.1）も並べる。10 分ごとのトリガー（importPhotoChecks）で必要なときに作り直す */
-var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日", "BOX1枠の個数"];
+var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日"];
 var TAX_RATE = 0.1;
 var METRICS_SHEET = "必要指標";
 function colLetter_(c) { var s = ""; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
@@ -1239,7 +1239,6 @@ function writePrizeExtras_(ps, row, rec) {
   if (/^\d{4}-\d{2}-\d{2}/.test(String(rec.deliveryDate || ""))) put("納品日", dateOf(String(rec.deliveryDate).slice(0, 10)), "yyyy/mm/dd");
   put("店舗", clean(rec.store || ""));
   put("購入者", clean(rec.buyer || rec.staff || ""));
-  if (num(rec.boxSet) > 1) put("BOX1枠の個数", num(rec.boxSet));
 }
 function ymdOf_(v, tz) {
   if (v instanceof Date) return Utilities.formatDate(v, tz, "yyyy-MM-dd");
@@ -1357,7 +1356,7 @@ function updateMetricsIfDue() {
      BOXから引いた数 ＝ BOX の枠に入れた数 × その景品の「BOX1枠の個数」（3 個セットなら 3）
      累計払出数 ＝ 4人機の取られた数 ＋ BOX で出た枠 × BOX1枠の個数
      棚卸の調整 ＝ 数えた在庫 − 数えた時点の計算上の在庫（_app_db の col=stock に 1 回ごとに残す。あとからの増減はそのまま効く）
-   景品マスタの H〜K（累計払出数・補充に使った数・BOXから引いた数・残り在庫）は、この関数が値で書き直す（数式は使わない）。
+   既存のタブは一切書き換えない（景品マスタの数式はそのまま）。この集計は「在庫整理」タブにだけ出す。
    「在庫整理」タブ：1 行＝1 景品。H 列「数えた在庫」だけ手入力できる（他の列は保護）。アプリの在庫整理画面からも同じ所に入る。
    10 分ごとのトリガーで H 列の手入力を取り込み（stock 文書を作る）、全部を作り直す */
 var STOCK_SHEET = "在庫整理";
@@ -1393,7 +1392,10 @@ function prizeBase_() {
 /* 巡回記録と棚卸記録から、景品ごとの動きを集計する */
 function stockTable_(docs) {
   var pb = prizeBase_(), base = pb.base, order = pb.order;
-  var setOf = function (name) { var b = base[normKey_(name)]; return b ? b.boxSet : 1; };
+  var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) Object.keys(d.opts).forEach(function (n) { opt[normKey_(n)] = d.opts[n]; }); });
+  var appSet = {}; (docs.prizes || []).forEach(function (d) { if (num(d.boxSet) > 1) appSet[normKey_(d.name)] = num(d.boxSet); });
+  var setOf = function (name) { var k = normKey_(name); if (appSet[k]) return appSet[k]; if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = base[k]; return b ? b.boxSet : 1; };
+  Object.keys(base).forEach(function (k) { base[k].boxSet = setOf(base[k].name); });
   var mv = {};
   var row = function (name) { var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, add4p: 0, boxUsed: 0, ret: 0, adj: 0, lastCount: null }; return mv[k]; };
   (docs.weekly || []).forEach(function (w) {
@@ -1434,23 +1436,7 @@ function stockTable_(docs) {
 /* 景品マスタの集計列と「在庫整理」タブを作り直す（何度実行しても同じ結果） */
 function rebuildStock() {
   var docs = readAllDocs(), table = stockTable_(docs);
-  // 1) 景品マスタ H〜K を値で書く（同じ品名が複数行なら最初の行に合計、ほかの行は空）
-  var pm = ss().getSheetByName("景品マスタ");
-  if (pm && pm.getLastRow() >= 2) {
-    var m = headerMap_(pm), cols = { "累計払出数": hcol_(m, "累計払出数"), "補充に使った数": hcol_(m, "補充に使った数"), "BOXから引いた数": hcol_(m, "BOXから引いた数"), "残り在庫": hcol_(m, "残り在庫") };
-    var last = pm.getLastRow(), cells = {};
-    Object.keys(cols).forEach(function (h) { if (cols[h]) cells[h] = pm.getRange(2, cols[h], last - 1, 1).getValues().map(function () { return [""]; }); });
-    table.forEach(function (t) {
-      t.rows.forEach(function (r, i) {
-        var first = i === 0;
-        if (cells["累計払出数"]) cells["累計払出数"][r - 2][0] = first ? t.pays : "";
-        if (cells["補充に使った数"]) cells["補充に使った数"][r - 2][0] = first ? t.add4p : "";
-        if (cells["BOXから引いた数"]) cells["BOXから引いた数"][r - 2][0] = first ? t.boxUsed : "";
-        if (cells["残り在庫"]) cells["残り在庫"][r - 2][0] = first ? t.left : "";
-      });
-    });
-    Object.keys(cells).forEach(function (h) { pm.getRange(2, cols[h], last - 1, 1).setValues(cells[h]); });
-  }
+  // 既存のタブ（景品マスタなど）は触らない。書くのは「在庫整理」タブだけ（2026-10-14 菊地さん：整理が終わったら元に戻す一時的な処理）
   // 2) 在庫整理タブ
   var sh = stockSheet_();
   var rows = table.map(function (t) {
