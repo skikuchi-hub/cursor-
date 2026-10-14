@@ -18,12 +18,12 @@
 var DB_SHEET = "_app_db";
 var STAFF_SHEET = "スタッフ";
 var ID_HEADER = "アプリID";
-var COLS = ["weekly", "prizes", "expenses", "settings", "sourcing"];   // sourcing＝仕入れ候補の判断（見送り／保留／発注）
+var COLS = ["weekly", "prizes", "expenses", "settings", "sourcing", "stock"];   // sourcing＝仕入れ候補の判断（見送り／保留／発注）、stock＝在庫整理（棚卸で数えた数）
 var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-13g";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-14a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -192,6 +192,7 @@ function addDoc(me, col, rec) {
   if (col === "weekly") applySalesDelta(rec, docs.weekly);   // 売上は月の累計入力 → 前回との差分を記録
   materialize(col, rec, docs);
   dbSheet().appendRow([col, rec.id, rec.createdAt, now, me.name, JSON.stringify(stripId(rec))]);
+  if (col === "stock" || col === "weekly" || col === "prizes") { try { rebuildStock(); } catch (e) { Logger.log("rebuildStock: " + e); } }
   if (col === "prizes") dropCache("sheet_master");
   if (col === "prizes" || col === "weekly") markMetricsDirty_();
   return { ok: true, rec: rec };
@@ -390,14 +391,15 @@ function readPrizeMaster() {
   if (v.length < 2) return res;
   var hdr = v[0].map(function (h) { return String(h || "").replace(/\s/g, ""); });
   function ci(name) { for (var i = 0; i < hdr.length; i++) if (hdr[i].indexOf(name) === 0) return i; return -1; }
-  var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), rate: ci("設定獲得率"), qty: ci("買った数量"), stock: ci("残り在庫"), memo: ci("メモ") };
+  var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), rate: ci("設定獲得率"), qty: ci("買った数量"), stock: ci("残り在庫"), memo: ci("メモ"), boxSet: ci("BOX1枠") };
   function g(r, k) { return C[k] >= 0 ? r[C[k]] : ""; }
   function n(x, d) { if (x === "" || x === null || x === undefined) return d; var f = parseFloat(x); return isFinite(f) ? f : d; }
   for (var i = 1; i < v.length; i++) {
     var r = v[i]; var name = clean(g(r, "name")); if (!name) continue;
     res.rows.push({
       name: name, vendor: clean(g(r, "vendor")), kind: clean(g(r, "kind")),
-      cost: n(g(r, "cost"), 0), rate: n(g(r, "rate"), null), qty: n(g(r, "qty"), 0), stock: n(g(r, "stock"), null), memo: clean(g(r, "memo"))
+      cost: n(g(r, "cost"), 0), rate: n(g(r, "rate"), null), qty: n(g(r, "qty"), 0), stock: n(g(r, "stock"), null), memo: clean(g(r, "memo")),
+      boxSet: Math.max(1, n(g(r, "boxSet"), 1))   // BOX 1 枠に入れる個数（3 個セットなど）。空なら 1
     });
   }
   return res;
@@ -450,7 +452,7 @@ function materialize(col, rec, docs) {
       var rate = num(rec.rateN) > 0 ? 1 / num(rec.rateN) : "";
       var row = appendValues(ps, [rec.name || "", rec.vendor || "", rec.use || "", num(rec.cost), rate, rec.qty ? num(rec.qty) : ""], rec.id);
       if (rate !== "") ps.getRange(row, 5).setNumberFormat("0.00%");
-      if (rec.memo) ps.getRange(row, 11).setValue(clean(rec.memo));            // K列：メモ（G〜J は数式）
+      if (rec.memo) { var mc = hcol_(headerMap_(ps), "メモ"); if (mc) ps.getRange(row, mc).setValue(clean(rec.memo)); }   // メモ列は見出しで探す（列が増えても壊れない）
       try { writePrizeExtras_(ps, row, rec); } catch (e) { Logger.log("景品マスタの追加項目: " + e); }   // 仕入日・納品日・店舗・購入者（右端の列）
     }
   } else if (col === "expenses") {
@@ -515,6 +517,12 @@ function sheetMemo(r) {
 function roomLines(r, all) {
   var out = [];
   var wk = dateOf(r.week);
+  if ((r.slots || []).length && r.counter !== "" && r.counter !== undefined && r.counter !== null) {   // BOX 機のカウンター（本体 1 行）
+    var prevB = all.filter(function (o) { return o.id !== r.id && o.store === r.store && o.machine === r.machine && String(o.createdAt || "") < String(r.createdAt || "") && o.counter !== "" && o.counter !== undefined && o.counter !== null; })
+      .sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
+    var difB = prevB ? Math.round((num(r.counter) - num(prevB.counter)) * 100) / 100 : "";
+    out.push([wk, r.store, r.machine, "本体", num(r.counter), difB, num(r.sBox), "", "", "", "", num(r.pays)]);
+  }
   (r.slots || []).forEach(function (x) {
     if (!x.out && !x.ret && (x.filled || "") === (x.prize || "")) return;   // 動きのあった枠だけ
     out.push([wk, r.store, r.machine, "枠" + x.i, "", "", num(r.sBox), x.prize || "", (x.prize && !x.out) ? 1 : 0, x.filled || "", x.filled ? 1 : 0, x.out ? 1 : 0,
@@ -772,6 +780,7 @@ function importPhotoChecks() {
     f.setName("done_" + name); n++;
   }
   PropertiesService.getScriptProperties().setProperty("photoChecksAt", String(Date.now()));
+  try { syncStockSheet_(); rebuildStock(); } catch (e) { Logger.log("在庫整理: " + e); }   // 在庫整理タブの手入力を取り込み、在庫を作り直す
   updateMetricsIfDue();   // 必要指標（在庫）の作り直しも 10 分ごとのトリガーで
   var msg = "チェック結果を取り込みました：" + n + " ファイル / " + m + " 枚";
   Logger.log(msg); return msg;
@@ -1181,7 +1190,7 @@ function repairChain() {
      倉庫（店に出していない在庫）：②仕入高、④＝店に出した分
      店舗：①③＝その店の機械の中の景品、②＝その店に入れた景品（補充 − 回収）、④＝その店で出た景品の原価
    金額は税抜で計算し、税込（×1.1）も並べる。10 分ごとのトリガー（importPhotoChecks）で必要なときに作り直す */
-var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日"];
+var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日", "BOX1枠の個数"];
 var TAX_RATE = 0.1;
 var METRICS_SHEET = "必要指標";
 function colLetter_(c) { var s = ""; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
@@ -1230,6 +1239,7 @@ function writePrizeExtras_(ps, row, rec) {
   if (/^\d{4}-\d{2}-\d{2}/.test(String(rec.deliveryDate || ""))) put("納品日", dateOf(String(rec.deliveryDate).slice(0, 10)), "yyyy/mm/dd");
   put("店舗", clean(rec.store || ""));
   put("購入者", clean(rec.buyer || rec.staff || ""));
+  if (num(rec.boxSet) > 1) put("BOX1枠の個数", num(rec.boxSet));
 }
 function ymdOf_(v, tz) {
   if (v instanceof Date) return Utilities.formatDate(v, tz, "yyyy-MM-dd");
@@ -1340,6 +1350,155 @@ function updateMetricsIfDue() {
   if (pr.getProperty("metricsDay") !== today) {
     try { updateMetrics(); pr.setProperty("metricsDay", today); } catch (e) { Logger.log("必要指標: " + e); }
   }
+}
+/* ===================== 在庫整理（棚卸）と在庫の作り直し（2026-10-14 菊地さん「在庫を綺麗にする」） =====================
+   在庫の計算はすべてここ（アプリ側の計算と同じ式）：
+     残り在庫 ＝ 買った数量 − 4人機に補充した数 − BOXから引いた数 ＋ 回収した数 ＋ 棚卸の調整
+     BOXから引いた数 ＝ BOX の枠に入れた数 × その景品の「BOX1枠の個数」（3 個セットなら 3）
+     累計払出数 ＝ 4人機の取られた数 ＋ BOX で出た枠 × BOX1枠の個数
+     棚卸の調整 ＝ 数えた在庫 − 数えた時点の計算上の在庫（_app_db の col=stock に 1 回ごとに残す。あとからの増減はそのまま効く）
+   景品マスタの H〜K（累計払出数・補充に使った数・BOXから引いた数・残り在庫）は、この関数が値で書き直す（数式は使わない）。
+   「在庫整理」タブ：1 行＝1 景品。H 列「数えた在庫」だけ手入力できる（他の列は保護）。アプリの在庫整理画面からも同じ所に入る。
+   10 分ごとのトリガーで H 列の手入力を取り込み（stock 文書を作る）、全部を作り直す */
+var STOCK_SHEET = "在庫整理";
+var STOCK_HEADERS = ["品名", "機械タイプ", "買った数量", "累計払出数", "補充に使った数（4人機）", "BOXから引いた数", "回収して戻した数", "計算上の残り", "数えた在庫（ここだけ入力）", "差（数えた−計算）", "数えた日", "担当", "メモ", "BOX1枠の個数"];
+function stockSheet_() {
+  var sh = ss().getSheetByName(STOCK_SHEET);
+  if (!sh) {
+    sh = ss().insertSheet(STOCK_SHEET);
+    sh.getRange(1, 1, 1, STOCK_HEADERS.length).setValues([STOCK_HEADERS]).setFontWeight("bold");
+    sh.setFrozenRows(1); sh.setColumnWidth(1, 260); sh.setColumnWidth(13, 220);
+    sh.getRange(1, STOCK_HEADERS.length + 2).setValue("数えた在庫（I 列）だけ入力してください。他はアプリが 10 分ごとに作り直します。数えた在庫を入れると、その差が在庫の調整として記録され、景品マスタの残り在庫に反映されます。").setFontColor("#999999");
+  }
+  return sh;
+}
+/* 景品マスタから 景品ごとの 買った数量・機械タイプ・単価・BOX1枠の個数 を集める（同じ品名の行は合算） */
+function prizeBase_() {
+  var sh = ss().getSheetByName("景品マスタ"), base = {}, order = [];
+  if (!sh || sh.getLastRow() < 2) return { base: base, order: order };
+  var m = headerMap_(sh), v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+  var cN = hcol_(m, "品名"), cK = hcol_(m, "機械タイプ"), cQ = hcol_(m, "買った数量"), cC = hcol_(m, "仕入単価（税抜）"), cS = hcol_(m, "BOX1枠の個数");
+  v.forEach(function (r, i) {
+    var name = clean(r[cN - 1]); if (!name) return;
+    var key = normKey_(name);
+    if (!base[key]) { base[key] = { name: name, kind: clean(cK ? r[cK - 1] : ""), qty: 0, cost: num(cC ? r[cC - 1] : 0), boxSet: 1, rows: [] }; order.push(key); }
+    var b = base[key];
+    b.qty += num(cQ ? r[cQ - 1] : 0);
+    if (cS && num(r[cS - 1]) > 1) b.boxSet = num(r[cS - 1]);
+    if (!b.kind && cK) b.kind = clean(r[cK - 1]);
+    b.rows.push(i + 2);
+  });
+  return { base: base, order: order };
+}
+/* 巡回記録と棚卸記録から、景品ごとの動きを集計する */
+function stockTable_(docs) {
+  var pb = prizeBase_(), base = pb.base, order = pb.order;
+  var setOf = function (name) { var b = base[normKey_(name)]; return b ? b.boxSet : 1; };
+  var mv = {};
+  var row = function (name) { var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, add4p: 0, boxUsed: 0, ret: 0, adj: 0, lastCount: null }; return mv[k]; };
+  (docs.weekly || []).forEach(function (w) {
+    (w.rooms || []).forEach(function (x) {
+      var p = clean(x.prize), ap = clean(x.addPrize) || p;
+      if (p && x.pays !== null && x.pays !== undefined && x.pays !== "") row(p).pays += num(x.pays);
+      if (ap && num(x.add) > 0) row(ap).add4p += num(x.add);
+      if (p && num(x.take) > 0) row(p).ret += num(x.take);
+    });
+    if ((w.slots || []).length) {
+      var start = {}, end = {};
+      w.slots.forEach(function (s) {
+        var p = clean(s.prize), f = clean(s.filled);
+        if (p && s.out) row(p).pays += setOf(p);
+        if (p && s.ret) row(p).ret += setOf(p);
+        if (p && !s.out && !s.ret) start[p] = (start[p] || 0) + 1;
+        if (f) end[f] = (end[f] || 0) + 1;
+      });
+      Object.keys(end).forEach(function (n) { var d = end[n] - (start[n] || 0); if (d > 0) row(n).boxUsed += d * setOf(n); });
+    }
+  });
+  (docs.stock || []).forEach(function (d) {
+    var p = clean(d.name); if (!p) return; var r = row(p);
+    r.adj += num(d.delta);
+    if (!r.lastCount || String(d.createdAt || "") > String(r.lastCount.createdAt || "")) r.lastCount = d;
+  });
+  var out = [];
+  var keys = order.slice(); Object.keys(mv).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });   // マスタに無い景品も出す（買った数 0）
+  keys.forEach(function (k) {
+    var b = base[k], m = mv[k] || { name: (b || {}).name, pays: 0, add4p: 0, boxUsed: 0, ret: 0, adj: 0, lastCount: null };
+    var qty = b ? b.qty : 0;
+    out.push({ key: k, name: (b || m).name, kind: b ? b.kind : "", qty: qty, cost: b ? b.cost : 0, boxSet: b ? b.boxSet : 1, rows: b ? b.rows : [],
+      pays: m.pays, add4p: m.add4p, boxUsed: m.boxUsed, ret: m.ret, adj: m.adj, lastCount: m.lastCount,
+      left: qty - m.add4p - m.boxUsed + m.ret + m.adj, inMaster: !!b });
+  });
+  return out;
+}
+/* 景品マスタの集計列と「在庫整理」タブを作り直す（何度実行しても同じ結果） */
+function rebuildStock() {
+  var docs = readAllDocs(), table = stockTable_(docs);
+  // 1) 景品マスタ H〜K を値で書く（同じ品名が複数行なら最初の行に合計、ほかの行は空）
+  var pm = ss().getSheetByName("景品マスタ");
+  if (pm && pm.getLastRow() >= 2) {
+    var m = headerMap_(pm), cols = { "累計払出数": hcol_(m, "累計払出数"), "補充に使った数": hcol_(m, "補充に使った数"), "BOXから引いた数": hcol_(m, "BOXから引いた数"), "残り在庫": hcol_(m, "残り在庫") };
+    var last = pm.getLastRow(), cells = {};
+    Object.keys(cols).forEach(function (h) { if (cols[h]) cells[h] = pm.getRange(2, cols[h], last - 1, 1).getValues().map(function () { return [""]; }); });
+    table.forEach(function (t) {
+      t.rows.forEach(function (r, i) {
+        var first = i === 0;
+        if (cells["累計払出数"]) cells["累計払出数"][r - 2][0] = first ? t.pays : "";
+        if (cells["補充に使った数"]) cells["補充に使った数"][r - 2][0] = first ? t.add4p : "";
+        if (cells["BOXから引いた数"]) cells["BOXから引いた数"][r - 2][0] = first ? t.boxUsed : "";
+        if (cells["残り在庫"]) cells["残り在庫"][r - 2][0] = first ? t.left : "";
+      });
+    });
+    Object.keys(cells).forEach(function (h) { pm.getRange(2, cols[h], last - 1, 1).setValues(cells[h]); });
+  }
+  // 2) 在庫整理タブ
+  var sh = stockSheet_();
+  var rows = table.map(function (t) {
+    var lc = t.lastCount;
+    return [t.name, t.kind, t.qty, t.pays, t.add4p, t.boxUsed, t.ret, t.left,
+      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(String(lc.createdAt || "").slice(0, 10)) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.boxSet];
+  });
+  var maxR = Math.max(sh.getMaxRows(), rows.length + 1);
+  if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
+  sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), STOCK_HEADERS.length).clearContent();
+  if (rows.length) {
+    sh.getRange(2, 1, rows.length, STOCK_HEADERS.length).setValues(rows);
+    sh.getRange(2, 11, rows.length, 1).setNumberFormat("yyyy/mm/dd");
+    sh.getRange(2, 8, rows.length, 1).setFontWeight("bold");
+    sh.getRange(2, 9, rows.length, 1).setBackground("#fff8dc");
+  }
+  try {   // 数えた在庫（I 列）とメモ（M 列）以外は編集できないようにする（オーナーは常に編集可）
+    var prots = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    var pr = prots.length ? prots[0] : sh.protect();
+    pr.setDescription("在庫整理：数えた在庫とメモだけ入力");
+    pr.setUnprotectedRanges([sh.getRange("I2:I1000"), sh.getRange("M2:M1000")]);
+    pr.setWarningOnly(true);
+  } catch (e) {}
+  PropertiesService.getScriptProperties().setProperty("stockAt", nowIso());
+  var msg = "在庫を作り直しました：" + table.length + " 景品";
+  Logger.log(msg); return msg;
+}
+/* 在庫整理タブの I 列（数えた在庫）に手で入れた数を、棚卸の記録（col=stock）として取り込む */
+function syncStockSheet_() {
+  var sh = ss().getSheetByName(STOCK_SHEET); if (!sh || sh.getLastRow() < 2) return 0;
+  var v = sh.getRange(2, 1, sh.getLastRow() - 1, STOCK_HEADERS.length).getValues();
+  var docs = readAllDocs(), last = {};
+  (docs.stock || []).forEach(function (d) { var k = normKey_(d.name); if (!last[k] || String(d.createdAt || "") > String(last[k].createdAt || "")) last[k] = d; });
+  var n = 0, now = nowIso();
+  v.forEach(function (r) {
+    var name = clean(r[0]); if (!name) return;
+    var counted = r[8];
+    if (counted === "" || counted === null || counted === undefined || isNaN(parseFloat(counted))) return;
+    counted = Math.round(parseFloat(counted));
+    var lc = last[normKey_(name)];
+    if (lc && num(lc.counted) === counted) return;          // すでに取り込み済み（表示用に書き戻した値）
+    var computed = num(r[7]);                               // その行の「計算上の残り」（最後に作り直した時点）
+    var rec = { id: newId(), name: name, counted: counted, computed: computed, delta: counted - computed, memo: clean(r[12] || ""), source: "sheet", createdAt: now, by: "シート入力", staff: "シート入力" };
+    dbSheet().appendRow(["stock", rec.id, rec.createdAt, now, "シート入力", JSON.stringify(stripId(rec))]);
+    n++;
+  });
+  if (n) Logger.log("在庫整理タブから " + n + " 件の棚卸を取り込みました");
+  return n;
 }
 var SELF_UPDATE_URL = "https://raw.githubusercontent.com/skikuchi-hub/cursor-/claude/examuse-prize-handover-8s2xx8/apps-script/Code.gs";
 /* 最後に走った結果を ScriptProperties に残し、doGet で見えるようにする（トリガーのログを開かなくても外から確かめられる） */

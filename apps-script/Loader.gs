@@ -27,6 +27,7 @@ function selfUpdate()          { return refreshCode_(); }
 function installTriggers()     { return run_("installTriggers", []); }
 function setup()               { refreshCode_(); return run_("setup", []); }
 function updateMetrics()       { return run_("updateMetrics", []); }
+function rebuildStock()        { return run_("rebuildStock", []); }
 function rebuildPrizeStats()   { return run_("rebuildPrizeStats", []); }
 function repairChain()         { return run_("repairChain", []); }
 function repairDates()         { return run_("repairDates", []); }

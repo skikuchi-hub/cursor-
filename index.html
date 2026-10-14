@@ -657,7 +657,22 @@ td:first-child{font-family:var(--fs-body)}
 .sh-chips{margin:8px 0 10px;max-height:38vh;overflow:auto}
 .sh-chips .chip[aria-pressed="true"]{outline:2px solid var(--ink)}
 .nosales{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 10px}
+/* 在庫整理 */
+.stk-top{padding:10px 12px 6px;display:flex;flex-direction:column;gap:8px;border-bottom:1px solid var(--line)}
+.stk{display:grid;grid-template-columns:1fr auto;gap:3px 10px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line)}
+.stk-nm{grid-column:1/-1;font-weight:700;font-size:12.5px;line-height:1.3;word-break:break-all}
+.stk-nm small{display:block;font-weight:500;color:var(--ink-3);font-size:10px}
+.stk-calc{font-size:11px;color:var(--ink-2)}
+.stk-calc b{font-family:var(--fs-mono);font-size:16px;color:var(--ink);margin-left:2px}
+.stk-calc small{display:block;font-size:9.5px;color:var(--ink-3)}
+.stk-in{width:96px;font-size:18px;text-align:right;padding:8px 8px}
+.stk-dif{grid-column:1/-1;font-size:11px;font-weight:700;text-align:right}
+.stk-dif.ok{color:var(--ink-3)} .stk-dif.minus{color:var(--rose)} .stk-dif.plus{color:var(--violet)}
+.stk-foot{padding:10px 12px 12px;display:flex;flex-direction:column;gap:8px;align-items:stretch}
+.stk-foot .chip{align-self:center}
 .pair.off{opacity:.45}
+.pair.ctr{background:transparent;border-style:dashed}
+.pair.ctr .yen{font-size:17px}
 .pair.off input{pointer-events:none}
 .ph-skip{margin-top:6px;font-weight:600}
 .ph-skip[aria-pressed="true"]{background:var(--rose-wash);border-color:var(--rose)}
@@ -1134,8 +1149,14 @@ body{font-variant-numeric:tabular-nums}
           <select class="txt" id="pzUse">
             <option>カリーノ用</option>
             <option>4人機用</option>
+            <option>両方</option>
           </select>
-          <p class="hint">巡回タブで、その機械のときだけ候補に出ます。</p>
+          <p class="hint">巡回タブで、その機械のときだけ候補に出ます。両方の機械に入れる景品は「両方」。</p>
+        </div>
+        <div class="field" id="pzBoxSetWrap">
+          <span class="lbl">BOX 1枠に入れる個数</span>
+          <input class="txt" id="pzBoxSet" type="number" inputmode="numeric" min="1" value="1">
+          <p class="hint">3 個セットで 1 枠に入れるなら 3。BOX に入れたとき・出たとき、在庫からその数だけ動きます。4人機は 1 個ずつなので関係ありません。</p>
         </div>
         <div class="grid2">
           <div class="field">
@@ -1186,6 +1207,11 @@ body{font-variant-numeric:tabular-nums}
         </div>
       </div>
       <button class="save" id="savePrize">景品を登録する</button>
+
+      <div class="card flush" style="margin-top:12px">
+        <div class="xhead fold" data-fold="stkList" role="button" tabindex="0" aria-expanded="false"><span class="nm">📋 在庫整理（数えて合わせる）</span><span class="ct" id="stkCt"></span><span class="chev" aria-hidden="true"></span></div>
+        <div id="stkList" hidden></div>
+      </div>
 
       <div class="card flush" style="margin-top:12px">
         <div class="xhead fold" data-fold="pzList" role="button" tabindex="0" aria-expanded="false"><span class="nm">景品マスタ</span><span class="ct" id="pzCt">0件</span><span class="chev" aria-hidden="true"></span></div>
@@ -1714,7 +1740,7 @@ function signOut(){
 }
 
 /* ===================== データ層（Apps Script 経由でスプレッドシートに保存） ===================== */
-const COLS = ["weekly","prizes","expenses","settings","sourcing"];
+const COLS = ["weekly","prizes","expenses","settings","sourcing","stock"];   // stock＝在庫整理（棚卸で数えた数）
 const Store = {
   db:null, canWrite:true, mode:"local", live:false, syncing:false, pollT:null,
   data:{weekly:[],prizes:[],expenses:[],settings:[],sourcing:[]},
@@ -1994,9 +2020,9 @@ function roomAfter(rm){                      // 補充後：残り ＋ 補充 �
 function resetRooms(keep){
   const t = machineType(F.machine);
   const old = (keep && R && R.type===t) ? R : null;
-  R = { type:t, rooms:ROOMS.map(blankRoom), slots:[], sAB:"", sCD:"", sBox:"",
-        moveFrom:null, pick:null };                    // moveFrom＝「動かした」の元の枠、pick＝開いている質問カード {i, step}
-  if (old){ R.rooms=old.rooms; R.slots=old.slots; R.sAB=old.sAB; R.sCD=old.sCD; R.sBox=old.sBox;
+  R = { type:t, rooms:ROOMS.map(blankRoom), slots:[], sAB:"", sCD:"", sBox:"", counterBox:"",
+        moveFrom:null, pick:null };                    // moveFrom＝「動かした」の元の枠、pick＝開いている質問カード {i, step}、counterBox＝BOX 機のカウンター
+  if (old){ R.rooms=old.rooms; R.slots=old.slots; R.sAB=old.sAB; R.sCD=old.sCD; R.sBox=old.sBox; R.counterBox=old.counterBox||""; R.noSales=old.noSales;
             R.moveFrom=old.moveFrom===undefined?null:old.moveFrom; R.pick=null; }
   if (t==="4p"){
     R.rooms.forEach(rm=>{
@@ -2042,16 +2068,30 @@ function refillUsed(){
   const r = {};
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); if(x.prize && num(x.take)>0) r[x.prize]=(r[x.prize]||0)-num(x.take); });
-    if ((w.slots||[]).length){ addInto(r, boxRefill(w.slots)); const bk=boxReturn(w.slots); Object.keys(bk).forEach(k=>r[k]=(r[k]||0)-bk[k]); }
+    if ((w.slots||[]).length){ const rf=boxRefill(w.slots); Object.keys(rf).forEach(k=>r[k]=(r[k]||0)+rf[k]*setOf(k)); const bk=boxReturn(w.slots); Object.keys(bk).forEach(k=>r[k]=(r[k]||0)-bk[k]*setOf(k)); }
   });
   return r;
 }
+/* BOX 1 枠に入れる個数（3 個セットなど）。アプリ登録 → シートの「BOX1枠の個数」列 → 1 */
+function setOf(name){
+  const p = Store.rows("prizes").find(p=>p.name===name); if (p && num(p.boxSet)>1) return Math.round(num(p.boxSet));
+  const sh = sheetPrize(name); if (sh && num(sh.boxSet)>1) return Math.round(num(sh.boxSet));
+  return 1;
+}
+/* 棚卸（在庫整理）の調整の合計＝「数えた数 − その時点の計算上の数」の積み上げ */
+function stockDocs(){ const out=[]; Store.rows("stock").forEach(d=>{ (d.items ? d.items : [d]).forEach(it=>out.push({name:clean(it.name), counted:num(it.counted), computed:num(it.computed), delta:num(it.delta), createdAt:d.createdAt||"", by:d.by||d.staff||"", memo:d.memo||it.memo||""})); }); return out; }
+function stockAdj(name){ return stockDocs().filter(d=>d.name===name).reduce((a,d)=>a+d.delta,0); }
+function lastCount(name){ return stockDocs().filter(d=>d.name===name).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]||null; }
+/* 残り在庫 ＝ 買った数 − 4人機に補充した数 − BOXに入れた数×1枠の個数 ＋ 回収 ＋ 棚卸の調整（サーバー側 rebuildStock と同じ式） */
 function stockOf(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
-  if (p){ if (!num(p.qty)) return null; return Math.max(0, num(p.qty) - (refillUsed()[name]||0)); }
-  const sh = sheetPrize(name);
-  if (sh && sh.stock!==null && sh.stock!==undefined && sh.stock!=="") return Math.max(0, num(sh.stock));
-  return null;
+  const shQty = sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
+  const known = !!p || sheetRows().some(r=>r.name===name);
+  if (!known) return null;
+  const qty = p ? num(p.qty) : shQty;
+  const used = refillUsed()[name]||0, adj = stockAdj(name);
+  if (!qty && !adj && !used) return null;           // 数量が登録されていない景品
+  return Math.max(0, qty - used + adj);
 }
 
 /* ========== 4人機のセル ========== */
@@ -2241,6 +2281,11 @@ function buildRooms(force){
     });
   } else {
     grid.innerHTML = `
+      <div class="pair ctr">
+        <span class="pk">カウンター</span>
+        <input class="yen" type="text" inputmode="decimal" maxlength="10" data-f="counterBox" placeholder="0.00" aria-label="機械のカウンター（任意）">
+        <span class="u"></span><span class="pp" data-p="counterBox"></span>
+      </div>
       <div class="pair">
         <span class="pk">累計売上</span>
         <input class="yen" type="text" inputmode="numeric" maxlength="8" data-f="sBox" placeholder="0" aria-label="今月の累計売上金額">
@@ -2257,7 +2302,7 @@ function buildRooms(force){
         <span class="stepper"><span class="mini" style="display:inline">枠数</span>
           <button data-act="slots-" aria-label="枠を減らす">−</button><b id="slotCount">0</b><button data-act="slots+" aria-label="枠を増やす">＋</button></span>
       </div>`;
-    setVal('[data-f="sBox"]', R.sBox);
+    setVal('[data-f="sBox"]', R.sBox); setVal('[data-f="counterBox"]', R.counterBox);
     drawSlots();
   }
   applyNoSales();
@@ -2268,8 +2313,8 @@ const noSalesRow = () => `<div class="nosales"><button type="button" class="chip
 function applyNoSales(){
   if (!R) return;
   const on = !!R.noSales;
-  $$("#roomGrid .pair").forEach(p=>p.classList.toggle("off", on));
-  $$("#roomGrid .pair input").forEach(i=>i.disabled=on);
+  $$("#roomGrid .pair:not(.ctr)").forEach(p=>p.classList.toggle("off", on));
+  $$("#roomGrid .pair:not(.ctr) input").forEach(i=>i.disabled=on);
   const b=$('#roomGrid [data-act="nosales"]'); if (b) b.setAttribute("aria-pressed", String(on));
 }
 function setVal(sel,v){ const el=document.querySelector("#roomGrid "+sel); if(!el) return; const isYen = /data-f="s(AB|CD|Box)"/.test(sel); el.value = v===undefined||v===null||v===""?"":(isYen ? Number(String(v).replace(/[^\d]/g,"")||0).toLocaleString("ja-JP") : v); }
@@ -2484,7 +2529,7 @@ function onRoomInput(e){
   } else if (f==="taken" || f==="before" || f==="add" || f==="take"){   // 個数は 3 桁まで
     const digits = String(el.value).replace(/[^\d]/g,"").slice(0,3);
     if (digits !== el.value) el.value = digits;
-  } else if (f==="counter"){                                     // カウンターは 数字 7 桁＋小数 2 桁まで
+  } else if (f==="counter" || f==="counterBox"){                 // カウンターは 数字 7 桁＋小数 2 桁まで
     const m = String(el.value).replace(/[^\d.]/g,"").match(/^(\d{0,7})(\.\d{0,2})?/);
     const v = m ? (m[1]||"") + (m[2]||"") : "";
     if (v !== el.value) el.value = v;
@@ -2503,7 +2548,7 @@ function totals(){
   if (!R) return {sales:0,plays:0,pays:0,cost:0,known:false,refill:0};
   if (R.type==="box"){
     const sales = salesDelta("sBox").delta, out = R.slots.filter(sl=>sl.out);
-    const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0), 0);
+    const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0)*setOf(sl.prize), 0);   // 3 個セットは 3 個分の原価
     const rf = boxRefill(R.slots), bk = boxReturn(R.slots);
     const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0), ret = Object.keys(bk).reduce((a,k)=>a+bk[k],0);
     return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill, ret};
@@ -2582,6 +2627,9 @@ function updateDerived(){
     });
     renderRoomActs();
   }
+  { const el=document.querySelector('#roomGrid [data-p="counterBox"]');
+    if (el){ const lv=lastVisit(); const prevC = lv && lv.counter!==undefined && lv.counter!==null && lv.counter!=="" ? num(lv.counter) : null;
+      el.textContent = (prevC!==null && R.counterBox!=="") ? `前回 ${lv.counter} → +${(+((num(R.counterBox)-prevC).toFixed(2)))}` : (prevC!==null ? `前回 ${lv.counter}` : "任意。機械のカウンター表示をそのまま"); } }
   ["sAB","sCD","sBox"].forEach(f=>{
     const el=document.querySelector(`#roomGrid [data-p="${f}"]`); if (!el) return;
     const d = salesDelta(f);
@@ -3236,7 +3284,7 @@ let DRAFTS = {}; try { DRAFTS = JSON.parse(localStorage.getItem(DRAFT_KEY)||"{}"
 const draftKey = () => F.store && F.machine ? `${F.store}|${F.machine}|${F.week}` : "";
 function rHasInput(r){
   if (!r) return false;
-  if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="" || r.noSales) return true;
+  if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="" || String(r.counterBox||"")!=="" || r.noSales) return true;
   if ((r.rooms||[]).some(rm=>rm.counter!=="" || rm.taken!=="" || rm.before!=="" || num(rm.add)>0 || num(rm.take)>0 || (rm.prizeWas!==undefined && rm.prize!==rm.prizeWas))) return true;
   if ((r.slots||[]).some(slotChanged)) return true;
   return false;
@@ -3334,6 +3382,11 @@ function validateVisit(){
   }
   if (R && R.type==="box"){
     if (lv0 && (lv0.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) && R.slots.every(sl=>!clean(sl.prize)) && !R.slots.some(sl=>clean(sl.filled))) block.push("前回の枠の中身が読み込めていません（通信待ち）。少し待って同期されてから、または開き直してから保存してください");
+    if (R.counterBox!=="" && lv0 && lv0.counter!=="" && lv0.counter!==undefined && lv0.counter!==null){
+      const diff = num(R.counterBox)-num(lv0.counter);
+      if (diff < 0) ask.push(`カウンター ${R.counterBox} が前回 ${lv0.counter} より小さい（カウンターは減りません）`);
+      else if (diff > 3000) ask.push(`カウンターが前回から ${Math.round(diff)} 増えています。桁の打ち間違いではありませんか？`);
+    }
     const t0 = totals();
     if (t0.sales>0 && !R.slots.some(sl=>sl.out)) ask.push(`売上 ${yen(t0.sales)}円 がありますが「出た枠」が 1 つも選ばれていません。本当に 1 個も出ていませんか？（出た枠は「① 出た枠」で空いていた枠をタップ）`);
   }
@@ -3370,6 +3423,7 @@ async function saveLog(){
     prevId:(prevSalesRec()||{}).id||"",
     sales:t.sales, plays:t.plays,
     noSales: !!R.noSales,                                                                        // 売上を見ていない（補充だけ）
+    counter: R.type==="box" ? (R.counterBox===""||R.counterBox===undefined ? "" : num(R.counterBox)) : "",   // BOX 機のカウンター（任意）
     photoMiss: EDIT ? undefined : ["before","after"].filter(k=>PHOTO_SKIP[k] && !PHOTOS.some(p=>p.kind===k)),   // 撮り忘れた写真の種別
     pays:num($("#paysIn").value), cost:num($("#costIn").value),
     prize:mainPrize(), auto:[R.noSales?"補充だけ（売上なし）":"", autoMemo(), ...(EDIT?[]:["before","after"].filter(k=>PHOTO_SKIP[k] && !PHOTOS.some(p=>p.kind===k)).map(k=>`📷${PHOTO_KINDS[k]}の写真なし（撮り忘れ）`))].filter(Boolean).join(" ｜ "),
@@ -3432,6 +3486,7 @@ function startEdit(id){
   if (R){
     const cum=cumOf(r); R.sAB=cum.sAB||""; R.sCD=cum.sCD||""; R.sBox=cum.sBox||"";   // 入力欄は累計
     R.noSales = !!r.noSales;
+    if (R.type==="box") R.counterBox = (r.counter===undefined||r.counter===null) ? "" : r.counter;
     if (!cum.sAB && !cum.sCD && !cum.sBox && num(r.sales)>0){ if (R.type==="box") R.sBox=num(r.sales); else R.sAB=num(r.sales); }   // 旧データ（合計だけ）の救済
     if (R.type==="4p"){
       (r.rooms||[]).forEach(x=>{ const rm=R.rooms.find(y=>y.k===x.k); if(!rm) return;
@@ -3563,15 +3618,63 @@ async function savePrize(){
     vendor: sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value,
     cost:num($("#pzCost").value), qty:num($("#pzQty").value), use:$("#pzUse").value,
     costRate:pzCostRate, rateN:n||0, retail:0, proof:"", memo:clean($("#pzMemo").value), staff:me(),
-    buyDate:$("#pzBuyDate").value||todayStr(), deliveryDate:$("#pzDelivDate").value||"", store:$("#pzStore").value||"", buyer:clean($("#pzBuyer").value)||me()
+    buyDate:$("#pzBuyDate").value||todayStr(), deliveryDate:$("#pzDelivDate").value||"", store:$("#pzStore").value||"", buyer:clean($("#pzBuyer").value)||me(),
+    boxSet: Math.max(1, Math.round(num($("#pzBoxSet").value)||1))                       // BOX 1 枠に入れる個数（3 個セットなど）
   };
   $("#savePrize").disabled=true;
   if (await Store.add("prizes", rec)){
     toast(`${rec.name} を登録！`);
-    ["#pzName","#pzMemo","#pzQty","#pzVendorOther"].forEach(s=>$(s).value="");
+    ["#pzName","#pzMemo","#pzQty","#pzVendorOther"].forEach(s=>$(s).value=""); $("#pzBoxSet").value="1";
     if (rec.vendor && sel.value==="__other"){ renderPrizeForm(); sel.value=rec.vendor; }
   }
   renderPrizeForm(); updatePzGauge(); render();
+}
+/* ===================== 在庫整理（棚卸）：倉庫の数を数えて「数えた数」を入れる → 保存で在庫を合わせる ===================== */
+const STK = { v:{}, f:"", q:"" };          // v＝入力中の数（景品名→文字）、f＝機械タイプの絞り込み、q＝検索
+function stockRows(){
+  const seen=new Set(), rows=[];
+  allPrizes().forEach(p=>{ const n=clean(p.name); if (!n || seen.has(n)) return; seen.add(n);
+    rows.push({name:n, kind:p.use||"", calc:stockOf(n), set:setOf(n), last:lastCount(n)}); });
+  rows.sort((a,b)=> (a.kind||"").localeCompare(b.kind||"") || a.name.localeCompare(b.name,"ja"));
+  return rows;
+}
+function renderStock(){
+  const el=$("#stkList"); if (!el) return;
+  if (el.contains(document.activeElement)) return;                 // 入力中は作り直さない（同期で手が止まらないように）
+  const rows = stockRows();
+  const shown = rows.filter(r=> (!STK.f || r.kind===STK.f || r.kind==="両方") && (!STK.q || r.name.toLowerCase().includes(STK.q.toLowerCase())));
+  const typed = Object.keys(STK.v).filter(k=>STK.v[k]!=="").length;
+  const ct=$("#stkCt"); if (ct) ct.textContent = typed ? `${typed}件 入力中` : `${rows.length}景品`;
+  const dif = r => { const v=STK.v[r.name]; if (v===undefined||v==="") return ""; const d = num(v) - (r.calc===null?0:r.calc); return d===0 ? `<span class="stk-dif ok">計算どおり</span>` : `<span class="stk-dif ${d<0?"minus":"plus"}">差 ${d>0?"+":""}${d}（${d<0?"計算より少ない":"計算より多い"}）</span>`; };
+  el.innerHTML = `
+    <div class="stk-top">
+      <p class="hint" style="margin:0">倉庫（店に出していない分）を数えて「数えた数」に入れ、下の保存を押してください。機械の中に入っている分は数えません（巡回の記録で追っています）。計算と違っても、数えた数が正になります。3 個セットは個数で数えます。</p>
+      <div class="chips">${["","4人機用","カリーノ用"].map(k=>`<button type="button" class="chip mini" data-stkf="${k}" aria-pressed="${STK.f===k}">${k||"すべて"}</button>`).join("")}</div>
+      <input class="txt" id="stkQ" placeholder="景品名で絞り込み" value="${esc(STK.q)}">
+    </div>
+    <div class="stk-rows">${shown.map(r=>`
+      <div class="stk" data-stk="${esc(r.name)}">
+        <div class="stk-nm">${esc(r.name)}<small>${esc(r.kind||"機械タイプ未設定")}${r.set>1?`　・BOX 1枠 ${r.set} こ`:""}</small></div>
+        <div class="stk-calc">計算上 <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
+        <input class="numin stk-in" type="text" inputmode="numeric" maxlength="4" placeholder="数えた数" aria-label="${esc(r.name)} の数えた数" value="${esc(STK.v[r.name]||"")}">
+        ${dif(r)}
+      </div>`).join("") || `<p class="hint" style="padding:10px 12px">該当する景品がありません</p>`}</div>
+    <div class="stk-foot"><button type="button" class="save" id="stkSave" ${typed?"":"disabled"}>数えた分を保存（${typed} 件）</button>
+      ${typed?`<button type="button" class="chip mini" id="stkClear">入力を消す</button>`:""}</div>`;
+}
+async function saveStock(){
+  const rows = stockRows();
+  const items = rows.filter(r=>STK.v[r.name]!==undefined && STK.v[r.name]!=="").map(r=>{ const counted=Math.round(num(STK.v[r.name])); const computed = r.calc===null?0:r.calc; return {name:r.name, kind:r.kind, counted, computed, delta: counted-computed}; });
+  if (!items.length) return;
+  const diffs = items.filter(i=>i.delta!==0);
+  const html = `<div class="cf-h">在庫整理　<span>${items.length} 景品</span></div><div class="cf-sub">${jpDate(todayStr())}　${esc(me())}</div>
+    <table class="cf-t">${items.map(i=>`<tr><td>${esc(i.name)}</td><td>計算 ${i.computed} → 数えた <b>${i.counted}</b></td><td>${i.delta===0?'<span class="dim">同じ</span>':`<b class="${i.delta<0?"warn":""}">${i.delta>0?"+":""}${i.delta}</b>`}</td></tr>`).join("")}</table>
+    <div class="cf-tot">差があるもの <b>${diffs.length}</b> 件。保存すると、数えた数が在庫になります（差は「調整」として記録）</div>`;
+  if (!(await confirmSheet(html, "この数で在庫を合わせる"))) return;
+  const btn=$("#stkSave"); if (btn) btn.disabled=true;
+  const ok = await Store.add("stock", {items, memo:"", kind:"棚卸", date:todayStr()});
+  if (ok){ STK.v={}; toast(`在庫を合わせました（${items.length} 景品）`); }
+  render();
 }
 function renderPrizeList(){
   const rows = Store.rows("prizes").filter(r=>staffOf(r)===me());        // 担当（わたし）の分だけ
@@ -4846,7 +4949,7 @@ async function saveGoal(){
 function render(){
   renderWeekStrip(); renderStoreRow(); renderMachineRow(); renderLogStatus();
   renderPrizeDatalist(); buildRooms(); renderLogList();
-  renderPrizeForm(); renderPrizeList(); renderCostForm(); renderCostList();
+  renderPrizeForm(); renderPrizeList(); renderStock(); renderCostForm(); renderCostList();
   renderDash(); renderQuest();
   if ($("#p-src") && $("#p-src").classList.contains("on")) renderSourcing();
   if ($("#drawer").classList.contains("on")) renderDrawer();
@@ -4918,6 +5021,16 @@ function wire(){
     await addPhotoFiles(files, kind);
   };
   $$(".photo-row[data-row]").forEach(el=>el.onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); });
+  { const pu=$("#pzUse"); if (pu){ const f=()=>{ const w=$("#pzBoxSetWrap"); if (w) w.hidden = pu.value==="4人機用"; }; pu.addEventListener("change", f); f(); } }
+  { const el=$("#stkList"); if (el){
+      el.addEventListener("input", e=>{ const i=e.target.closest(".stk-in"); if (i){ const row=i.closest(".stk"); const d=String(i.value).replace(/[^\d]/g,"").slice(0,4); if (d!==i.value) i.value=d; STK.v[row.dataset.stk]=d;
+          const r=stockRows().find(x=>x.name===row.dataset.stk); const old=row.querySelector(".stk-dif"); if (old) old.remove();
+          if (d!=="" && r){ const dv=num(d)-(r.calc===null?0:r.calc); const sp=document.createElement("span"); sp.className="stk-dif "+(dv===0?"ok":dv<0?"minus":"plus"); sp.textContent = dv===0?"計算どおり":`差 ${dv>0?"+":""}${dv}（${dv<0?"計算より少ない":"計算より多い"}）`; row.appendChild(sp); }
+          const typed=Object.keys(STK.v).filter(k=>STK.v[k]!=="").length; const b=$("#stkSave"); if (b){ b.disabled=!typed; b.textContent=`数えた分を保存（${typed} 件）`; } const ct=$("#stkCt"); if (ct) ct.textContent = typed?`${typed}件 入力中`:ct.textContent; return; }
+        const q=e.target.closest("#stkQ"); if (q){ STK.q=q.value; clearTimeout(STK.t); STK.t=setTimeout(()=>{ q.blur(); renderStock(); const nq=$("#stkQ"); if (nq){ nq.focus(); nq.setSelectionRange(nq.value.length, nq.value.length); } }, 350); } });
+      el.addEventListener("click", e=>{ const c=e.target.closest("[data-stkf]"); if (c){ STK.f=c.dataset.stkf; renderStock(); return; }
+        if (e.target.closest("#stkSave")) return saveStock();
+        if (e.target.closest("#stkClear")){ STK.v={}; renderStock(); } }); } }
   $$(".ph-skip").forEach(b=>b.onclick = () => { const k=b.dataset.skip; PHOTO_SKIP[k]=!PHOTO_SKIP[k]; if (PHOTO_SKIP[k]) GUIDE.skip[k]=true; renderPhotoRow(); toast(PHOTO_SKIP[k] ? `${PHOTO_KINDS[k]}の写真は「撮り忘れ」として記録します` : "取り消しました"); });
   document.addEventListener("click", e=>{
     const b=e.target.closest("[data-addph]"); if(!b) return;
