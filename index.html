@@ -2097,16 +2097,14 @@ function setOf(name){
 function stockDocs(){ const out=[]; Store.rows("stock").forEach(d=>{ (d.items ? d.items : [d]).forEach(it=>out.push({name:clean(it.name), counted:num(it.counted), computed:num(it.computed), delta:num(it.delta), createdAt:d.createdAt||"", by:d.by||d.staff||"", memo:d.memo||it.memo||""})); }); return out; }
 function stockAdj(name){ return stockDocs().filter(d=>d.name===name).reduce((a,d)=>a+d.delta,0); }
 function lastCount(name){ return stockDocs().filter(d=>d.name===name).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]||null; }
-/* 残り在庫 ＝ 買った数 − 4人機に補充した数 − BOXに入れた数×1枠の個数 ＋ 回収 ＋ 棚卸の調整（サーバー側 rebuildStock と同じ式） */
+/* 在庫 ＝ 買った数 − 累計払出数 ＋ 棚卸の調整（倉庫＋機械の中の合計。2026-10-15 菊地さん：数えるときは機械の中の分も数える。サーバー側 rebuildStock と同じ式） */
 function stockOf(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
-  const shQty = sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
   const known = !!p || sheetRows().some(r=>r.name===name);
   if (!known) return null;
-  const qty = p ? num(p.qty) : shQty;
-  const used = refillUsed()[name]||0, adj = stockAdj(name);
-  if (!qty && !adj && !used) return null;           // 数量が登録されていない景品
-  return Math.max(0, qty - used + adj);
+  const b = stockBreakdown(name);
+  if (!b.qty && !b.adj && !b.pays) return null;      // 数量が登録されていない景品
+  return Math.max(0, b.left);
 }
 
 /* ========== 4人機のセル ========== */
@@ -3644,31 +3642,33 @@ async function savePrize(){
   }
   renderPrizeForm(); updatePzGauge(); render();
 }
-/* ===================== 在庫整理（棚卸）：倉庫の数を数えて「数えた数」を入れる → 保存で在庫を合わせる ===================== */
+/* ===================== 在庫整理（棚卸）：倉庫＋機械の中の全部を数えて「数えた数」を入れる → 保存で在庫を合わせる ===================== */
 const STK = { v:{}, f:"", q:"" };          // v＝入力中の数（景品名→文字）、f＝機械タイプの絞り込み、q＝検索
 /* 景品ごとの在庫の内訳（スプシ「在庫整理」タブと同じ列・同じ式） */
 function stockBreakdown(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
   const qty = p ? num(p.qty) : sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
-  const b = {qty, pays:0, add4p:0, boxUsed:0, ret:0, adj:stockAdj(name)};
+  const b = {qty, pays:0, add4p:0, boxUsed:0, ret:0, adj:stockAdj(name), pays4p:0, paysBox:0, ret4p:0, retBox:0};
   const set = setOf(name);
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ const pr=clean(x.prize), ap=clean(x.addPrize)||pr;
-      if (pr===name && x.pays!==null && x.pays!==undefined && x.pays!=="") b.pays+=num(x.pays);
+      if (pr===name && x.pays!==null && x.pays!==undefined && x.pays!=="") b.pays4p+=num(x.pays);
       if (ap===name && num(x.add)>0) b.add4p+=num(x.add);
-      if (pr===name && num(x.take)>0) b.ret+=num(x.take); });
+      if (pr===name && num(x.take)>0) b.ret4p+=num(x.take); });
     if ((w.slots||[]).length){
-      w.slots.forEach(sl=>{ if (clean(sl.prize)===name){ if (sl.out) b.pays+=set; if (sl.ret) b.ret+=set; } });
+      w.slots.forEach(sl=>{ if (clean(sl.prize)===name){ if (sl.out) b.paysBox+=set; if (sl.ret) b.retBox+=set; } });
       const rf=boxRefill(w.slots); if (rf[name]) b.boxUsed += rf[name]*set;
     }
   });
-  b.left = qty - b.add4p - b.boxUsed + b.ret + b.adj;
+  b.pays = b.pays4p + b.paysBox; b.ret = b.ret4p + b.retBox;
+  b.inMach = Math.max(0, b.add4p - b.pays4p - b.ret4p) + Math.max(0, b.boxUsed - b.paysBox - b.retBox);   // 記録から見た「いま機械の中にある数」の目安
+  b.left = qty - b.pays + b.adj;                                                                           // 倉庫＋機械の中の合計
   return b;
 }
 function stockRows(){
   const seen=new Set(), rows=[];
   allPrizes().forEach(p=>{ const n=clean(p.name); if (!n || seen.has(n)) return; seen.add(n);
-    rows.push({name:n, kind:p.use||"", calc:stockOf(n), set:setOf(n), last:lastCount(n), bd:stockBreakdown(n)}); });
+    const bd=stockBreakdown(n); rows.push({name:n, kind:p.use||"", calc:stockOf(n)===null?null:bd.left, set:setOf(n), last:lastCount(n), bd}); });
   rows.sort((a,b)=> (a.kind||"").localeCompare(b.kind||"") || a.name.localeCompare(b.name,"ja"));
   return rows;
 }
@@ -3682,15 +3682,15 @@ function renderStock(){
   const dif = r => { const v=STK.v[r.name]; if (v===undefined||v==="") return ""; const d = num(v) - (r.calc===null?0:r.calc); return d===0 ? `<span class="stk-dif ok">計算どおり</span>` : `<span class="stk-dif ${d<0?"minus":"plus"}">差 ${d>0?"+":""}${d}（${d<0?"計算より少ない":"計算より多い"}）</span>`; };
   el.innerHTML = `
     <div class="stk-top">
-      <p class="hint" style="margin:0">スプレッドシートの「在庫整理」タブと同じ内容です。倉庫（店に出していない分）を数えて「数えた数」に入れ、下の保存を押してください。機械の中に入っている分は数えません（巡回の記録で追っています）。計算と違っても、数えた数が正になります。3 個セットは個数で数えます。</p>
+      <p class="hint" style="margin:0">スプレッドシートの「在庫整理」タブと同じ内容です。<b>倉庫の分と機械の中に入っている分を合わせた全部</b>を数えて「数えた数」に入れ、下の保存を押してください。計算上の在庫 ＝ 買った数 − 累計払出数 ± 調整 です。計算と違っても、数えた数が正になります。3 個セットは個数で数えます。</p>
       <div class="chips">${["","4人機用","カリーノ用"].map(k=>`<button type="button" class="chip mini" data-stkf="${k}" aria-pressed="${STK.f===k}">${k||"すべて"}</button>`).join("")}</div>
       <input class="txt" id="stkQ" placeholder="景品名で絞り込み" value="${esc(STK.q)}">
     </div>
     <div class="stk-rows">${shown.map(r=>`
       <div class="stk" data-stk="${esc(r.name)}">
         <div class="stk-nm">${esc(r.name)}<small>${esc(r.kind||"機械タイプ未設定")}${r.set>1?`　・BOX 1枠 ${r.set} こ`:""}</small></div>
-        <div class="stk-bd">買った <b>${r.bd.qty}</b>　払出 <b>${r.bd.pays}</b>　補充(4人機) <b>${r.bd.add4p}</b>　BOXから引いた <b>${r.bd.boxUsed}</b>　回収 <b>${r.bd.ret}</b>${r.bd.adj?`　調整 <b>${r.bd.adj>0?"+":""}${r.bd.adj}</b>`:""}</div>
-        <div class="stk-calc">計算上の残り <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
+        <div class="stk-bd">買った <b>${r.bd.qty}</b>　払出 <b>${r.bd.pays}</b>${r.bd.adj?`　調整 <b>${r.bd.adj>0?"+":""}${r.bd.adj}</b>`:""}　うち機械の中（目安） <b>${r.bd.inMach}</b></div>
+        <div class="stk-calc">計算上の在庫（倉庫＋機械） <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
         <input class="numin stk-in" type="text" inputmode="numeric" maxlength="4" placeholder="数えた数" aria-label="${esc(r.name)} の数えた数" value="${esc(STK.v[r.name]||"")}">
         ${dif(r)}
         <div class="stk-opt"><label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
@@ -3709,7 +3709,7 @@ async function saveStock(){
     <div class="cf-tot">差があるもの <b>${diffs.length}</b> 件。保存すると、数えた数が在庫になります（差は「調整」として記録）</div>`;
   if (!(await confirmSheet(html, "この数で在庫を合わせる"))) return;
   const btn=$("#stkSave"); if (btn) btn.disabled=true;
-  const ok = await Store.add("stock", {items, memo:"", kind:"棚卸", date:todayStr()});
+  const ok = await Store.add("stock", {items, memo:"", kind:"棚卸", date:todayStr(), basis:"total"});   // basis: 計算上の在庫は 倉庫＋機械の中（2026-10-15〜）
   if (ok){ STK.v={}; toast(`在庫を合わせました（${items.length} 景品）`); }
   render();
 }

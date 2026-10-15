@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-15a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-15b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -758,9 +758,52 @@ function maintenanceOnce_() {
   if (!pr.getProperty("repairChainAt")) {           // 2026-10-13：景品名が空のまま保存された記録（10/9 下山門ミニSP など）の復元
     try { var m = repairChain(); pr.setProperty("repairChainAt", nowIso() + " " + String(m).slice(0, 200)); } catch (e) { Logger.log("repairChain: " + e); }
   }
+  if (!pr.getProperty("stockRebaseAt")) {           // 2026-10-15：在庫の定義を「倉庫＋機械の中」に変更 → 保存済みの棚卸の差を取り直す
+    try { var m3 = rebaseStockCounts_(); pr.setProperty("stockRebaseAt", nowIso() + " " + String(m3).slice(0, 200)); } catch (e) { Logger.log("rebaseStockCounts: " + e); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
+}
+/* 保存済みの棚卸（stock）の computed／delta を、「買った数量 − その時点までの払出 ± それまでの調整」（倉庫＋機械の中）で取り直す。
+   10/14〜15 の棚卸は倉庫だけの式（補充・BOX を引いた数）と比べて差を出していたが、実際には機械の中の分も数えていた（2026-10-15 菊地さん）。
+   数えた数（counted）はそのまま。一度やった記録には basis:"total" を付けて二度やらない */
+function rebaseStockCounts_() {
+  var docs = readAllDocs(), pb = prizeBase_(), base = pb.base;
+  (docs.prizes || []).forEach(function (d) { var n = clean(d.name); if (!n) return; var k = normKey_(n); if (!base[k] && num(d.qty) > 0) base[k] = { qty: num(d.qty) }; });
+  var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) Object.keys(d.opts).forEach(function (n) { opt[normKey_(n)] = d.opts[n]; }); });
+  var setOf = function (name) { var k = normKey_(name); var p = (docs.prizes || []).filter(function (d) { return normKey_(d.name) === k && num(d.boxSet) > 1; })[0]; if (p) return num(p.boxSet); if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = pb.base[k]; return b && b.boxSet > 1 ? b.boxSet : 1; };
+  var paysBefore = function (key, t) {   // その時刻より前に記録された払出（4人機の pays ＋ BOX の出た枠×1枠の個数）
+    var n = 0;
+    (docs.weekly || []).forEach(function (w) {
+      if (String(w.createdAt || "") >= t) return;
+      (w.rooms || []).forEach(function (x) { if (normKey_(x.prize) === key && x.pays !== null && x.pays !== undefined && x.pays !== "") n += num(x.pays); });
+      (w.slots || []).forEach(function (s) { if (s.out && normKey_(s.prize) === key) n += setOf(s.prize); });
+    });
+    return n;
+  };
+  var stocks = (docs.stock || []).slice().sort(function (a, b) { return String(a.createdAt || "") < String(b.createdAt || "") ? -1 : 1; });
+  var adjSoFar = {}, changed = 0, sh = dbSheet();
+  stocks.forEach(function (d) {
+    var items = (d.items && d.items.length) ? d.items : [d];
+    var t = String(d.createdAt || ""), touched = false;
+    items.forEach(function (it) {
+      var k = normKey_(it.name); if (!k) return;
+      if (d.basis !== "total") {
+        var qty = base[k] ? num(base[k].qty) : 0;
+        var computed = qty - paysBefore(k, t) + (adjSoFar[k] || 0);
+        it.computed = computed; it.delta = num(it.counted) - computed; touched = true;
+      }
+      adjSoFar[k] = (adjSoFar[k] || 0) + num(it.delta);
+    });
+    if (!touched) return;
+    d.basis = "total";
+    var r = findDbRow("stock", d.id); if (!r) return;
+    sh.getRange(r, 4).setValue(nowIso()); sh.getRange(r, 6).setValue(JSON.stringify(stripId(d)));
+    changed++;
+  });
+  if (changed) { try { rebuildStock(); } catch (e) {} }
+  return "棚卸 " + changed + " 件の差を取り直しました";
 }
 /* 「ピカチュウセレクション」（BOX の枠に入れた名前）を「モンコレ ピカチュウセレクション①」に統一し、
    景品ごとの設定（settings/prizeOpt）に BOX1枠＝3・両方の機械で使う を入れる。いじる用の重複 2 行（数量空）も消す。景品マスタ本体は触らない（反映ボタンで） */
@@ -1393,15 +1436,16 @@ function updateMetricsIfDue() {
    「在庫整理」タブ：1 行＝1 景品。H 列「数えた在庫」だけ手入力できる（他の列は保護）。アプリの在庫整理画面からも同じ所に入る。
    10 分ごとのトリガーで H 列の手入力を取り込み（stock 文書を作る）、全部を作り直す */
 var STOCK_SHEET = "在庫整理";
-var STOCK_HEADERS = ["品名", "機械タイプ", "買った数量", "累計払出数", "補充に使った数（4人機）", "BOXから引いた数", "回収して戻した数", "計算上の残り", "数えた在庫（ここだけ入力）", "差（数えた−計算）", "数えた日", "担当", "メモ", "BOX1枠の個数"];
+/* 在庫 ＝ 買った数量 − 累計払出数 ± 調整（倉庫＋機械の中の合計）。2026-10-15 菊地さん：数えるときは機械の中の分も数える */
+var STOCK_HEADERS = ["品名", "機械タイプ", "買った数量", "累計払出数", "計算上の在庫（倉庫＋機械の中）", "数えた在庫（ここだけ入力）", "差（数えた−計算）", "数えた日", "担当", "メモ", "うち機械の中（記録からの目安）", "BOX1枠の個数"];
+var STOCK_OLD_WIDTH = 16;   // 以前の列構成（14 列＋説明）を消すため
 function stockSheet_() {
   var sh = ss().getSheetByName(STOCK_SHEET);
-  if (!sh) {
-    sh = ss().insertSheet(STOCK_SHEET);
-    sh.getRange(1, 1, 1, STOCK_HEADERS.length).setValues([STOCK_HEADERS]).setFontWeight("bold");
-    sh.setFrozenRows(1); sh.setColumnWidth(1, 260); sh.setColumnWidth(13, 220);
-  }
-  sh.getRange(1, STOCK_HEADERS.length + 2).setValue("数えた在庫（I 列）だけ入力してください。他はアプリが 10 分ごとに作り直します（アプリの景品タブ「在庫整理」と同じ内容）。数えた在庫を入れると、その差が在庫の調整として記録されます。景品マスタなど他のタブは書き換えません。").setFontColor("#999999");
+  if (!sh) { sh = ss().insertSheet(STOCK_SHEET); sh.setFrozenRows(1); sh.setColumnWidth(1, 260); }
+  sh.getRange(1, 1, 1, Math.max(STOCK_OLD_WIDTH, STOCK_HEADERS.length + 2)).clearContent().setFontWeight("normal").setFontColor("#000000");
+  sh.getRange(1, 1, 1, STOCK_HEADERS.length).setValues([STOCK_HEADERS]).setFontWeight("bold");
+  sh.setColumnWidth(10, 220);
+  sh.getRange(1, STOCK_HEADERS.length + 2).setValue("数えた在庫（F 列）だけ入力してください。倉庫の分と機械の中の分を合わせた全部の数です。他はアプリが 10 分ごとに作り直します（アプリの景品タブ「在庫整理」と同じ内容）。数えた在庫を入れると、その差が在庫の調整として記録されます。景品マスタなど他のタブは書き換えません。").setFontColor("#999999");
   return sh;
 }
 /* 景品マスタから 景品ごとの 買った数量・機械タイプ・単価・BOX1枠の個数 を集める（同じ品名の行は合算） */
@@ -1450,20 +1494,20 @@ function stockTable_(docs) {
   var setOf = function (name) { var k = normKey_(name); if (appSet[k]) return appSet[k]; if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = base[k]; return b ? b.boxSet : 1; };
   Object.keys(base).forEach(function (k) { base[k].boxSet = setOf(base[k].name); });
   var mv = {};
-  var row = function (name) { var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, add4p: 0, boxUsed: 0, ret: 0, adj: 0, lastCount: null }; return mv[k]; };
+  var row = function (name) { var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, pays4p: 0, paysBox: 0, add4p: 0, boxUsed: 0, ret: 0, ret4p: 0, retBox: 0, adj: 0, lastCount: null }; return mv[k]; };
   (docs.weekly || []).forEach(function (w) {
     (w.rooms || []).forEach(function (x) {
       var p = clean(x.prize), ap = clean(x.addPrize) || p;
-      if (p && x.pays !== null && x.pays !== undefined && x.pays !== "") row(p).pays += num(x.pays);
+      if (p && x.pays !== null && x.pays !== undefined && x.pays !== "") { row(p).pays += num(x.pays); row(p).pays4p += num(x.pays); }
       if (ap && num(x.add) > 0) row(ap).add4p += num(x.add);
-      if (p && num(x.take) > 0) row(p).ret += num(x.take);
+      if (p && num(x.take) > 0) { row(p).ret += num(x.take); row(p).ret4p += num(x.take); }
     });
     if ((w.slots || []).length) {
       var start = {}, end = {};
       w.slots.forEach(function (s) {
         var p = clean(s.prize), f = clean(s.filled);
-        if (p && s.out) row(p).pays += setOf(p);
-        if (p && s.ret) row(p).ret += setOf(p);
+        if (p && s.out) { row(p).pays += setOf(p); row(p).paysBox += setOf(p); }
+        if (p && s.ret) { row(p).ret += setOf(p); row(p).retBox += setOf(p); }
         if (p && !s.out && !s.ret) start[p] = (start[p] || 0) + 1;
         if (f) end[f] = (end[f] || 0) + 1;
       });
@@ -1478,11 +1522,12 @@ function stockTable_(docs) {
   var out = [];
   var keys = order.slice(); Object.keys(mv).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });   // マスタに無い景品も出す（買った数 0）
   keys.forEach(function (k) {
-    var b = base[k], m = mv[k] || { name: (b || {}).name, pays: 0, add4p: 0, boxUsed: 0, ret: 0, adj: 0, lastCount: null };
+    var b = base[k], m = mv[k] || { name: (b || {}).name, pays: 0, pays4p: 0, paysBox: 0, add4p: 0, boxUsed: 0, ret: 0, ret4p: 0, retBox: 0, adj: 0, lastCount: null };
     var qty = b ? b.qty : 0;
+    var inMach = Math.max(0, m.add4p - m.pays4p - m.ret4p) + Math.max(0, m.boxUsed - m.paysBox - m.retBox);   // 記録から見た「いま機械の中にある数」の目安
     out.push({ key: k, name: (b || m).name, kind: b ? b.kind : "", qty: qty, cost: b ? b.cost : 0, boxSet: b ? b.boxSet : 1, rows: b ? b.rows : [],
-      pays: m.pays, add4p: m.add4p, boxUsed: m.boxUsed, ret: m.ret, adj: m.adj, lastCount: m.lastCount,
-      left: qty - m.add4p - m.boxUsed + m.ret + m.adj, inMaster: !!b });
+      pays: m.pays, add4p: m.add4p, boxUsed: m.boxUsed, ret: m.ret, adj: m.adj, lastCount: m.lastCount, inMach: inMach,
+      left: qty - m.pays + m.adj, inMaster: !!b });                                                            // 在庫 ＝ 倉庫＋機械の中
   });
   return out;
 }
@@ -1494,23 +1539,22 @@ function rebuildStock() {
   var sh = stockSheet_();
   var rows = table.map(function (t) {
     var lc = t.lastCount;
-    return [t.name, t.kind, t.qty, t.pays, t.add4p, t.boxUsed, t.ret, t.left,
-      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(lc.date || lc.createdAt) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.boxSet];
+    return [t.name, t.kind, t.qty, t.pays, t.left,
+      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(lc.date || lc.createdAt) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.inMach, t.boxSet];
   });
-  var maxR = Math.max(sh.getMaxRows(), rows.length + 1);
   if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
-  sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), STOCK_HEADERS.length).clearContent();
+  sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(STOCK_OLD_WIDTH, STOCK_HEADERS.length)).clearContent().setBackground(null).setFontWeight("normal");
   if (rows.length) {
     sh.getRange(2, 1, rows.length, STOCK_HEADERS.length).setValues(rows);
-    sh.getRange(2, 11, rows.length, 1).setNumberFormat("yyyy/mm/dd");
-    sh.getRange(2, 8, rows.length, 1).setFontWeight("bold");
-    sh.getRange(2, 9, rows.length, 1).setBackground("#fff8dc");
+    sh.getRange(2, 8, rows.length, 1).setNumberFormat("yyyy/mm/dd");
+    sh.getRange(2, 5, rows.length, 1).setFontWeight("bold");
+    sh.getRange(2, 6, rows.length, 1).setBackground("#fff8dc");
   }
-  try {   // 数えた在庫（I 列）とメモ（M 列）以外は編集できないようにする（オーナーは常に編集可）
+  try {   // 数えた在庫（F 列）とメモ（J 列）以外は編集できないようにする（オーナーは常に編集可）
     var prots = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
     var pr = prots.length ? prots[0] : sh.protect();
     pr.setDescription("在庫整理：数えた在庫とメモだけ入力");
-    pr.setUnprotectedRanges([sh.getRange("I2:I1000"), sh.getRange("M2:M1000")]);
+    pr.setUnprotectedRanges([sh.getRange("F2:F1000"), sh.getRange("J2:J1000")]);
     pr.setWarningOnly(true);
   } catch (e) {}
   PropertiesService.getScriptProperties().setProperty("stockAt", nowIso());
@@ -1526,13 +1570,13 @@ function syncStockSheet_() {
   var n = 0, now = nowIso();
   v.forEach(function (r) {
     var name = clean(r[0]); if (!name) return;
-    var counted = r[8];
+    var counted = r[5];                                     // F 列：数えた在庫（倉庫＋機械の中）
     if (counted === "" || counted === null || counted === undefined || isNaN(parseFloat(counted))) return;
     counted = Math.round(parseFloat(counted));
     var lc = last[normKey_(name)];
     if (lc && num(lc.counted) === counted) return;          // すでに取り込み済み（表示用に書き戻した値）
-    var computed = num(r[7]);                               // その行の「計算上の残り」（最後に作り直した時点）
-    var rec = { id: newId(), name: name, counted: counted, computed: computed, delta: counted - computed, memo: clean(r[12] || ""), source: "sheet", createdAt: now, by: "シート入力", staff: "シート入力" };
+    var computed = num(r[4]);                               // E 列：その行の「計算上の在庫」（最後に作り直した時点）
+    var rec = { id: newId(), name: name, counted: counted, computed: computed, delta: counted - computed, memo: clean(r[9] || ""), source: "sheet", createdAt: now, by: "シート入力", staff: "シート入力", basis: "total", date: now.slice(0, 10) };
     dbSheet().appendRow(["stock", rec.id, rec.createdAt, now, "シート入力", JSON.stringify(stripId(rec))]);
     n++;
   });
