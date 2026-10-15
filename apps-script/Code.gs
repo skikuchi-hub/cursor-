@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-14d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-15a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -1423,8 +1423,28 @@ function prizeBase_() {
   return { base: base, order: order };
 }
 /* 巡回記録と棚卸記録から、景品ごとの動きを集計する */
+/* 棚卸の記録を 1 景品 1 行にほどく。アプリの棚卸は 1 件に複数景品（items）、在庫整理タブからの取り込みは 1 件 1 景品 */
+function stockEntries_(docs) {
+  var out = [];
+  (docs.stock || []).forEach(function (d) {
+    var items = (d.items && d.items.length) ? d.items : [d];
+    items.forEach(function (it) {
+      var p = clean(it.name); if (!p) return;
+      out.push({ name: p, counted: num(it.counted), computed: num(it.computed), delta: num(it.delta), createdAt: String(d.createdAt || ""),
+                 date: String(it.date || d.date || "").slice(0, 10), by: d.by || d.staff || "", memo: clean(d.memo || it.memo || "") });
+    });
+  });
+  return out;
+}
 function stockTable_(docs) {
   var pb = prizeBase_(), base = pb.base, order = pb.order;
+  // アプリで登録したが景品マスタに行が無い景品（買った数量あり）も載せる（アプリの在庫整理と同じ見え方にする）
+  (docs.prizes || []).forEach(function (d) {
+    var n = clean(d.name); if (!n) return; var k = normKey_(n);
+    if (base[k] || !(num(d.qty) > 0)) return;
+    base[k] = { name: n, kind: d.use === "both" ? "両方" : clean(d.use || ""), qty: num(d.qty), cost: num(d.cost), boxSet: num(d.boxSet) > 1 ? num(d.boxSet) : 1, rows: [], app: true };
+    order.push(k);
+  });
   var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) Object.keys(d.opts).forEach(function (n) { opt[normKey_(n)] = d.opts[n]; }); });
   var appSet = {}; (docs.prizes || []).forEach(function (d) { if (num(d.boxSet) > 1) appSet[normKey_(d.name)] = num(d.boxSet); });
   var setOf = function (name) { var k = normKey_(name); if (appSet[k]) return appSet[k]; if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = base[k]; return b ? b.boxSet : 1; };
@@ -1450,10 +1470,10 @@ function stockTable_(docs) {
       Object.keys(end).forEach(function (n) { var d = end[n] - (start[n] || 0); if (d > 0) row(n).boxUsed += d * setOf(n); });
     }
   });
-  (docs.stock || []).forEach(function (d) {
-    var p = clean(d.name); if (!p) return; var r = row(p);
-    r.adj += num(d.delta);
-    if (!r.lastCount || String(d.createdAt || "") > String(r.lastCount.createdAt || "")) r.lastCount = d;
+  stockEntries_(docs).forEach(function (d) {
+    var r = row(d.name);
+    r.adj += d.delta;
+    if (!r.lastCount || d.createdAt > String(r.lastCount.createdAt || "")) r.lastCount = d;
   });
   var out = [];
   var keys = order.slice(); Object.keys(mv).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); });   // マスタに無い景品も出す（買った数 0）
@@ -1475,7 +1495,7 @@ function rebuildStock() {
   var rows = table.map(function (t) {
     var lc = t.lastCount;
     return [t.name, t.kind, t.qty, t.pays, t.add4p, t.boxUsed, t.ret, t.left,
-      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(String(lc.createdAt || "").slice(0, 10)) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.boxSet];
+      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(lc.date || lc.createdAt) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.boxSet];
   });
   var maxR = Math.max(sh.getMaxRows(), rows.length + 1);
   if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
@@ -1502,7 +1522,7 @@ function syncStockSheet_() {
   var sh = ss().getSheetByName(STOCK_SHEET); if (!sh || sh.getLastRow() < 2) return 0;
   var v = sh.getRange(2, 1, sh.getLastRow() - 1, STOCK_HEADERS.length).getValues();
   var docs = readAllDocs(), last = {};
-  (docs.stock || []).forEach(function (d) { var k = normKey_(d.name); if (!last[k] || String(d.createdAt || "") > String(last[k].createdAt || "")) last[k] = d; });
+  stockEntries_(docs).forEach(function (d) { var k = normKey_(d.name); if (!last[k] || d.createdAt > String(last[k].createdAt || "")) last[k] = d; });
   var n = 0, now = nowIso();
   v.forEach(function (r) {
     var name = clean(r[0]); if (!name) return;
