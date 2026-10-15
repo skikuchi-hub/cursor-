@@ -2464,7 +2464,7 @@ function editPrize(k){
   let finished = false;
   const done = () => {
     if (finished) return; finished = true;
-    if (rm){ rm.prize = clean(inp.value); if (!rm.addPrize || rm.addPrize===rm.prizeWas) rm.addPrize = rm.prize; }
+    if (rm){ rm.prize = clean(inp.value); if (!rm.swap) rm.addPrize = rm.prize; }   // 名前の変更は入れ替えではない（⇄ の流れで決めた入れ替え先だけ残す）。2 回名前を変えると前の名前が残って保存できなかった不具合の修正
     const b = document.createElement("button");
     b.className = "pname "+(rm.prize?"":"none"); b.dataset.act="rename"; b.dataset.k=k;
     b.innerHTML = esc(rm.prize||"景品を選ぶ")+'<span class="pen">✎</span>';
@@ -3385,8 +3385,9 @@ function validateVisit(){
       const b = roomBefore(rm);
       if (num(rm.take) > 0 && b!=="" && num(rm.take) > b + num(rm.add)) block.push(`部屋${rm.k} の回収 ${num(rm.take)} が、残り＋補充（${b + num(rm.add)}）を超えています`);
       // 入れ替え・補充で数が合わなくなるパターン
+      if (!rm.swap && clean(rm.addPrize) && clean(rm.addPrize)!==clean(rm.prize) && !(num(rm.add)>0)) rm.addPrize = rm.prize;   // ⇄ を使っていないのに入れ替え先だけ残っている（古い下書き・名前の変更）→ 名前の訂正として扱う
       const ap = addPrizeOf(rm), cur = clean(rm.prize), swapped = ap && cur && ap!==cur;
-      if (swapped && !(num(rm.add)>0)) block.push(`部屋${rm.k}：新しい景品「${ap}」を選びましたが、入れた数が 0 です`);
+      if (swapped && !(num(rm.add)>0)) block.push(`部屋${rm.k}：新しい景品「${ap}」を選びましたが、入れた数が 0 です（部屋${rm.k} の「補充・回収・入れ替え」を押して数を入れるか、「まちがえた：元にもどす」を押してください）`);
       if (swapped && num(rm.add)>0 && b!=="" && b>0 && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：「${cur}」が ${b}こ残っているのに回収 0 のまま「${ap}」を入れています。古い景品を抜いたなら「抜いた数」を入れてください`);
       if (num(rm.add)>0){ const stk = stockOf(ap||cur); if (stk!==null && num(rm.add) > stk) ask.push(`部屋${rm.k}：「${ap||cur}」の在庫は ${stk}こですが ${num(rm.add)}こ補充しています（景品マスタの在庫が合っていない可能性）`); }
       if (rm.prizeWas!==undefined && st!==null && cur!==clean(rm.prizeWas) && !(num(rm.add)>0) && !(num(rm.take)>0)) ask.push(`部屋${rm.k}：景品名を「${rm.prizeWas||"（空）"}」→「${cur}」に変えましたが、回収・補充が 0 です。中身を入れ替えたなら「⇄ 景品を入れ替える」で数を入れてください（名前の訂正だけなら OK）`);
