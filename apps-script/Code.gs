@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-15b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-15c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -1545,7 +1545,7 @@ function rebuildStock() {
   if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
   sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(STOCK_OLD_WIDTH, STOCK_HEADERS.length)).clearContent().setBackground(null).setFontWeight("normal");
   if (rows.length) {
-    sh.getRange(2, 1, rows.length, STOCK_HEADERS.length).setValues(rows);
+    sh.getRange(2, 1, rows.length, STOCK_HEADERS.length).setValues(rows).setNumberFormat("General");   // 以前の列構成の日付書式（K 列など）を消す
     sh.getRange(2, 8, rows.length, 1).setNumberFormat("yyyy/mm/dd");
     sh.getRange(2, 5, rows.length, 1).setFontWeight("bold");
     sh.getRange(2, 6, rows.length, 1).setBackground("#fff8dc");
