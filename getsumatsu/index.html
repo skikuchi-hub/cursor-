@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-15 新画面62';
+const APP_BUILD='2026-10-15 新画面63';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11537,18 +11537,58 @@ function fixSheetRef(ws){
   Object.keys(ws).forEach(k=>{if(k[0]==='!')return;const c=XLSX.utils.decode_cell(k);any=true;if(c.r>maxR)maxR=c.r;if(c.c>maxC)maxC=c.c});
   if(any)ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:maxC}});
 }
+function sheetHeaderRow(aoa){let hi=0;for(let i=0;i<Math.min(aoa.length,12);i++){if((aoa[i]||[]).filter(v=>typeof v==='string'&&v.trim()&&!/^[\d,.¥\-]+$/.test(v)).length>=3){hi=i;break}}return hi}
+const normHdr=x=>String(x==null?'':x).normalize('NFKC').replace(/\s+/g,'').trim();
+function setCell(ws,r,c,v){if(v==null||v==='')return;const a=XLSX.utils.encode_cell({r,c});const t=typeof v==='number'?'n':(v instanceof Date?'d':'s');if(ws[a]){ws[a].v=v;ws[a].t=t;delete ws[a].w;delete ws[a].f}else ws[a]={v,t}}
 async function addStatementSheets(wb,job,m){
   let groups;try{groups=stmtPartners([job])}catch(e){console.warn('stmtPartners',e);return 0}
   const names=Object.keys(groups);if(!names.length)return 0;
+  /* 引き継ぎ処理（上位店の明細をそのまま引き継ぐ商材）は、上位店の明細の列をそのまま写す：前月の支払明細書で同じ列名のタブを探し、列名が同じ項目は元の値、手数料の列は当月の単価 */
+  let srcRaw=null,srcHdr=null;
+  if(m.carry&&S.meisaiWb&&S.meisaiSheet&&S.meisaiWb.Sheets[S.meisaiSheet]){
+    srcRaw=XLSX.utils.sheet_to_json(S.meisaiWb.Sheets[S.meisaiSheet],{header:1,defval:null});
+    srcHdr=(srcRaw[sheetHeaderRow(srcRaw)]||[]).map(normHdr);
+  }
   const added=[];
   for(const partner of names){
     const rows=groups[partner].flatMap(p=>p.rows);
     let ws=null;
     try{
-      const tpl=await getTemplateWb(partner);const tab=tpl&&findProductTab(tpl.wb,m);
-      if(tab){ws=cloneWorkbook({a:tpl.wb.Sheets[tab]}).a;clearDataRows(ws);writeRowsToTab(ws,rows,m,partner);fixSheetRef(ws)}
+      const tpl=await getTemplateWb(partner);
+      if(tpl){
+        let tab=null,tHdr=null,tHi=0,overlap=0;
+        if(srcHdr){   /* 列名の重なりが一番多いタブ */
+          tpl.wb.SheetNames.filter(sn=>!/^表紙$/.test(sn)).forEach(sn=>{const aoa=XLSX.utils.sheet_to_json(tpl.wb.Sheets[sn],{header:1,defval:null});const hi=sheetHeaderRow(aoa);const h=(aoa[hi]||[]).map(normHdr);
+            const ov=h.filter(x=>x&&srcHdr.includes(x)).length;if(ov>overlap){overlap=ov;tab=sn;tHdr=h;tHi=hi}});
+          if(overlap<3){tab=null}
+        }
+        if(tab&&srcHdr){
+          ws=cloneWorkbook({a:tpl.wb.Sheets[tab]}).a;clearDataRows(ws);
+          const feeC=tHdr.findIndex(x=>/手数料|支払額|支払金額|報酬/.test(x)&&!/日|率/.test(x)),dateC=tHdr.findIndex(x=>/支払日|支払予定日/.test(x));
+          const payeeC=tHdr.findIndex(x=>/^(支払先|パートナー名?|代理店名?)$/.test(x)&&!srcHdr.includes(x));
+          rows.forEach((r,i)=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];
+            tHdr.forEach((name,c)=>{if(!name)return;
+              if(c===feeC){setCell(ws,tHi+1+i,c,Number(r.price)||0);return}
+              if(c===dateC)return;
+              const j=srcHdr.indexOf(name);
+              if(j>=0&&j<raw.length)setCell(ws,tHi+1+i,c,raw[j]);
+              else if(c===payeeC)setCell(ws,tHi+1+i,c,partner);
+            });
+          });
+          fixSheetRef(ws);
+        }else{
+          const tab2=findProductTab(tpl.wb,m);
+          if(tab2){ws=cloneWorkbook({a:tpl.wb.Sheets[tab2]}).a;clearDataRows(ws);writeRowsToTab(ws,rows,m,partner);fixSheetRef(ws)}
+        }
+      }
     }catch(e){console.warn('stmtSheet',partner,e);ws=null}
-    if(!ws){ws=XLSX.utils.aoa_to_sheet([STMT_DEFAULT_HEAD]);try{writeRowsToTab(ws,rows,m,partner)}catch(e){console.warn('stmtSheet default',partner,e)}fixSheetRef(ws)}
+    if(!ws){
+      if(srcHdr){   /* テンプレが無いときは上位店の明細の列＋手数料 */
+        const hdr=srcHdr.filter(Boolean).concat(['支払先','支払手数料']);const aoa=[hdr];
+        rows.forEach(r=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];aoa.push(srcHdr.map((x,j)=>x?raw[j]:undefined).filter((_,j)=>srcHdr[j]).concat([partner,Number(r.price)||0]))});
+        ws=XLSX.utils.aoa_to_sheet(aoa);
+      }else{ws=XLSX.utils.aoa_to_sheet([STMT_DEFAULT_HEAD]);try{writeRowsToTab(ws,rows,m,partner)}catch(e){console.warn('stmtSheet default',partner,e)}fixSheetRef(ws)}
+    }
     const base=('明細_'+stockShort(partner)).slice(0,31);let nm=base,k=2;while(wb.SheetNames.includes(nm)){nm=base.slice(0,28)+'_'+(k++)}
     XLSX.utils.book_append_sheet(wb,ws,nm);added.push(nm);
   }
