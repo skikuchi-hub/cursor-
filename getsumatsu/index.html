@@ -5144,7 +5144,7 @@ function findTemplate(partner){
 }
 /* 対象タブ名を決める（モジュール指定 → 商材名の部分一致） */
 function findProductTab(wb,m){
-  const cands=[m.wtTab,m.wtProduct,(m.title||'').split('/')[0]].filter(Boolean);
+  const cands=[m.wtTab,m.wtProduct,(m.title||'').split('/')[0],(m.title||'').split('/')[1]].filter(Boolean);   /* 最後は上位店名（引き継ぎ処理の HTB など） */
   for(const c of cands){
     const hit=wb.SheetNames.find(sn=>sn===c);
     if(hit)return hit;
@@ -7529,7 +7529,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-14 新画面61';
+const APP_BUILD='2026-10-15 新画面62';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11527,6 +11527,35 @@ function uniqueName(name,used){
   while(used.has(n)){n=name.replace(/(\.[a-z0-9]+)$/i,`(${i})$1`);i++}
   used.add(n);return n;
 }
+/* ---- 商材ごとの出力に、パートナーごとの「支払明細書に貼る内訳」を同じ列並びで入れる ----
+   （2026-10-15 菊地さん「全商材、生成するエクセルに各パートナーごとに貼り付ける明細内訳を過去の支払明細書と同じフォーマットで」）
+   前月の支払明細書（テンプレ）からその商材のタブを写し、列構成そのままに当月の確定行を書く。テンプレが無ければ標準の列。
+   シート名「明細_<パートナー>」で先頭に並べる */
+const STMT_DEFAULT_HEAD=['取次日','氏名','電話番号','商材','商材名','パートナー番号','パートナー名','支払区分','申込番号','アポ担当会社','アポ担当者名','お客様名','支払手数料'];
+function fixSheetRef(ws){
+  let maxR=0,maxC=0,any=false;
+  Object.keys(ws).forEach(k=>{if(k[0]==='!')return;const c=XLSX.utils.decode_cell(k);any=true;if(c.r>maxR)maxR=c.r;if(c.c>maxC)maxC=c.c});
+  if(any)ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:maxR,c:maxC}});
+}
+async function addStatementSheets(wb,job,m){
+  let groups;try{groups=stmtPartners([job])}catch(e){console.warn('stmtPartners',e);return 0}
+  const names=Object.keys(groups);if(!names.length)return 0;
+  const added=[];
+  for(const partner of names){
+    const rows=groups[partner].flatMap(p=>p.rows);
+    let ws=null;
+    try{
+      const tpl=await getTemplateWb(partner);const tab=tpl&&findProductTab(tpl.wb,m);
+      if(tab){ws=cloneWorkbook({a:tpl.wb.Sheets[tab]}).a;clearDataRows(ws);writeRowsToTab(ws,rows,m,partner);fixSheetRef(ws)}
+    }catch(e){console.warn('stmtSheet',partner,e);ws=null}
+    if(!ws){ws=XLSX.utils.aoa_to_sheet([STMT_DEFAULT_HEAD]);try{writeRowsToTab(ws,rows,m,partner)}catch(e){console.warn('stmtSheet default',partner,e)}fixSheetRef(ws)}
+    const base=('明細_'+stockShort(partner)).slice(0,31);let nm=base,k=2;while(wb.SheetNames.includes(nm)){nm=base.slice(0,28)+'_'+(k++)}
+    XLSX.utils.book_append_sheet(wb,ws,nm);added.push(nm);
+  }
+  const rest=wb.SheetNames.filter(n=>!added.includes(n));wb.SheetNames=added.concat(rest);
+  if(wb.Workbook&&Array.isArray(wb.Workbook.Sheets))wb.Workbook.Sheets=wb.SheetNames.map(n=>(wb.Workbook.Sheets.find(x=>x&&x.name===n)||{name:n}));
+  return added.length;
+}
 /* 出力を組み立てる（ダウンロードはしない）。実行が終わった直後にも silent で呼び、会計フォルダへ自動保存する（2026-10-13 菊地さん「直し方のおすすめで」） */
 async function buildOuts(opts){
   opts=opts||{};
@@ -11541,8 +11570,9 @@ async function buildOuts(opts){
       try{
         const meta=computeOutput();
         const wb=m.buildWb();appendVerifySheet(wb);
-        const buf=XLSX.write(wb,{type:'array',bookType:'xlsx'});
-        outs.push({name:uniqueName(S._fname||`${productOf(m)}.xlsx`,used),data:new Uint8Array(buf),desc:`${m.title}: ${meta.sub||''}`,kind:'prod',job});
+        if(m.kind!=='audit'){try{const ns=await addStatementSheets(wb,job,m);if(ns)meta.stmtSheets=ns}catch(e){console.warn('addStatementSheets',e)}}
+        const buf=XLSX.write(wb,{type:'array',cellStyles:true,bookType:'xlsx'});
+        outs.push({name:uniqueName(S._fname||`${productOf(m)}.xlsx`,used),data:new Uint8Array(buf),desc:`${m.title}: ${meta.sub||''}${meta.stmtSheets?`（支払明細書の形の内訳 ${meta.stmtSheets}社）`:''}`,kind:'prod',job});
         results.push({job,meta,partners:(S.outPartners||[]).slice(),checks:(S.checks||[]).slice()});
       }catch(ex){console.error('output',job.key,ex);results.push({job,err:(ex&&ex.message)||String(ex)})}
       await tick();
