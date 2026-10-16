@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-15c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-16a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -285,6 +285,39 @@ function patchDoc(me, col, id, obj) {
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
   return { ok: true, rec: rec };
 }
+/* 景品の修正（機械タイプ・買った数量など一部だけ）。本人か管理者。景品マスタの同じ行（アプリID で対応）も直す（2026-10-16 石原さん：カリーノ用を 4人機用で登録してしまった） */
+var PRIZE_SHEET_FIELDS = { name: "品名", vendor: "仕入先", use: "機械タイプ", cost: "仕入単価（税抜）", qty: "買った数量" };
+function updatePrize_(me, id, obj) {
+  var row = findDbRow("prizes", id);
+  if (!row) throw new Error("記録が見つかりません");
+  var sh = dbSheet();
+  var old; try { old = JSON.parse(sh.getRange(row, 6).getValue()); } catch (e) { old = {}; }
+  var owner = old.by || old.staff || "";
+  if (me.role !== "admin" && owner && owner !== me.name) throw new Error("この記録は " + owner + " さんが登録したものなので修正できません");
+  var rec = Object.assign({}, old);
+  Object.keys(obj || {}).forEach(function (k) { if (k !== "id" && k !== "createdAt" && k !== "by") rec[k] = obj[k]; });
+  rec.id = id; rec.editedAt = nowIso(); rec.editedBy = me.name;
+  sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
+  var ps = ss().getSheetByName("景品マスタ");
+  if (ps) {
+    var idc = idColumn(ps, false), last = ps.getLastRow();
+    if (idc && last >= 2) {
+      var ids = ps.getRange(2, idc, last - 1, 1).getValues(), m = headerMap_(ps);
+      for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(id)) {
+        Object.keys(PRIZE_SHEET_FIELDS).forEach(function (k) {
+          if (!(k in (obj || {}))) return;
+          var c = hcol_(m, PRIZE_SHEET_FIELDS[k]); if (!c) return;
+          var v = rec[k]; if (k === "cost" || k === "qty") v = (v === "" || v === null || v === undefined) ? "" : num(v);
+          ps.getRange(i + 2, c).setValue(v === undefined || v === null ? "" : v);
+        });
+        break;
+      }
+    }
+  }
+  dropCache("sheet_master");
+  try { rebuildStock(); } catch (e) { Logger.log("rebuildStock: " + e); }
+  return { ok: true, rec: rec };
+}
 function removeDoc(me, col, id) {
   if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
@@ -309,6 +342,7 @@ function removeDoc(me, col, id) {
 var REFRESH_TABS = ["巡回ログ", "部屋別ログ", "景品実績"];
 function updateDoc(me, col, id, obj) {
   if (col === "prizes" || col === "weekly") markMetricsDirty_();
+  if (col === "prizes") return updatePrize_(me, id, obj);
   if (col !== "weekly") throw new Error("この記録は修正できません");
   var row = findDbRow(col, id);
   if (!row) throw new Error("記録が見つかりません");
@@ -1604,10 +1638,10 @@ function cleanupMaster(me, dry) {
     want[k].n++;
   });
   if (order.length < 10) throw new Error("いじる用の行が " + order.length + " 行しかありません。消えていませんか？（10 行未満では反映しません）");
-  var mm = headerMap_(pm), mN = hcol_(mm, "品名"), mK = hcol_(mm, "機械タイプ"), mQ = hcol_(mm, "買った数量");
+  var mm = headerMap_(pm), mN = hcol_(mm, "品名"), mK = hcol_(mm, "機械タイプ"), mQ = hcol_(mm, "買った数量"), mI = hcol_(mm, ID_HEADER);
   var mv = pm.getLastRow() >= 2 ? pm.getRange(2, 1, pm.getLastRow() - 1, pm.getLastColumn()).getValues() : [];
   var have = {};
-  mv.forEach(function (r, i) { var name = clean(r[mN - 1]); if (!name) return; var k = normKey_(name); (have[k] = have[k] || []).push({ row: i + 2, name: name, kind: clean(r[mK - 1]), qty: r[mQ - 1] }); });
+  mv.forEach(function (r, i) { var name = clean(r[mN - 1]); if (!name) return; var k = normKey_(name); (have[k] = have[k] || []).push({ row: i + 2, name: name, kind: clean(r[mK - 1]), qty: r[mQ - 1], app: !!(mI && clean(r[mI - 1])) }); });
   var upd = [], add = [], del = [];
   order.forEach(function (k) {
     var w = want[k], rows = have[k];
@@ -1618,7 +1652,8 @@ function cleanupMaster(me, dry) {
     if (ch.length) upd.push({ row: first.row, name: first.name, changes: ch, kind: w.kind, qty: w.qty });
     rows.slice(1).forEach(function (d) { del.push({ row: d.row, name: d.name, why: "同じ品名の重複行" }); });
   });
-  Object.keys(have).forEach(function (k) { if (!want[k]) have[k].forEach(function (d) { del.push({ row: d.row, name: d.name, why: "いじる用に無い" }); }); });
+  // いじる用に無い行は消す。ただし アプリID の付いた行（いじる用を作ったあとにアプリで登録した景品）は残す（2026-10-16）
+  Object.keys(have).forEach(function (k) { if (!want[k]) have[k].forEach(function (d) { if (!d.app) del.push({ row: d.row, name: d.name, why: "いじる用に無い" }); }); });
   var summary = { update: upd.map(function (u) { return u.name + "：" + u.changes.join("、"); }), add: add.map(function (a) { return a.name + "（" + (a.kind || "機械タイプ空") + "・" + (a.qty === "" ? "数量空" : a.qty) + "）"; }), remove: del.map(function (d) { return d.name + "（" + d.why + "）"; }), dry: !!dry };
   if (dry) return summary;
   upd.forEach(function (u) { if (u.kind && mK) pm.getRange(u.row, mK).setValue(u.kind); if (String(u.qty) !== "" && mQ) pm.getRange(u.row, mQ).setValue(num(u.qty)); });

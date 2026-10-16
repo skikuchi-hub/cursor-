@@ -3681,7 +3681,8 @@ function stockBreakdown(name){
 function stockRows(){
   const seen=new Set(), rows=[];
   allPrizes().forEach(p=>{ const n=clean(p.name); if (!n || seen.has(n)) return; seen.add(n);
-    const bd=stockBreakdown(n); rows.push({name:n, kind:p.use||"", calc:stockOf(n)===null?null:bd.left, set:setOf(n), last:lastCount(n), bd}); });
+    const doc = p._sheet ? null : Store.rows("prizes").find(x=>x.id===p.id);
+    const bd=stockBreakdown(n); rows.push({name:n, kind:p.use||"", calc:stockOf(n)===null?null:bd.left, set:setOf(n), last:lastCount(n), bd, pid: doc ? doc.id : null, rawUse: doc ? (doc.use||"") : "", mine: !!doc && (ME && (ME.role==="admin" || (doc.by||doc.staff||"")===me()))}); });
   rows.sort((a,b)=> (a.kind||"").localeCompare(b.kind||"") || a.name.localeCompare(b.name,"ja"));
   return rows;
 }
@@ -3706,7 +3707,7 @@ function renderStock(){
         <div class="stk-calc">計算上の在庫（倉庫＋機械） <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
         <input class="numin stk-in" type="text" inputmode="numeric" maxlength="4" placeholder="数えた数" aria-label="${esc(r.name)} の数えた数" value="${esc(STK.v[r.name]||"")}">
         ${dif(r)}
-        <div class="stk-opt"><label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
+        <div class="stk-opt">${r.mine?`<label>機械タイプ <select class="stk-use" aria-label="${esc(r.name)} の機械タイプ">${["カリーノ用","4人機用"].map(u=>`<option value="${u}" ${r.rawUse===u?"selected":""}>${u}</option>`).join("")}</select></label>`:""}<label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
       </div>`).join("") || `<p class="hint" style="padding:10px 12px">該当する景品がありません</p>`}</div>
     <div class="stk-foot"><button type="button" class="save" id="stkSave" ${typed?"":"disabled"}>数えた分を保存（${typed} 件）</button>
       ${typed?`<button type="button" class="chip mini" id="stkClear">入力を消す</button>`:""}
@@ -5100,6 +5101,8 @@ function wire(){
         const row=e.target.closest(".stk"); if (!row) return; const name=row.dataset.stk;
         if (e.target.classList.contains("stk-set")){ const n=Math.max(1, Math.round(num(e.target.value)||1)); e.target.value=n; if (await setPrizeOpt(name,{boxSet:n})) toast(`${name}：BOX 1枠 ${n} こ`); renderStock(); return; }
         if (e.target.classList.contains("stk-both")){ if (await setPrizeOpt(name,{both:e.target.checked})) toast(e.target.checked?`${name}：両方の機械で使う`:`${name}：元の機械タイプに戻す`); render(); return; }
+        if (e.target.classList.contains("stk-use")){ const r=stockRows().find(x=>x.name===name); if (!r || !r.pid) return; const u=e.target.value;
+          if (await Store.update("prizes", r.pid, {use:u})) toast(`${name}：機械タイプを「${u}」に直しました（景品マスタも）`); render(); return; }
       });
       el.addEventListener("click", e=>{ const c=e.target.closest("[data-stkf]"); if (c){ STK.f=c.dataset.stkf; renderStock(); return; }
         if (e.target.closest("#stkSave")) return saveStock();
