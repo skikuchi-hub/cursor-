@@ -2649,6 +2649,7 @@ function updateDerived(){
     if (!(d.cur>0)) { el.textContent = d.has ? `前回までの累計 ${yen(d.prev)}円` : ""; return; }
     el.textContent = !d.has ? `今月初回：今回分 ${yen(d.delta)}円＝${Math.round(d.delta/PLAY_PRICE)}プレイ`
       : d.reset ? `前回累計 ${yen(d.prev)}円より小さいので、${yen(d.delta)}円を今回分として記録`
+      : d.delta===0 ? `前回累計 ${yen(d.prev)}円と同じ → 今回分 0円（売上が動いていなければこのまま保存できます）`
       : `前回累計 ${yen(d.prev)}円 → 今回分 ${yen(d.delta)}円＝${Math.round(d.delta/PLAY_PRICE)}プレイ`;
   });
   if (!paysTouched) $("#paysIn").value = t.pays;
@@ -2758,14 +2759,17 @@ function renderLogStatus(){
 function updateReadouts(){
   const t = totals();
   const noSales = !!(R && R.noSales);
-  const ok = F.store && F.machine && (t.sales>0 || noSales);
+  // 累計を入れたが前回と同じ金額（今回分 0 円）でも保存できる。売上が 1 日動かない機械もある（2026-10-16 石原さん：下山門カリーノが確定できない）
+  const sameAsPrev = !!(R && !noSales && t.sales===0 && (R.type==="box" ? ["sBox"] : ["sAB","sCD"]).some(f=>{ const d=salesDelta(f); return d.has && d.cur>0 && d.cur===d.prev; }));
+  const ok = F.store && F.machine && (t.sales>0 || noSales || sameAsPrev);
   $("#saveLog").disabled = !ok;
   const missing = [];
   if (!F.store) missing.push("①で店舗を選ぶ");
   else if (!F.machine) missing.push("①で機械を選ぶ");
-  if (F.machine && !(t.sales>0) && !noSales) missing.push(R && R.type==="4p" ? "②で A＋B または C＋D の累計売上を入れる（前回より増えている額）。売上を見ない日は「売上は見ていない（補充だけ）」を押す" : "②で累計売上を入れる（前回より増えている額）。売上を見ない日は「売上は見ていない（補充だけ）」を押す");
+  if (F.machine && !(t.sales>0) && !noSales) missing.push(R && R.type==="4p" ? "②の A＋B・C＋D の累計売上に、機械に表示されている累計をそのまま入れる。売上を見ない日は「売上は見ていない（補充だけ）」を押す" : "②の累計売上に、機械に表示されている累計をそのまま入れる。売上を見ない日は「売上は見ていない（補充だけ）」を押す");
   $("#saveNote").textContent = ok
     ? (noSales ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　補充だけ（売上なし）として保存します`
+       : sameAsPrev ? `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　累計が前回と同じなので 今回分 0円＝0プレイ として保存します`
                : `${F.store}／${F.machine}／${jpDate(F.week)} 訪問　今回分の売上${yen(t.sales)}円＝${t.plays}プレイ として保存します`)
     : (missing.length===1 && missing[0]==="①で機械を選ぶ") ? "巡回を報告：機械タイプごとに押す"
     : (F.machine && R && R.type==="4p") ? ""
@@ -3357,7 +3361,8 @@ function validateVisit(){
     else block.push(`${PHOTO_KINDS[k]}の写真がありません。撮れなかったときは、写真ボタンの下の「撮り忘れた」を押してください`);
   });
   // 累計が前回より少ない＝リセット扱い。「今回分」を入れてしまったミスが多い
-  ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`); });
+  ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`);
+    else if (d.has && d.cur>0 && d.cur===d.prev && !(R && R.noSales)) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回と同じです。売上が動いていなければ 今回分 0円 で OK`); });
   // 同じ日に同じ機械の記録
   const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
   if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
@@ -3411,7 +3416,7 @@ function validateVisit(){
 const SALES_SANITY = 100000;      // 1回の訪問でこれを超える「今回分」は、累計の入力ミス（桁違い・カウンター値の誤入力）の可能性が高い
 async function saveLog(){
   const t = totals();
-  if (!F.store || !F.machine || (t.sales<=0 && !(R && R.noSales))) return;
+  if (!F.store || !F.machine || $("#saveLog").disabled) return;   // 押せる条件は updateReadouts と同じ（前回と同じ累計＝今回分 0 円も可）
   const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
   const warns = v.ask.slice();
   if (t.sales > SALES_SANITY){
