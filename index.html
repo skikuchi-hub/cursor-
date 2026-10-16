@@ -2014,6 +2014,7 @@ function roomPays(rm){                       // 払出＝入力した「取ら�
   return Math.max(0, Math.round(num(rm.taken)));
 }
 function roomBefore(rm){                     // 補充前の残り：前回の数 − 取られた数（初回は手入力）
+  if (rm.fixBefore) return rm.before===""||rm.before===undefined ? "" : Math.max(0, num(rm.before));   // 「数え直した」：いま入っている数を入れ直した（記録の残りが合わないとき）
   const st = prevStock(rm.k);
   if (st===null) return rm.before===""||rm.before===undefined ? "" : Math.max(0, num(rm.before));
   const p = roomPays(rm); if (p===null) return "";
@@ -2137,7 +2138,7 @@ function roomCell(rm){
 function roomActLabel(rm){
   const ap = addPrizeOf(rm), cur = clean(rm.prize);
   if ((rm.swap || num(rm.add)>0) && ap && ap!==cur) return `⇄ ${esc(cur||"？")} −${num(rm.take)} → ${esc(ap)} ＋${num(rm.add)}`;
-  const parts=[]; if (num(rm.add)>0) parts.push(`＋${num(rm.add)} 足した`); if (num(rm.take)>0) parts.push(`−${num(rm.take)} 抜いた`);
+  const parts=[]; if (rm.fixBefore) parts.push(`数え直し ${num(rm.before)} こ`); if (num(rm.add)>0) parts.push(`＋${num(rm.add)} 足した`); if (num(rm.take)>0) parts.push(`−${num(rm.take)} 抜いた`);
   return parts.join("　");
 }
 function renderRoomActs(){
@@ -2339,7 +2340,7 @@ function openRoomSheet(k, step){
   R.rpick = {k, step: step||"what", tmp:{}}; renderRoomSheet();
 }
 function closeRoomSheet(){ if (R) R.rpick=null; const ov=$("#roomSheet"); if (ov) ov.remove(); renderRoomActs(); updateDerived(); saveDraft(); }
-function roomChanged(rm){ return num(rm.add)>0 || num(rm.take)>0 || !!rm.swap || (clean(rm.addPrize) && clean(rm.addPrize)!==clean(rm.prize)); }
+function roomChanged(rm){ return num(rm.add)>0 || num(rm.take)>0 || !!rm.swap || !!rm.fixBefore || (clean(rm.addPrize) && clean(rm.addPrize)!==clean(rm.prize)); }
 function renderRoomSheet(){
   let ov = $("#roomSheet");
   if (!R || !R.rpick){ if (ov) ov.remove(); return; }
@@ -2355,10 +2356,14 @@ function renderRoomSheet(){
       <button type="button" class="sh-btn" data-act="rs-add"><span class="ic">＋</span><span><b>同じ景品を足した</b><small>在庫から補充した</small></span></button>
       <button type="button" class="sh-btn" data-act="rs-take"><span class="ic">↩</span><span><b>抜いて在庫にもどした</b><small>機械から出して持ち帰った</small></span></button>
       <button type="button" class="sh-btn" data-act="rs-swap"><span class="ic">⇄</span><span><b>別の景品に入れかえた</b><small>古いのを抜いて、新しいのを入れた</small></span></button>
+      <button type="button" class="sh-btn plain" data-act="rs-fix"><span class="ic">#</span><span><b>数え直した：いま入っている数を入れ直す</b><small>記録の残り${b!==""?`（${b} こ）`:""}が実物と合わないとき</small></span></button>
       ${roomChanged(rm) ? `<button type="button" class="sh-btn plain" data-act="rs-reset"><span class="ic">⟲</span><span><b>まちがえた：この部屋を元にもどす</b></span></button>` : ""}
       <button type="button" class="sh-btn plain" data-act="rs-close"><span class="ic">✓</span><span><b>そのまま（何もしていない）</b></span></button>`;
   } else if (p.step==="add"){
     body = `<div class="sh-q">「${esc(name)}」を 何こ入れた？</div><div class="sh-sub">${have}</div>${numBox(rm.add)}
+      <button type="button" class="sh-ok" data-act="rs-ok">決定</button><button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
+  } else if (p.step==="fix"){
+    body = `<div class="sh-q">部屋 ${p.k} に「${esc(name)}」は いま何こ入っている？</div><div class="sh-sub">取られたあと・足す前の数。${have||"記録なし"}</div>${numBox(rm.fixBefore ? rm.before : "")}
       <button type="button" class="sh-ok" data-act="rs-ok">決定</button><button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
   } else if (p.step==="take"){
     body = `<div class="sh-q">「${esc(name)}」を 何こ抜いた？</div><div class="sh-sub">${have}${b!==""?`。全部なら ${b}`:""}</div>${numBox(rm.take)}
@@ -2392,12 +2397,14 @@ function onRoomSheetClick(e){
   if (a==="rs-add"){ p.step="add"; return renderRoomSheet(); }
   if (a==="rs-take"){ p.step="take"; return renderRoomSheet(); }
   if (a==="rs-swap"){ p.step="swap1"; return renderRoomSheet(); }
-  if (a==="rs-reset"){ rm.add=""; rm.take=""; rm.addPrize=rm.prize; rm.swap=false; toast(`部屋${p.k} を元にもどしました`); return closeRoomSheet(); }
+  if (a==="rs-fix"){ p.step="fix"; return renderRoomSheet(); }
+  if (a==="rs-reset"){ rm.add=""; rm.take=""; rm.addPrize=rm.prize; rm.swap=false; if (rm.fixBefore){ rm.fixBefore=false; rm.before=""; } toast(`部屋${p.k} を元にもどしました`); return closeRoomSheet(); }
   if (a==="rs-pick"){ p.tmp.name = b.dataset.v; p.step="swap3"; return renderRoomSheet(); }
   if (a==="rs-ok"){
     const n = numIn();
     if (p.step==="add"){ if (!(n>0)){ toast("入れた数を入れてください"); return; } rm.add=n; if (!rm.swap) rm.addPrize=rm.prize; toast(`部屋${p.k}：「${clean(rm.prize)}」を ${n} こ足した`); return closeRoomSheet(); }
     if (p.step==="take"){ if (n===null){ toast("抜いた数を入れてください"); return; } rm.take=n; toast(`部屋${p.k}：${n} こ抜いた（在庫にもどす）`); return closeRoomSheet(); }
+    if (p.step==="fix"){ if (n===null){ toast("いま入っている数を入れてください（0 でも可）"); return; } rm.before=n; rm.fixBefore=true; toast(`部屋${p.k}：いま ${n} こ入っている、で記録を合わせます`); return closeRoomSheet(); }
     if (p.step==="swap1"){ if (n===null){ toast("抜いた数を入れてください（0 でも可）"); return; } p.tmp.take=n; p.step="swap2"; return renderRoomSheet(); }
     if (p.step==="swap2"){ const nm = clean(($("#rsName")||{}).value||""); if (!nm){ toast("新しい景品を選ぶか、名前を打ってください"); return; } p.tmp.name=nm; p.step="swap3"; return renderRoomSheet(); }
     if (p.step==="swap3"){ if (!(n>0)){ toast("入れた数を入れてください"); return; }
@@ -3302,7 +3309,7 @@ const draftKey = () => F.store && F.machine ? `${F.store}|${F.machine}|${F.week}
 function rHasInput(r){
   if (!r) return false;
   if (String(r.sAB||"")!=="" || String(r.sCD||"")!=="" || String(r.sBox||"")!=="" || String(r.counterBox||"")!=="" || r.noSales) return true;
-  if ((r.rooms||[]).some(rm=>rm.counter!=="" || rm.taken!=="" || rm.before!=="" || num(rm.add)>0 || num(rm.take)>0 || (rm.prizeWas!==undefined && rm.prize!==rm.prizeWas))) return true;
+  if ((r.rooms||[]).some(rm=>rm.counter!=="" || rm.taken!=="" || rm.before!=="" || rm.fixBefore || num(rm.add)>0 || num(rm.take)>0 || (rm.prizeWas!==undefined && rm.prize!==rm.prizeWas))) return true;
   if ((r.slots||[]).some(slotChanged)) return true;
   return false;
 }
@@ -3321,7 +3328,7 @@ function draftCount(){ const cutoff=Date.now()-3*864e5; Object.keys(DRAFTS).forE
 function visitSummaryHtml(warns){
   const t = totals();
   const rowsHtml = R.type==="4p"
-    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
+    ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.fixBefore) parts.push(`数え直し <b>${num(rm.before)}</b> こ`); if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
         return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
     : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
         const rt=R.slots.filter(sl=>sl.ret&&sl.prize); const mv=R.slots.filter(sl=>slotMoved(sl)||slotGone(sl)).length;
@@ -3384,7 +3391,7 @@ function validateVisit(){
         else if (diff > 3000) ask.push(`部屋${rm.k} のカウンターが前回から ${Math.round(diff)} 増えています。桁の打ち間違いではありませんか？`);
       }
       const p = roomPays(rm);
-      if (p!==null && st!==null && p > st) block.push(`部屋${rm.k} の取られた数 ${p} が、前回入っていた数 ${st} を超えています`);
+      if (p!==null && st!==null && p > st && !rm.fixBefore) ask.push(`部屋${rm.k} の取られた数 ${p} が、記録上の残り ${st} を超えています。記録が実物と合っていないなら、「補充・回収・入れ替え」→「数え直した」で いま入っている数を入れ直すと次回から合います`);
       if (p!==null && p > 99) block.push(`部屋${rm.k} の取られた数 ${p} が多すぎます`);
       if (num(rm.add) > 200) block.push(`部屋${rm.k} の補充 ${num(rm.add)} が多すぎます`);
       const b = roomBefore(rm);
@@ -3429,7 +3436,7 @@ async function saveLog(){
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
-    pays: roomPays(rm)
+    pays: roomPays(rm), ...(rm.fixBefore ? {recount:true} : {})
   })) : [];
   const slots = R.type==="box" ? R.slots.map(sl=>({
     i:sl.i, prize:clean(sl.prize), out:!!sl.out, ret:!!sl.ret, filled:clean(sl.filled)
@@ -3512,7 +3519,7 @@ function startEdit(id){
         rm.counter = x.counter===undefined||x.counter===null ? "" : x.counter;
         rm.prize = x.prize||rm.prize; rm.prizeWas = rm.prize;
         rm.taken = (x.pays===null||x.pays===undefined) ? "" : x.pays;
-        rm.before = x.before===undefined||x.before===null ? "" : x.before;
+        rm.before = x.before===undefined||x.before===null ? "" : x.before; rm.fixBefore = !!x.recount;
         rm.addPrize = x.addPrize||rm.prize; rm.add = num(x.add)>0 ? num(x.add) : ""; rm.take = num(x.take)>0 ? num(x.take) : ""; });
     } else if ((r.slots||[]).length){
       R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, ret:!!sl.ret, filled:sl.filled||""}));
