@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-19 新画面67';
+const APP_BUILD='2026-10-19 新画面68';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7729,6 +7729,8 @@ function mergeLedger(remote){
   /* 商材ごとの単価の軸: 新しい方 */
   Object.entries(remote.axes||{}).forEach(([k,r])=>{lg.axes=lg.axes||{};const cur=lg.axes[k];if(!cur||(r.at||0)>(cur.at||0)){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.axes[k]=r;n++}}});
   Object.entries(remote.answered||{}).forEach(([k,r])=>{const cur=lg.answered[k];if(!cur||(r.at||'')>(cur.at||'')){lg.answered[k]=r;n++}});
+  /* ライフサポートの固定単価（"R|Hitotech株式会社" など支払先ごと。菊地さんが決めた単価で前月踏襲より優先。2026-10-19）: 新しい方 */
+  Object.entries(remote.stockPrice||{}).forEach(([k,r])=>{lg.stockPrice=lg.stockPrice||{};const cur=lg.stockPrice[k];if(!cur||(r.at||'')>(cur.at||'')){if(JSON.stringify(cur)!==JSON.stringify(r)){lg.stockPrice[k]=r;n++}}});
   /* ショット先出OP: 計画は会社ごと、実績は月×会社ごとに新しい方 */
   if(remote.shot){const m=shotMem();
     Object.entries(remote.shot.plan||{}).forEach(([c,p])=>{const cur=m.plan[c];if(!cur||(p.at||'')>(cur.at||'')){m.plan[c]=p;n++}});
@@ -7739,7 +7741,7 @@ function mergeLedger(remote){
   normalizePending();
   return n;
 }
-function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},axes:lg.axes||{},staffCo:lg.staffCo||{},trend:lg.trend||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
+function ledgerPayload(){const lg=ledgerOf();return {version:2,at:new Date().toISOString(),seed:lg.seed||'',rules:lg.rules,changes:lg.changes,opLists:lg.opLists||{},answers:lg.answers||{},answered:lg.answered||{},stockPrice:lg.stockPrice||{},axes:lg.axes||{},staffCo:lg.staffCo||{},trend:lg.trend||{},board:{unpaid:(S.memory&&S.memory.unpaid)||{},payMiss:(S.memory&&S.memory.payMiss)||{}},shot:(S.memory&&S.memory.shot)||null}}
 /* 台帳を変えたら少し待ってから Drive へ送る（連続操作をまとめる） */
 function syncLedgerSoon(){
   if(!syncReady())return;
@@ -9006,15 +9008,16 @@ function stockBuild(p){
       if(!m[pt]||m[pt].r[ki]!=='売上')m[pt]={r,hdr:s.hdr}})});return o};
   const base=idxOf(baseYm),olderIdx=older.map(idxOf);
   /* 学習: 支払先ごとの見出し、XRM シート → 主な支払先、リストID → OP、単価 */
-  const hdrOf={},sheetPay={},opList={},listCust={},learn={},learnAll={},opPrice={};
+  const hdrOf={},sheetPay={},opList={},listCust={},learn={},learnAll={},opPrice={},ptPrice={};
   const bump=(o,k,v)=>{const m=o[k]||(o[k]={});m[v]=(m[v]||0)+1};
   const top=m=>{if(!m)return null;let b=null,n=-1,t=0;Object.entries(m).forEach(([k,v])=>{t+=v;if(v>n){n=v;b=k}});return {v:b,n,t}};
   const learnFrom=stockYmAdd(target,-STOCK_LEARN_MONTHS);
   months.forEach(ym=>Object.entries(st.months[ym]).forEach(([pt,g])=>{const s=g[K];if(!s)return;
-    if(!hdrOf[pt])hdrOf[pt]=s.hdr;
+    /* 単価の列が無い月（Hitotech の LS(R) 2026-08/09 は見出し欠けで単価が落ちていた）でも、内訳には単価列を出す（2026-10-19） */
+    if(!hdrOf[pt])hdrOf[pt]=s.hdr.some(x=>/単価/.test(x))?s.hdr:s.hdr.concat(['支払い単価']);
     const ci=s.hdr.indexOf('顧客ID'),ki=s.hdr.indexOf('売上返金区分名称'),pi=s.hdr.findIndex(h=>/単価/.test(h)),mi=s.hdr.indexOf('支払い方法');
     s.rows.forEach(r=>{if(r[ki]!=='売上')return;const x=X&&X[stockId(r[ci])];
-      if(ym===baseYm)bump(opPrice,pt,r[pi]);
+      if(ym===baseYm&&pi>=0)bump(opPrice,pt,r[pi]);if(pi>=0&&Number(r[pi])>0)bump(ptPrice,pt,r[pi]);
       if(!x)return;
       if(ym===baseYm){bump(sheetPay,x.sheet,pt);if(x.list){bump(opList,x.list,pt);bump(listCust,x.list,stockId(r[ci]))}}
       const mc=stockMclass(r[mi]);
@@ -9061,7 +9064,9 @@ function stockBuild(p){
     return null};
   const KN={'1':'01','01':'01','2':'02','02':'02','20':'02','3':'03/10','03':'03/10','10':'03/10','03/10':'03/10','4':'04','04':'04','9':'09','09':'09','11':'11'};
   const tablePrice=(acq,kb,mc)=>{const t=OPL.table&&OPL.table[/Exploration/.test(acq||'')?'教育':'取次'];const c=t&&t[KN[String(kb)]];return c?c[mc==='card'?'クレカ':'キャリア']:null};
-  const opPriceOf=pt=>{const t=top(opPrice[pt]);return t?+t.v:(OPL.opPrice||{})[pt]||0};
+  /* 支払先ごとの固定単価（台帳 stockPrice["R|Hitotech株式会社"]={price} など）。菊地さんが決めた単価で、前月踏襲・学習より優先（2026-10-19） */
+  const fixedPrice=pt=>{const o=(ledgerOf().stockPrice||{})[K+'|'+pt];return o&&o.price!=null&&o.price!==''?Number(o.price):null};
+  const opPriceOf=pt=>{const fx=fixedPrice(pt);if(fx!=null)return fx;const t=top(opPrice[pt]);return t&&+t.v>0?+t.v:(OPL.opPrice||{})[pt]||0};
   const tableFrom=OPL.tableFrom||'2025-11';
   const unknownLists={},unknownInfo={};
   const noteUnknown=(l,id)=>{unknownLists[l]=(unknownLists[l]||0)+1;const u=unknownInfo[l]||(unknownInfo[l]={samples:[]});
@@ -9097,11 +9102,13 @@ function stockBuild(p){
         const spi=src.hdr.findIndex(x=>/単価/.test(x));
         const row=h.map((k,i)=>{const j=i===pi?spi:src.hdr.indexOf(k);return j>=0&&j<src.r.length?src.r[j]:''});
         let pr=Math.abs(Number(row[pi])||0),how2=how;
+        if(!(pr>0)){const t=top(ptPrice[pt]);if(t)pr=+t.v}   /* 前月の行に単価が無い（見出し欠けなど）ときは、その支払先に払ってきた単価 */
         /* OP のリストの顧客: WT は条件表の区分の単価まで下げる（OP を新しく払う顧客と、申込が条件表の開始月以降の顧客） */
         if(pt==='Wetopia株式会社'&&op&&(addOp||(x0&&x0.ym>=tableFrom))){
           const ai=src.hdr.indexOf('獲得パートナー');const tp=tablePrice(x0?x0.partner:(ai>=0?src.r[ai]:''),inf.kb,mcT);
           if(tp&&tp<pr){pr=tp;how2='WT条件表'}
         }
+        {const fx=fixedPrice(pt);if(fx!=null)pr=fx}
         row[pi]=neg?-pr:pr;if(ki>=0)row[ki]=d.kubunName;if(mi>=0&&d.method)row[mi]=d.method;fillTx(h,row,d);
         put(pt,row,neg?'返金・CB':how2,row[pi]);
       });
@@ -9145,7 +9152,7 @@ function stockBuild(p){
     const mc=stockMclass(d.method);
     const t=(old?null:top(learn[[pt,x.sheet,x.partner,mc,x.list].join('|')])||top(learn[[pt,x.sheet,x.partner,mc].join('|')]))||top(learnAll[[pt,x.sheet,x.partner,mc].join('|')]);
     if(!t){ck(`単価が決められません（${pt}・${x.partner}・${d.method}）`);return}
-    const pr=+t.v;
+    const pr=fixedPrice(pt)!=null?fixedPrice(pt):+t.v;
     const li=listOf(id,null),inf=listInfo(li.list);
     if(li.list&&!inf)noteUnknown(li.list,id);
     const op=pt==='Wetopia株式会社'&&inf&&inf.co&&autoOp.has(inf.co)?inf.co:'';
