@@ -1199,7 +1199,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
   <div class="dropzone dz-all" id="dzIn">
     <div class="dz-icon">📥</div>
     <div class="dz-title">ここに明細を入れる</div>
-    <div class="dz-hint">Excel・CSV（複数可）。XRM・前月の支払明細書・条件表は Drive から自動で取り込みます。</div>
+    <div class="dz-hint">Excel・CSV・PDF（複数可）。入れたら「⬆ 会計フォルダにアップロード」を押すだけ：保存 → 自動で実行 → 内訳も会計フォルダへ。XRM・前月の支払明細書・条件表は Drive から自動で取り込みます。</div>
     <div class="in-btns">
       <button class="btn-ghost" onclick="document.getElementById('inIn').click()">ファイルを選ぶ（複数可）</button>
       <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-15 新画面65';
+const APP_BUILD='2026-10-19 新画面66';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11040,10 +11040,46 @@ function rebuildJobs(){
 }
 
 /* ---- 入れる画面 ---- */
+/* ---- 進み具合パネル（2026-10-19 菊地さん「動かし方がわからん。処理が進んでるのかもわからん。わかりやすくして」） ----
+   入れたファイルごとに 読み込み／会計フォルダ／実行 の3段階を出し、「次にすること」を1つだけ大きく出す */
+function renderFlowPanel(){
+  const files=document.getElementById('inFiles');if(!files)return;
+  let host=document.getElementById('flowPanel');
+  if(!host){host=document.createElement('div');host.id='flowPanel';files.insertAdjacentElement('beforebegin',host)}
+  const list=(B.files||[]);
+  if(!list.length){host.innerHTML='';return}
+  const ok=t=>`<span class="pill ok">✓ ${esc(t)}</span>`,wait=t=>`<span class="pill warn">${esc(t)}</span>`,flat=t=>`<span class="pill flat">${esc(t)}</span>`,bad=t=>`<span class="pill bad">${esc(t)}</span>`;
+  const kindJa={meisai:'上位店の明細',csv:'決済CSV',pay:'前月の支払明細書',xrm:'XRM',json:'記憶/台帳',skip:'対象外',unknown:'判別できず',error:'エラー'};
+  const rows=list.slice().reverse().map(f=>{
+    const read=!f.kind?wait('読み込み中…'):f.kind==='error'?bad('エラー'):f.kind==='unknown'?bad('判別できず'):ok(kindJa[f.kind]||f.kind);
+    const a=f.arch||{};
+    const arch=a.st==='saved'?ok('保存済み'):a.st==='skip'?ok('あります'):a.st==='pending'?wait('⬆ 未アップロード'):(a.st==='saving'||a.st==='checking')?wait('処理中…'):a.st==='err'?bad('保存できず'):flat('—');
+    let run='';
+    if(f.kind==='csv')run=f.stock&&!f.stock.err?ok('内訳できた'):(f.stock&&f.stock.err?bad('内訳できず'):flat('—'));
+    else if(f.kind==='meisai'){const js=B.jobs.filter(j=>j.file&&j.file.name===f.name);run=!js.length?flat('—'):js.every(j=>j.done)?ok('実行済み'):(B.running?wait('実行中…'):wait('▶ 未実行'))}
+    else run=flat('—');
+    return `<tr><td title="${esc(f.name)}">${esc(f.name.length>28?f.name.slice(0,26)+'…':f.name)}</td><td>${read}</td><td>${arch}</td><td>${run}</td></tr>`;
+  }).join('');
+  const pend=list.filter(f=>f.arch&&f.arch.st==='pending').length;
+  const todo=B.jobs.filter(j=>!j.done).length;
+  const ymK=thisYm();const kaikei=`会計/${+ymK.slice(0,4)}年${+ymK.slice(4)}月会計資料`;
+  let next='';
+  if(B.busy>0)next=`<b>読み込んでいます…</b> 少し待ってください`;
+  else if(B.running)next=`<b>実行しています…</b> 終わると自動で「②内訳を確認」に進みます（下の実行ログで進み具合が見えます）`;
+  else if(pend)next=`<b>次にすること：</b><button class="btn" onclick="archiveNow()">⬆ 会計フォルダにアップロード（${pend}件）</button>　押すと保存して、そのまま実行します`;
+  else if(todo)next=`<b>次にすること：</b><button class="btn" onclick="runBatch()">▶ 実行する（${todo}商材）</button>`;
+  else if(B.outSave&&B.outSave.st==='saving')next=`<b>内訳を会計フォルダに保存しています…</b>`;
+  else if(B.jobs.length&&B.ran)next=`<b>✓ すべて終わりました。</b>内訳は ${esc(kaikei)}/ の各フォルダに入ります（Mac の同期で3分以内）。<a href="#" onclick="go(2);return false">②で確認する</a>／<a href="#" onclick="go(4);return false">③で受け取る</a>`;
+  else if(list.every(f=>['csv','skip','xrm','json','pay'].includes(f.kind)))next=`<b>✓ 反映しました。</b>実行の要らないファイルです（決済CSVの内訳は下のカード。会計フォルダにも保存しています）`;
+  host.innerHTML=`<div class="stockcard" style="margin:0 0 12px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b>進み具合</b><span class="note">①入れる → ②⬆アップロード → ③自動で実行 → ④内訳は会計フォルダへ</span></div>
+    <div class="tbl-wrap" style="margin-top:6px"><table><thead><tr><th>ファイル</th><th>読み込み</th><th>会計フォルダ</th><th>実行</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p style="margin:10px 0 0">${next}</p></div>`;
+}
 function renderIn(){
   const host=document.getElementById('inFiles');if(!host)return;
   const pill=(cls,t)=>`<span class="pill ${cls}">${esc(t)}</span>`;
-  host.innerHTML=B.files.map((f,i)=>{
+  const order=B.files.map((f,i)=>i).reverse();   /* 新しく入れたものを上に */
+  host.innerHTML=order.map(i=>{const f=B.files[i];
     let tag='',d='';
     if(f.kind==='xrm'){tag=pill('info','XRM');d=f.note}
     else if(f.kind==='pay'){tag=pill('flat','前月の支払明細書');d=f.note}
@@ -11073,9 +11109,11 @@ function renderIn(){
       const btn=(a.st==='pending'||a.st==='err')&&a.sig?` <button class="btn btn-sm" onclick="archiveNow(${JSON.stringify(a.sig).replace(/"/g,'&quot;')})">⬆ 会計フォルダにアップロード</button>`:'';
       arch=`<span class="d">${p2} ${esc((a.where?'保存先 '+a.where+'　':'')+(a.why||''))}${btn}</span>`;
     }
-    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${arch}${f.stock?stockCardHtml(i,f.stock):''}</div>`;
+    const stockHtml=f.stock?(f.stock.err?stockCardHtml(i,f.stock):`<details class="adv" style="margin-top:6px"><summary><span>ライフサポート（${f.stock.kind==='R'?'ロボペイ':'SBPS'}）の内訳 ${esc(fmtYmJa(f.stock.target.replace('-','')))}度：合計 ${esc(yen(f.stock.total))}・${f.stock.partners.filter(x=>x.n).length}社</span><span class="adv-sub">開く</span></summary>${stockCardHtml(i,f.stock)}</details>`):'';
+    return `<div class="file"><span class="n" title="${esc(f.name)}">${esc(f.name)}</span><span class="fr">${tag}<button class="fx" title="外す" onclick="removeInFile(${i})">×</button></span><span class="d">${esc(d)}</span>${arch}${stockHtml}</div>`;
   }).join('')||'<p class="note" style="padding:12px 0">まだファイルがありません。上の枠にまとめて入れてください。</p>';
   try{renderUploadHistory()}catch(e){}
+  try{renderFlowPanel()}catch(e){console.warn('flow',e)}
   const npend=(B.files||[]).filter(f=>f.arch&&f.arch.st==='pending').length;
   if(npend>=2&&host)host.innerHTML=`<p class="note" style="padding:6px 0 10px"><button class="btn" onclick="archiveNow()">⬆ 会計フォルダにまとめてアップロード（${npend}件）</button></p>`+host.innerHTML;
   const xs=document.getElementById('inXrm');
@@ -11178,6 +11216,7 @@ function computeStats(job){
 /* ---- 実行: 全ジョブを順番に突合 ---- */
 async function runBatch(){
   if(!B.jobs.length||B.busy)return;
+  B.running=true;try{renderFlowPanel()}catch(e){}
   const p=document.getElementById('inProg');p.innerHTML='';p.classList.add('on');S._progEl=p;
   const btn=document.getElementById('runAll');btn.disabled=true;btn.textContent='実行中…';
   S.detailOpen=false;
@@ -11203,6 +11242,7 @@ async function runBatch(){
     if(pm)progLine(`支払漏れの候補: ${pm}件（「支払漏れ」タブ）`,'err');
   }catch(e){console.error('miss update',e)}
   renderIn();
+  B.running=false;try{renderFlowPanel()}catch(e){}
   setTimeout(()=>go(2),500);
   setTimeout(autoSaveOuts,1500);   /* まとめて実行のあとも出力を会計フォルダへ */
 }
@@ -11666,7 +11706,7 @@ function outDirOf(o){
   return null;
 }
 async function saveOutsToDrive(outs){
-  const set=v=>{B.outSave=v;try{renderOut()}catch(e){}};
+  const set=v=>{B.outSave=v;try{renderOut()}catch(e){}try{renderFlowPanel()}catch(e){}};
   if(!outs||!outs.length)return;
   if(typeof syncReady!=='function'||!syncReady()){set({st:'err',why:'Drive と同期の設定がこの端末にありません（「同期」から設定）'});return}
   set({st:'saving'});
