@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-19 新画面66';
+const APP_BUILD='2026-10-19 新画面67';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11619,15 +11619,28 @@ async function addStatementSheets(wb,job,m){
         }
         if(tab&&srcHdr){
           ws=cloneWorkbook({a:tpl.wb.Sheets[tab]}).a;clearDataRows(ws);
-          const feeC=tHdr.findIndex(x=>/手数料|支払額|支払金額|報酬/.test(x)&&!/日|率/.test(x)),dateC=tHdr.findIndex(x=>/支払日|支払予定日/.test(x));
+          /* 手数料の列＝当月の単価（「支払い単価」「取次手数料」「手数料」「支払手数料」など。上位店側の金額列（販売価格・システム利用料・決済手数料）は元の値のまま）
+             2026-10-19 菊地さん「単価が入ってない」→ 「単価」も手数料の列として扱う */
+          const isFee=x=>/(支払い?単価|取次手数料|^手数料$|支払手数料$|支払額$|支払金額$|報酬$|代理店手数料$)/.test(x)&&!/日|率|税込|上位|販売|決済手数料|システム/.test(x);
+          let feeC=tHdr.map((x,i)=>isFee(x)?i:-1).filter(i=>i>=0);
+          feeC=feeC.length?feeC[feeC.length-1]:-1;   /* 右端の手数料列（左に上位店の手数料列があるテンプレのため） */
+          const dateC=tHdr.findIndex(x=>/支払日|支払予定日/.test(x));
           const payeeC=tHdr.findIndex(x=>/^(支払先|パートナー名?|代理店名?)$/.test(x)&&!srcHdr.includes(x));
+          const fromX=(name,r)=>{const x=r.x||{};
+            if(/営業担当|担当者名/.test(name))return x.staff||'';
+            if(/リストID|リスト番号/.test(name))return x.list||'';
+            if(/獲得パートナー|パートナー企業/.test(name))return x.partner||'';
+            if(/電話番号|連絡先/.test(name))return x.tel||r.tel||'';
+            if(/氏名|お客様名|顧客名/.test(name))return r.name||x.name||'';
+            return ''};
           rows.forEach((r,i)=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];
             tHdr.forEach((name,c)=>{if(!name)return;
               if(c===feeC){setCell(ws,tHi+1+i,c,Number(r.price)||0);return}
               if(c===dateC)return;
               const j=srcHdr.indexOf(name);
-              if(j>=0&&j<raw.length)setCell(ws,tHi+1+i,c,raw[j]);
+              if(j>=0&&j<raw.length&&raw[j]!=null&&raw[j]!=='')setCell(ws,tHi+1+i,c,raw[j]);
               else if(c===payeeC)setCell(ws,tHi+1+i,c,partner);
+              else{const v=fromX(name,r);if(v!=='')setCell(ws,tHi+1+i,c,v)}
             });
           });
           fixSheetRef(ws);
@@ -11639,7 +11652,7 @@ async function addStatementSheets(wb,job,m){
     }catch(e){console.warn('stmtSheet',partner,e);ws=null}
     if(!ws){
       if(srcHdr){   /* テンプレが無いときは上位店の明細の列＋手数料 */
-        const hdr=srcHdr.filter(Boolean).concat(['支払先','支払手数料']);const aoa=[hdr];
+        const hdr=srcHdr.filter(Boolean).concat(['支払先','パートナー支払手数料']);const aoa=[hdr];   /* 上位店の列に手数料があっても区別がつく名前に */
         rows.forEach(r=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];aoa.push(srcHdr.map((x,j)=>x?raw[j]:undefined).filter((_,j)=>srcHdr[j]).concat([partner,Number(r.price)||0]))});
         ws=XLSX.utils.aoa_to_sheet(aoa);
       }else{ws=XLSX.utils.aoa_to_sheet([STMT_DEFAULT_HEAD]);try{writeRowsToTab(ws,rows,m,partner)}catch(e){console.warn('stmtSheet default',partner,e)}fixSheetRef(ws)}
