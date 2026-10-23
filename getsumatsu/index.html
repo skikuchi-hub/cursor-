@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-23 新画面72';
+const APP_BUILD='2026-10-23 新画面73';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -7883,7 +7883,7 @@ async function syncNow(opts){
       const f=await syncFile(man.salesHistory.path,null,{size:man.salesHistory.size,onFrac:fr=>syncProg(88,93,fr,'売上の推移を受信中')});
       const h=JSON.parse(new TextDecoder().decode(new Uint8Array(f.buf)));
       const mem=S.memory||(S.memory=emptyMem());
-      mem.salesHistory={months:h.months||[],upstreams:h.upstreams||{},at:h.generatedAt||''};
+      mem.salesHistory={months:h.months||[],upstreams:h.upstreams||{},billed:h.billed||{},at:h.generatedAt||''};
       await saveMemory();c.salesHistMtime=man.salesHistory.mtime;saveSyncCfg(c);
       syncLog(`売上明細書 ${(h.months||[]).length}ヶ月分の入金を集計しました（上位店 ${Object.keys(h.upstreams||{}).length}社。「収支推移」に表示）`);
     }
@@ -10583,11 +10583,14 @@ function makeCarryModule(cfg){
         const cur=top&&top[1]>=20&&top[1]>=tot*0.5?top[0]:'';   /* 毎月払うストックの明細（引き継ぎの大半が同じ月）だけ */
         /* 菊地さん（2026-10-12）: 途中で払わなくなったお客様（4月度まで払い5〜9月度は払っていない・8月度まで払い9月度に抜けた）は、上位店明細に載っていても払わない */
         /* 菊地さん（2026-10-12）: スキルの「古い案件で前月に払っていないものは今月も0円」を使う。ただし月額ペイだけは今までどおり払う（2ヶ月以上あいた人に要確認の印） */
-        /* 菊地さん（2026-10-23 ネオグリフ 永利さんと突合）: 前月だけ抜けた人（前々月まで払い、前月は上位店明細に請求が無かった）は払う。2ヶ月以上抜けた人は今までどおり0円 */
+        /* 菊地さん（2026-10-23 ネオグリフ 永利さんと突合）: 前々月まで払い、前月は上位店明細に載っていなかった（請求が無かった）人は払う。
+           前月の明細に載っていたのに払っていない人（止めた人）と、2ヶ月以上抜けた人は今までどおり 0円。前月に載っていたかは Mac の sales_history.json の billed（月ごとの LMP 番号）で見る */
+        const billedPrev=(()=>{const b=S.memory&&S.memory.salesHistory&&S.memory.salesHistory.billed;const l=b&&cur&&b[cur];return l&&l.length?new Set(l):null})();
         if(cur)S.rows.forEach(r=>{if(!r.carried||r.modo||!r.lastM)return;
-          if(r.lastM<prevYm(cur)){r.gap=true;r.price=0;r.state='ok';r.resolved=true;r.co=null;
-            r.why=`${fmtYmJa(r.lastM)}度を最後に払っていない（2ヶ月以上払っていない古い案件は今月も0円）`;return}
-          if(r.lastM<cur){r.state='warn';r.gap=true;r.why+=` / 前月 ${fmtYmJa(cur)}度は請求が無く、${fmtYmJa(r.lastM)}度と同じ単価で払う（2026-10-23 菊地さん）`}})}
+          const skippedOnly=r.lastM===prevYm(cur)&&billedPrev&&!billedPrev.has(String(r.key||''));
+          if(r.lastM<cur&&!skippedOnly){r.gap=true;r.price=0;r.state='ok';r.resolved=true;r.co=null;
+            r.why=`${fmtYmJa(r.lastM)}度を最後に払っていない（前月 ${fmtYmJa(cur)}度に払っていない古い案件は今月も0円）`;return}
+          if(skippedOnly){r.state='warn';r.gap=true;r.why+=` / 前月 ${fmtYmJa(cur)}度は上位店明細に載っていなかった（請求なし）ので、${fmtYmJa(r.lastM)}度と同じ単価で払う（2026-10-23 菊地さん）`}})}
       /* 過去にも XRM にも無い新しいお客様でも、店舗コード（会社名ではない店舗アカウント）があれば、同じ明細の同じ店舗・同じ商品・同じ決済の種類のお客様の
          支払先と、契約日が新しい人の単価を当てる（9月度: 月額ペイ TK01 → CHAiNON 655/555/505/581円、クレカは 705/619/624/524円） */
       if(storeC>=0){
