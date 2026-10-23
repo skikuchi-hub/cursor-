@@ -132,6 +132,14 @@ h1,h2,h3{margin:0;text-wrap:balance}
   min-width:19px;padding:0 5px;font-family:var(--fs-mono);font-size:11px;font-weight:700;line-height:17px;text-align:center
 }
 .hdr-btn[data-zero="1"]{background:var(--surface-sunk);color:var(--ink-2);box-shadow:inset 0 0 0 1px var(--line)}
+.hdr-btn.iss{background:var(--danger);margin-left:auto}.hdr-btn.iss .cnt{color:var(--danger-ink)}
+.issuebar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:var(--r-m);background:var(--danger-wash);border:2px solid var(--danger);color:var(--danger-ink);font-size:13px;font-weight:700;line-height:1.45}
+.issuebar .btn{flex:none;white-space:nowrap;padding:7px 12px;font-size:12px;border-radius:8px;border:1px solid var(--danger);background:var(--surface);color:var(--danger-ink);font-weight:800}
+.iss-item{padding:10px 0;border-top:1px solid var(--line);font-size:13px;line-height:1.5}.iss-item:first-child{border-top:0}
+.iss-item .who{font-size:11px;color:var(--ink-3);font-weight:700}.iss-item .who b{color:var(--ink)}
+.iss-item .msg{margin:2px 0 6px}.iss-item.bad .msg{color:var(--danger-ink);font-weight:700}
+.iss-item .acts{display:flex;gap:6px;flex-wrap:wrap}.iss-item .acts button{border:1px solid var(--line-2);background:var(--surface);color:var(--ink);border-radius:8px;font-size:12px;font-weight:700;padding:6px 10px}
+.iss-item .acts button.pri{background:var(--ink);color:var(--surface);border-color:var(--ink)}
 .hdr-btn[data-zero="1"] .cnt{background:transparent;color:var(--ink-3)}
 .save-dot{font-size:10px;color:var(--ink-3);display:flex;align-items:center;gap:4px;flex:none}
 .save-dot b{width:7px;height:7px;border-radius:50%;background:var(--good);display:block}
@@ -1031,6 +1039,7 @@ body{font-variant-numeric:tabular-nums}
     <div class="hdr-row">
       <div class="brand"><b>クレーンログ</b></div>
       <a class="hdr-btn" id="openX" data-zero="1" href="https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit" target="_blank" rel="noopener">📗 シート<span class="cnt" id="xCount" hidden>0</span></a>
+      <button type="button" class="hdr-btn iss" id="issueBtn" hidden>⚠ 要確認<span class="cnt" id="issueCnt">0</span></button>
     </div>
     <div class="hdr-sub">
       <span id="weekBadge">—</span>
@@ -1044,6 +1053,7 @@ body{font-variant-numeric:tabular-nums}
     <!-- ========================= 巡回ログ入力 ========================= -->
     <section class="panel on" id="p-log" role="tabpanel" aria-label="巡回">
 
+      <div class="issuebar" id="issueBar" hidden><span id="issueBarTxt"></span><button type="button" class="btn" id="issueBarOpen">見る</button></div>
       <div class="card wk" id="wkStrip" aria-live="polite">
         <div class="wk-row">
           <div class="wk-k" id="wkTitle">今月の巡回</div>
@@ -1853,7 +1863,8 @@ const Store = {
   async remove(c,id){
     if (API_URL){
       if (!this.online()){ toast("いまは削除できません（オフライン）"); return; }
-      try { await api("remove", {col:c, id}); this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id); render(); }
+      try { const r = await api("remove", {col:c, id}); const upd={}; (r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
+            this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id).map(x=> upd[x.id] || x); render(); }   // 消した記録のあとの訪問は計算し直されて返る
       catch(e){ toast(errMsg(e)); }
       return;
     }
@@ -3518,6 +3529,7 @@ function renderEditBar(){
   const btn=$("#saveLog"); if (btn) btn.textContent = EDIT ? "修正を保存" : "巡回を報告";
   const c2=$("#editCancel2"); if (c2) c2.hidden = !EDIT;
   if (EDIT){ const r=(Store.data.weekly||[]).find(x=>x.id===EDIT.id)||{}; $("#editBarTxt").textContent = `✎ ${jpDate(r.week)} ${r.store||""}／${r.machine||""} の記録を修正中`; }
+  if (typeof renderIssues==="function") renderIssues();   // 修正中は要確認の帯を隠す
 }
 function startEdit(id){
   const r=(Store.data.weekly||[]).find(x=>x.id===id); if(!r || !canDelete(r)) return;
@@ -3563,6 +3575,83 @@ function cancelEdit(){
   EDIT=null; $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
   F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
   renderEditBar(); renderMachineRow(); buildRooms(true); render(); toast("修正をやめました");
+}
+
+/* ===================== 要確認（記録のミスの検出と通知） =====================
+   2026-10-23 菊地さん「こういうエラーをアプリ側に通知して、石原さんがミスってそうだったら石原さんに通知」。
+   保存されている記録を開くたびに点検し、変な記録があれば ヘッダーの「⚠ 要確認」と巡回タブ上の赤い帯で知らせる。
+   担当者には自分の記録だけ、管理者には全員分（担当者名つき）。直近 45 日の記録だけ見る */
+const ISSUE_DAYS = 45;
+function expectedSales(r, all){                    // 記録の累計と「本当の前回」から今回分を計算し直す（サーバーと同じ規則）
+  const cum = cumOf(r);
+  const prev = all.filter(o=>o.id!==r.id && o.store===r.store && o.machine===r.machine && String(o.createdAt||"")<String(r.createdAt||""))
+    .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
+  const pc = prev ? cumOf(prev) : {sAB:0,sCD:0,sBox:0};
+  const d = f => { const c=cum[f], p=pc[f]; if (!prev) return c; if (!(c>0)) return 0; return c<p ? c : c-p; };
+  const box = r.mtype==="box" || (r.slots||[]).length>0;
+  return box ? d("sBox") : d("sAB")+d("sCD");
+}
+function dataIssues(){
+  const out=[], all=Store.data.weekly||[], today=todayStr();
+  const recent = all.filter(r=>daysSince(r.week) <= ISSUE_DAYS && r.source!=="sheet");
+  recent.forEach(r=>{
+    const who = staffOf(r), sales = num(r.sales), push = (level,msg,fix) => out.push({id:r.id, col:"weekly", rec:r, who, level, msg, fix, when:`${jpDate(r.week)} ${r.time||""} ${r.store} ${r.machine}`});
+    if (sales < 0) push("bad", `売上が マイナス ${yen(sales)}円 になっています。累計を空のまま保存した可能性。開いて、機械の累計を入れ直して保存（売上を見ていない日なら「売上は見ていない」）`, "edit");
+    else if (!r.noSales && r.cum){
+      const ex = expectedSales(r, all);
+      if (Math.round(ex)!==Math.round(sales)) push(sales>SALES_SANITY?"bad":"warn", `今回分 ${yen(sales)}円 が、前回の記録から計算し直すと ${yen(ex)}円 です（前の記録が消えた・直された・月またぎ）。開いてそのまま保存すると計算し直されます`, "edit");
+      else if (sales > SALES_SANITY) push("bad", `今回分 ${yen(sales)}円 は 1 回の訪問にしては大きすぎます。累計の桁違い・カウンターの数字を入れた可能性。開いて累計を直す`, "edit");
+    }
+    if (!r.noSales && (r.pays===null||r.pays===undefined)) push("warn", "払出数が入っていません（取られた数が空のまま）。開いて取られた数を入れる", "edit");
+    if ((r.photoMiss||[]).length && daysSince(r.week) <= 14) push("warn", `写真なし（${r.photoMiss.map(k=>PHOTO_KINDS[k]||k).join("・")} 撮り忘れ）。次回は 補充前・補充後 を 1 枚ずつ`, "");
+    const dup = recent.find(o=>o.id!==r.id && o.store===r.store && o.machine===r.machine && o.week===r.week && String(o.createdAt||"")<String(r.createdAt||""));
+    if (dup && Math.abs(num(dup.sales)-sales)<1 && sales>0) push("warn", `同じ日に同じ機械の記録が 2 件あり、売上も同じ ${yen(sales)}円 です。二重登録なら片方を削除（巡回ログの 🗑）`, "delete");
+  });
+  (Store.data.collect||[]).forEach(r=>{
+    const now = visitSalesBetween(r.store, r.fromAt||"", r.createdAt);
+    if (Math.round(now)!==Math.round(num(r.visitSales))) out.push({id:r.id, col:"collect", rec:r, who:r.staff||r.by||"", level:"warn", when:`${jpDate(r.date)} ${r.time||""} ${r.store} 集金`,
+      msg:`集金のあとで巡回記録が変わっています（集金時の合計 ${yen(num(r.visitSales))}円 → いま ${yen(now)}円）。集金額 ${yen(num(r.total))}円 はそのまま。おかしければ集金の履歴で削除してやり直す`, fix:""});
+  });
+  const meName = me(), admin = ME && ME.role==="admin";
+  // 同じ記録の指摘は 1 件にまとめる（ボタンが重複しないように）
+  const g = {}; out.filter(x=> admin || x.who===meName).forEach(x=>{
+    const k = x.col+"/"+x.id;
+    if (!g[k]) g[k] = Object.assign({}, x, {msgs:[x.msg]}); else { g[k].msgs.push(x.msg); if (x.level==="bad") g[k].level="bad"; if (x.fix==="edit") g[k].fix="edit"; }
+  });
+  return Object.values(g).sort((a,b)=>(a.level==="bad"?0:1)-(b.level==="bad"?0:1) || String(b.rec.createdAt||"").localeCompare(String(a.rec.createdAt||"")));
+}
+function renderIssues(){
+  const btn=$("#issueBtn"), bar=$("#issueBar"); if (!btn || !bar) return;
+  const list = dataIssues(), n=list.length, admin = ME && ME.role==="admin", meName=me();
+  btn.hidden = n===0; $("#issueCnt").textContent = n;
+  if (EDIT || n===0){ bar.hidden=true; }
+  else {
+    const by={}; list.forEach(x=>{ by[x.who]=(by[x.who]||0)+1; });
+    const mineN = list.filter(x=>x.who===meName).length, bad = list.filter(x=>x.level==="bad").length;
+    $("#issueBarTxt").textContent = admin
+      ? `⚠ 確認が必要な記録 ${n}件（${Object.keys(by).map(k=>`${k} ${by[k]}`).join("・")}）${bad?`　うち要修正 ${bad}件`:""}`
+      : `⚠ ${meName}さんの記録に確認が必要なものが ${mineN}件あります${bad?`（うち要修正 ${bad}件）`:""}`;
+    bar.hidden=false;
+  }
+  btn.onclick = openIssueSheet; $("#issueBarOpen").onclick = openIssueSheet;
+  const ov = $("#issueSheet"); if (ov) fillIssueSheet(ov, list);   // 開いたまま削除・修正したら中身を更新
+}
+function fillIssueSheet(ov, list){
+  ov.innerHTML = `<div class="cf-card sh-card" role="dialog" aria-modal="true"><div class="sh-q">⚠ 要確認の記録（${list.length}件）</div>
+    <div class="sh-sub">保存した記録を点検して見つかったものです。直すと消えます。${ME && ME.role==="admin" ? "担当者本人のアプリにも同じ内容が出ています。" : ""}</div>
+    ${list.length ? list.map(x=>`<div class="iss-item ${x.level}"><div class="who">${esc(x.when)}　<b>${esc(x.who)}</b></div>${x.msgs.map(m=>`<div class="msg">・${esc(m)}</div>`).join("")}
+      <div class="acts">${x.fix==="edit" && x.col==="weekly" && canDelete(x.rec) ? `<button type="button" class="pri" data-edit-iss="${esc(x.id)}">開いて直す</button>` : ""}${x.col==="weekly" && canDelete(x.rec) ? `<button type="button" class="del" data-c="weekly" data-id="${esc(x.id)}">🗑</button>` : ""}</div></div>`).join("")
+      : `<div class="empty"><b>✅</b>いまは確認が必要な記録はありません</div>`}
+    <div class="cf-acts" style="grid-template-columns:1fr"><button type="button" class="cf-back" id="issClose">閉じる</button></div></div>`;
+  ov.querySelector("#issClose").onclick = () => ov.remove();
+}
+function openIssueSheet(){
+  const ov=document.createElement("div"); ov.id="issueSheet"; ov.className="cf-ov sh-ov";
+  fillIssueSheet(ov, dataIssues());
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  ov.addEventListener("click", e=>{ if (e.target===ov) close(); const b=e.target.closest("[data-edit-iss]"); if (!b) return;
+    close(); const tab=document.querySelector('.tab[data-p="p-log"]'); if (tab) tab.click(); startEdit(b.dataset.editIss); });
 }
 
 /* ===================== 集金（店舗ごとの売上確定） =====================
@@ -5137,7 +5226,7 @@ async function saveGoal(){
 /* ===================== 全体 render ===================== */
 function render(){
   renderWeekStrip(); renderStoreRow(); renderMachineRow(); renderLogStatus();
-  renderPrizeDatalist(); buildRooms(); renderLogList(); renderCollectBox(); renderCollectList();
+  renderPrizeDatalist(); buildRooms(); renderLogList(); renderCollectBox(); renderCollectList(); renderIssues();
   renderPrizeForm(); renderPrizeList(); renderStock(); renderCostForm(); renderCostList();
   renderDash(); renderQuest();
   if ($("#p-src") && $("#p-src").classList.contains("on")) renderSourcing();

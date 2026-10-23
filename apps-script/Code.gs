@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-23a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-23b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -327,19 +327,37 @@ function removeDoc(me, col, id) {
     var owner = rec.by || rec.staff || "";
     if (owner && owner !== me.name) throw new Error("この記録は " + owner + " さんが登録したものなので削除できません");
   }
+  var old = null;
   if (row) {
-    var old; try { old = JSON.parse(dbSheet().getRange(row, 6).getValue()); } catch (e) { old = {}; }
+    try { old = JSON.parse(dbSheet().getRange(row, 6).getValue()); } catch (e) { old = {}; }
     (old.photos || []).forEach(function (p) { try { DriveApp.getFileById(p.fid).setTrashed(true); } catch (e) {} });
     dbSheet().deleteRow(row);
   }
   dematerialize(col, id);
+  // 巡回の記録を消すと、あとの訪問の「前回」が変わる（2026-10-23：消した記録を前回にしていた訪問が累計まるごと今回分のまま残っていた）
+  var recs = [];
+  if (col === "weekly" && old && old.store && old.machine) recs = recomputeLater_(old.store, old.machine, old.createdAt, id, readAllDocs());
   if (col === "prizes") dropCache("sheet_master");
-  return { ok: true };
+  return { ok: true, recs: recs };
 }
 /* 記録の修正（登録した本人か管理者）。巡回の記録のみ。
    createdAt・by・sentAt・photos は元の値を保ち、売上の差分を計算し直して、巡回ログ・部屋別ログ・景品実績の行を作り直す。
    同じ店舗・機械のあとの訪問は「前回」が変わるので、差分と行を同じように作り直す（写真タブの行はそのまま） */
 var REFRESH_TABS = ["巡回ログ", "部屋別ログ", "景品実績"];
+/* 同じ店舗・機械の、createdAt より後の訪問の売上差分と行を作り直す（修正・削除で「前回」が変わるため） */
+function recomputeLater_(store, machine, createdAt, excludeId, docs) {
+  var sh = dbSheet();
+  var later = docs.weekly.filter(function (r) { return r.id !== excludeId && r.store === store && r.machine === machine && String(r.createdAt || "") > String(createdAt || ""); })
+    .sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
+  var recs = [];
+  later.forEach(function (r) {
+    applySalesDelta(r, docs.weekly); rewriteAutoMoney(r);
+    var rr = findDbRow("weekly", r.id); if (!rr) return;
+    sh.getRange(rr, 4, 1, 3).setValues([[nowIso(), "recompute", JSON.stringify(stripId(r))]]);
+    rematerialize(r, docs); recs.push(r);
+  });
+  return recs;
+}
 function updateDoc(me, col, id, obj) {
   if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (col === "prizes") return updatePrize_(me, id, obj);
@@ -360,16 +378,7 @@ function updateDoc(me, col, id, obj) {
   applySalesDelta(rec, docs.weekly);
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
   rematerialize(rec, docs);
-  // あとの訪問（同じ店舗・機械）を作り直す
-  var later = docs.weekly.filter(function (r) { return r.id !== id && r.store === rec.store && r.machine === rec.machine && String(r.createdAt || "") > String(rec.createdAt || ""); })
-    .sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
-  var recs = [];
-  later.forEach(function (r) {
-    applySalesDelta(r, docs.weekly); rewriteAutoMoney(r);
-    var rr = findDbRow("weekly", r.id); if (!rr) return;
-    sh.getRange(rr, 4, 1, 3).setValues([[nowIso(), "recompute", JSON.stringify(stripId(r))]]);
-    rematerialize(r, docs); recs.push(r);
-  });
+  var recs = recomputeLater_(rec.store, rec.machine, rec.createdAt, id, docs);   // あとの訪問（同じ店舗・機械）を作り直す
   return { ok: true, rec: rec, recs: recs };
 }
 function rematerialize(rec, docs) {
