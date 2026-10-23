@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-23 新画面69';
+const APP_BUILD='2026-10-23 新画面70';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9041,7 +9041,7 @@ function stockBuild(p){
      判定の順: 台帳の答え（要確認で選んだもの）→ OPリスト番号一覧（Mac が data/op_lists.json に置く）→ 毎月の支払明細書から覚えたもの */
   const OPL=(S.memory&&S.memory.opLists)||{lists:{},phones:{},table:null,opPrice:{}};
   const ans={};Object.entries(ledgerOf().opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)ans[k]=a});
-  Object.keys(OPL.opPrice||{}).forEach(pt=>{if(!hdrOf[pt]&&!/EN\./.test(pt))hdrOf[pt]=OP_HDR.slice()});
+  /* 2026-10-23: 前月までに内訳シートが無い OP 会社（Owl Eye）を自動で足すのは、確定済みの SBPS 内訳まで変わるので止めた。菊地さんの判断が出たら OP_HDR で有効にする */
   const autoOp=new Set(Object.keys(OPL.opPrice||{}).filter(pt=>hdrOf[pt]&&!/EN\./.test(pt)));
   const digits=v=>String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,'');
   const phones=Object.assign({},OPL.phones||{});
