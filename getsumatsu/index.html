@@ -1205,6 +1205,7 @@ details.adv>#pmSlot1 .pm{box-shadow:none}
       <button class="btn-ghost" onclick="document.getElementById('inDir').click()">📁 月のフォルダごと選ぶ</button>
     </div>
     <div class="in-btns" id="inDrive" hidden></div>
+    <div id="life365Box" hidden style="margin-top:8px"></div>
     <input type="file" id="inIn" accept=".xlsx,.xls,.csv,.json,.pdf" multiple style="display:none">
     <input type="file" id="inDir" webkitdirectory multiple style="display:none">
   </div>
@@ -7544,7 +7545,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-23 新画面73';
+const APP_BUILD='2026-10-23 新画面74';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -8136,6 +8137,41 @@ function renderSalesButtons(){
   const a=document.getElementById('syncSales');if(a)a.innerHTML=ms.map(btn).join('');
   const b=document.getElementById('inDrive');
   if(b){b.hidden=!ms.length;b.innerHTML=ms.slice(0,2).map(btn).join('')}
+  try{renderLife365()}catch(e){console.warn('life365',e)}
+}
+/* ---- Life365（MatoPass 課金明細）: iMac のスクリプトで処理する依頼（2026-10-23 菊地さん「明細処理ボタンも月末処理クラウド内に付けて」）
+   WT はストック払い（その月の入金〇の行すべて）、Liberte・ブランニュー・GeNNeo はショット払い（同じお客様は初回入金分の1回だけ）。
+   ルールと単価は iMac の sync/life365/build_statement.py（スキル shot-partner-payment-statement の写し）。
+   アプリは Drive の out/_requests/life365_<課金月>.json に依頼を置き、iMac の3分ごとの同期が実行して result.json を返す ---- */
+function life365Target(){
+  const its=(SALES_LIST||[]).filter(x=>/MatoPass/i.test(String(x.name||''))&&/(\d{1,2})月期/.test(String(x.name||'')));
+  if(!its.length)return null;const it=its.sort((a,b)=>String(b.month).localeCompare(String(a.month)))[0];
+  const mo=+String(it.name).match(/(\d{1,2})月期/)[1];let y=+String(it.month).slice(0,4);if(mo>+String(it.month).slice(4))y--;   /* 12月期は翌年1月の売上明細書 */
+  return {it,mo,ym:`${y}${String(mo).padStart(2,'0')}`};
+}
+async function life365Request(){
+  const t=life365Target();if(!t){toast('MatoPass 課金明細が Drive（WST の売上明細書）にありません');return}
+  if(!syncReady()){openSync();return}
+  const at=new Date().toISOString();const body=JSON.stringify({kind:'life365',ym:t.ym,at,from:'app'});
+  const r=await syncPost({action:'saveFile',path:`_requests/life365_${t.ym}.json`,b64:btoa(unescape(encodeURIComponent(body)))});
+  if(!(r&&r.ok)){toast('依頼を送れませんでした: '+((r&&r.error)||'不明'),'err');return}
+  const c=syncCfg();c.life365={ym:t.ym,at};saveSyncCfg(c);
+  toast(`Life365（${t.mo}月期）の処理を iMac に頼みました。3分ほどで会計フォルダにできます`);renderLife365();setTimeout(life365Poll,45000);
+}
+async function life365Poll(){
+  const c=syncCfg();if(!c.life365)return;
+  try{const j=await syncGetOnce({action:'file',path:`out/_requests/life365_${c.life365.ym}.result.json`,part:0});
+    const res=JSON.parse(new TextDecoder().decode(b64ToBytes(j.data||'')));c.life365.result=res;saveSyncCfg(c)}catch(e){}
+  renderLife365();const r=c.life365.result;if(!r||r.reqAt!==c.life365.at)setTimeout(life365Poll,45000);
+}
+function renderLife365(){
+  const host=document.getElementById('life365Box');if(!host)return;
+  const t=life365Target();if(!t){host.hidden=true;return}host.hidden=false;
+  const L=syncCfg().life365||null;const r=L&&L.result&&L.result.reqAt===L.at?L.result:null;const waiting=!!(L&&!r&&L.ym===t.ym);
+  if(waiting&&!renderLife365._t){renderLife365._t=setTimeout(()=>{renderLife365._t=null;life365Poll()},5000)}
+  host.innerHTML=`<div class="note">Life365（${esc(t.it.name)}）— WT はストック払い、Liberte・ブランニュー・GeNNeo はショット払い（初回入金分だけ）。iMac が3ファイルを作って会計フォルダの Alt に置きます。</div>
+    <button class="btn-ghost btn-sm" onclick="life365Request()" ${waiting?'disabled':''}>▶ Life365（${t.mo}月期）を処理する</button>${waiting?' <span class="note">iMac で処理中（3分ほど）…</span>':''}
+    ${r?`<div class="note" style="white-space:pre-wrap;margin-top:6px">${r.ok?'✔':'✖'} ${esc(String(r.at||'').replace('T',' ').slice(0,16))} ${r.ok?`→ 会計/${esc(r.outdir||'')}（${(r.files||[]).map(esc).join('・')}）`:esc(r.error||'')}\n${(r.lines||[]).map(esc).join('\n')}</div>`:''}`;
 }
 async function loadSalesMonth(ym){
   if(!syncReady()){openSync();return}
