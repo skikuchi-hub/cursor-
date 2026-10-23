@@ -18,12 +18,12 @@
 var DB_SHEET = "_app_db";
 var STAFF_SHEET = "スタッフ";
 var ID_HEADER = "アプリID";
-var COLS = ["weekly", "prizes", "expenses", "settings", "sourcing", "stock"];   // sourcing＝仕入れ候補の判断（見送り／保留／発注）、stock＝在庫整理（棚卸で数えた数）
+var COLS = ["weekly", "prizes", "expenses", "settings", "sourcing", "stock", "collect"];   // sourcing＝仕入れ候補の判断（見送り／保留／発注）、stock＝在庫整理（棚卸で数えた数）、collect＝集金（店舗ごとの売上確定）
 var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-16a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-23a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -209,13 +209,13 @@ var PLAY_PRICE = 100;
 function cumOf(r) { var c = r && r.cum; return c ? { sAB: num(c.sAB), sCD: num(c.sCD), sBox: num(c.sBox) } : { sAB: num(r && r.sAB), sCD: num(r && r.sCD), sBox: num(r && r.sBox) }; }
 function applySalesDelta(rec, allWeekly) {
   var cum = cumOf(rec);
-  var mon = String(rec.week || "").slice(0, 7);
+  // 前回＝同じ店舗・同じ機械の直近の記録（月をまたいでもよい。2026-10-23：月初の記録が累計をまるごと今回分にしてしまう二重計上を防ぐ）
   var prev = (allWeekly || []).filter(function (o) {
-    return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine &&
-      String(o.week || "").slice(0, 7) === mon && String(o.createdAt || "") < String(rec.createdAt || "");
+    return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine && String(o.createdAt || "") < String(rec.createdAt || "");
   }).sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
   var pc = prev ? cumOf(prev) : { sAB: 0, sCD: 0, sBox: 0 };
-  function d(f) { var c = cum[f], p = pc[f]; return prev ? (c > 0 && c < p ? c : c - p) : c; }
+  // 累計が空（0）のときは「見ていない」扱い：今回分 0、累計は前回のまま（マイナスの今回分を作らない）。累計が前回より小さいときは機械のリセット扱い
+  function d(f) { var c = cum[f], p = pc[f]; if (!prev) return c; if (!(c > 0)) { cum[f] = p; return 0; } return c < p ? c : c - p; }
   rec.sAB = d("sAB"); rec.sCD = d("sCD"); rec.sBox = d("sBox");
   rec.sales = rec.mtype === "box" ? rec.sBox : rec.sAB + rec.sCD;
   if (rec.sales > 1000000) throw new Error("今回分の売上が " + Math.round(rec.sales).toLocaleString("ja-JP") + " 円になります。累計の入力ミス（桁違い）の可能性が高いので保存しませんでした。累計の金額を確認してください");
@@ -491,6 +491,12 @@ function materialize(col, rec, docs) {
       if (rec.memo) { var mc = hcol_(headerMap_(ps), "メモ"); if (mc) ps.getRange(row, mc).setValue(clean(rec.memo)); }   // メモ列は見出しで探す（列が増えても壊れない）
       try { writePrizeExtras_(ps, row, rec); } catch (e) { Logger.log("景品マスタの追加項目: " + e); }   // 仕入日・納品日・店舗・購入者（右端の列）
     }
+  } else if (col === "collect") {
+    var cs = collectSheet_();
+    var lines = (rec.readings || []).map(function (x) { return x.machine + " " + (x.label || "") + "：" + yen(x.prev) + "→" + yen(x.cur) + "＝" + yen(x.sales) + "円" + (x.reset ? "（リセット扱い）" : ""); }).join("\n");
+    var cr = appendValues(cs, [dateOf(rec.date), rec.time || "", rec.store || "", rec.fromDate ? dateOf(rec.fromDate) : "初回", num(rec.total), rec.cash === "" || rec.cash === null || rec.cash === undefined ? "" : num(rec.cash),
+      rec.cash === "" || rec.cash === null || rec.cash === undefined ? "" : num(rec.cash) - num(rec.total), lines, num(rec.visitSales), rec.staff || rec.by || "", rec.memo || ""], rec.id);
+    cs.getRange(cr, 1).setNumberFormat("yyyy/mm/dd"); if (rec.fromDate) cs.getRange(cr, 4).setNumberFormat("yyyy/mm/dd");
   } else if (col === "expenses") {
     var es = ss().getSheetByName("経費台帳");
     if (es) {
@@ -499,8 +505,21 @@ function materialize(col, rec, docs) {
     }
   }
 }
+/* 集金タブ（無ければ作る。既存のタブは触らない） */
+var COLLECT_SHEET = "集金";
+var COLLECT_HEADERS = ["集金日", "時刻", "店舗", "前回の集金", "売上合計（確定）", "実際の現金", "差額（現金−売上）", "機械ごとの累計（前回→今回＝今回分）", "巡回記録の合計（参考）", "担当", "メモ"];
+function collectSheet_() {
+  var sh = ss().getSheetByName(COLLECT_SHEET);
+  if (!sh) {
+    sh = ss().insertSheet(COLLECT_SHEET);
+    sh.getRange(1, 1, 1, COLLECT_HEADERS.length).setValues([COLLECT_HEADERS]).setFontWeight("bold");
+    sh.setFrozenRows(1); sh.setColumnWidth(8, 360); sh.setColumnWidth(3, 160);
+    sh.getRange(1, COLLECT_HEADERS.length + 2).setValue("アプリの「集金する」で確定した内容。売上合計＝機械の累計表示の差（前回集金→今回）。巡回記録の合計は突き合わせ用の参考値。").setFontColor("#999999");
+  }
+  return sh;
+}
 function dematerialize(col, id) {
-  var names = col === "weekly" ? ["巡回ログ", "部屋別ログ", PRIZE_STATS_SHEET, PHOTO_SHEET] : col === "prizes" ? ["景品マスタ"] : col === "expenses" ? ["経費台帳"] : [];
+  var names = col === "weekly" ? ["巡回ログ", "部屋別ログ", PRIZE_STATS_SHEET, PHOTO_SHEET] : col === "prizes" ? ["景品マスタ"] : col === "expenses" ? ["経費台帳"] : col === "collect" ? [COLLECT_SHEET] : [];
   names.forEach(function (n) {
     var sh = ss().getSheetByName(n); if (!sh) return;
     var idc = idColumn(sh, false); if (!idc) return;

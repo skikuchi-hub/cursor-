@@ -387,6 +387,13 @@ body.gbar-on #p-log{padding-bottom:64px}
 .cf-acts{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:14px}
 .cf-back{padding:14px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px}
 .cf-ok{padding:14px;border-radius:12px;border:0;background:var(--navy);color:var(--gold);font-weight:900;font-size:16px}
+.colbox{margin-top:12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:1.5px solid var(--gold);display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.5;color:var(--ink-2)}
+.colbox b{font-size:16px;color:var(--ink);font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
+.colbox .btn{flex:none;margin-left:auto;white-space:nowrap;padding:9px 12px;font-size:13px;font-weight:800;border-radius:10px}
+.col-t td{padding:5px 3px}.col-t td.k{width:auto;font-size:12px}.col-t td.k small{display:block;font-weight:400;color:var(--ink-3)}
+.col-t input{width:100%;box-sizing:border-box;font-family:var(--fs-mono);font-size:15px;font-weight:700;padding:6px 8px;border:1.5px solid var(--line);border-radius:8px;background:var(--surface-2);color:inherit;text-align:right}
+.col-t td.s{text-align:right;font-family:var(--fs-mono);font-weight:700;white-space:nowrap}.col-t td.s .rs{display:block;font-size:10px;color:var(--danger-ink)}
+.col-t .lb{font-size:10px;color:var(--ink-3);display:block}
 /* 記録の修正中 */
 .editbar{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:2px solid var(--gold);color:var(--ink);font-size:13px;font-weight:700}
 .editbar .btn{flex:none;white-space:nowrap;padding:7px 12px;font-size:12px;border-radius:8px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink)}
@@ -1055,6 +1062,7 @@ body{font-variant-numeric:tabular-nums}
           <span class="lbl">機械<span class="req">*</span></span>
           <div class="chips" id="machineRow"></div>
         </div>
+        <div class="colbox" id="collectBox" hidden></div>
       </div>
 
       <div class="card">
@@ -1126,6 +1134,10 @@ body{font-variant-numeric:tabular-nums}
       <div class="card flush" style="margin-top:12px">
         <div class="xhead fold" data-fold="logList" role="button" tabindex="0" aria-expanded="false"><span class="nm">最近の巡回ログ</span><span class="ct" id="logCt">0件</span><span class="chev" aria-hidden="true"></span></div>
         <div id="logList" hidden></div>
+      </div>
+      <div class="card flush" style="margin-top:12px">
+        <div class="xhead fold" data-fold="colList" role="button" tabindex="0" aria-expanded="false"><span class="nm">💰 集金の履歴</span><span class="ct" id="colCt">0件</span><span class="chev" aria-hidden="true"></span></div>
+        <div id="colList" hidden></div>
       </div>
     </section>
 
@@ -1745,7 +1757,7 @@ function signOut(){
 }
 
 /* ===================== データ層（Apps Script 経由でスプレッドシートに保存） ===================== */
-const COLS = ["weekly","prizes","expenses","settings","sourcing","stock"];   // stock＝在庫整理（棚卸で数えた数）
+const COLS = ["weekly","prizes","expenses","settings","sourcing","stock","collect"];   // stock＝在庫整理（棚卸で数えた数）、collect＝集金（店舗ごとの売上確定）
 const Store = {
   db:null, canWrite:true, mode:"local", live:false, syncing:false, pollT:null,
   data:{weekly:[],prizes:[],expenses:[],settings:[],sourcing:[]},
@@ -1991,22 +2003,24 @@ function refreshRoomsAfterSync(){
   if (mergeRoomNames()>0){ buildRooms(true); toast("前回の景品名を読み込みました"); }   // 同じ機械のまま force＝R の値を保ったまま画面だけ作り直す
 }
 
-/* 売上は「今月の累計額」を入力する運用（機械の表示どおり）。記録は前回訪問との差分＝今回分。
-   同じ店・同じ機械・同じ月の直前の記録の累計（cum。無い古い記録は入力値そのもの）を引く。
-   累計が前回より小さいときはリセットとみなし、入力値をそのまま今回分にする */
+/* 売上は「機械に表示されている累計額」を入力する運用。記録は前回訪問との差分＝今回分。
+   同じ店・同じ機械の直前の記録の累計（cum。無い古い記録は入力値そのもの）を引く。月はまたいでよい
+   （2026-10-23：月初の記録が累計をまるごと今回分にする二重計上を防ぐ）。
+   累計が前回より小さいときはリセットとみなし、入力値をそのまま今回分にする。
+   累計が空（0）で前回がある日は「見ていない」扱い：今回分 0、累計は前回のまま（マイナスの今回分を作らない） */
 const cumOf = r => r.cum ? {sAB:num(r.cum.sAB), sCD:num(r.cum.sCD), sBox:num(r.cum.sBox)} : {sAB:num(r.sAB), sCD:num(r.sCD), sBox:num(r.sBox)};
 function prevSalesRec(){
   if(!F.store || !F.machine) return null;
-  const mon = monthOf(F.week);
   return Store.data.weekly
-    .filter(r => r.store===F.store && r.machine===F.machine && monthOf(r.week)===mon && beforeEdit(r))
+    .filter(r => r.store===F.store && r.machine===F.machine && beforeEdit(r))
     .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0] || null;
 }
 function salesDelta(f){                       // f: "sAB" | "sCD" | "sBox" → {cur, prev, delta, reset}
   const pr = prevSalesRec(), prev = pr ? cumOf(pr)[f] : 0;
   if (R && R.noSales) return {cur:prev, prev, delta:0, reset:false, has:!!pr};   // 売上を見ていない日：今回分 0、累計は前回のまま
-  const cur = num(R ? R[f] : 0);
-  const reset = pr && cur>0 && cur<prev;
+  const raw = num(R ? R[f] : 0);
+  if (pr && !(raw>0)) return {cur:prev, prev, delta:0, reset:false, has:true, blank:prev>0};   // 累計が空：前回の累計を引き継ぐ
+  const cur = raw, reset = pr && cur>0 && cur<prev;
   return {cur, prev, delta: pr ? (reset ? cur : cur-prev) : cur, reset, has:!!pr};
 }
 function roomPays(rm){                       // 払出＝入力した「取られた数」
@@ -2653,6 +2667,7 @@ function updateDerived(){
   ["sAB","sCD","sBox"].forEach(f=>{
     const el=document.querySelector(`#roomGrid [data-p="${f}"]`); if (!el) return;
     const d = salesDelta(f);
+    if (d.blank) { el.textContent = `未入力：前回の累計 ${yen(d.prev)}円 のまま（今回分 0円）で記録されます。機械の累計を見たなら入れる`; return; }
     if (!(d.cur>0)) { el.textContent = d.has ? `前回までの累計 ${yen(d.prev)}円` : ""; return; }
     el.textContent = !d.has ? `今月初回：今回分 ${yen(d.delta)}円＝${Math.round(d.delta/PLAY_PRICE)}プレイ`
       : d.reset ? `前回累計 ${yen(d.prev)}円より小さいので、${yen(d.delta)}円を今回分として記録`
@@ -2726,7 +2741,7 @@ function renderStoreRow(){
     F.store = b.dataset.v;
     const st = storeOf(F.store);
     if (st && !st.machines.includes(F.machine)) F.machine = st.machines.length===1 ? st.machines[0] : "";
-    renderStoreRow(); renderMachineRow(); renderLogStatus(); buildRooms(true);
+    renderStoreRow(); renderMachineRow(); renderLogStatus(); renderCollectBox(); buildRooms(true);
   };
 }
 function renderMachineRow(){
@@ -2767,7 +2782,7 @@ function updateReadouts(){
   const t = totals();
   const noSales = !!(R && R.noSales);
   // 累計を入れたが前回と同じ金額（今回分 0 円）でも保存できる。売上が 1 日動かない機械もある（2026-10-16 石原さん：下山門カリーノが確定できない）
-  const sameAsPrev = !!(R && !noSales && t.sales===0 && (R.type==="box" ? ["sBox"] : ["sAB","sCD"]).some(f=>{ const d=salesDelta(f); return d.has && d.cur>0 && d.cur===d.prev; }));
+  const sameAsPrev = !!(R && !noSales && t.sales===0 && (R.type==="box" ? ["sBox"] : ["sAB","sCD"]).some(f=>{ const d=salesDelta(f); return d.has && !d.blank && d.cur>0 && d.cur===d.prev; }));
   const ok = F.store && F.machine && (t.sales>0 || noSales || sameAsPrev);
   $("#saveLog").disabled = !ok;
   const missing = [];
@@ -3343,9 +3358,10 @@ function visitSummaryHtml(warns){
     <div class="cf-tot">今回分 <b>${yen(t.sales)}円</b>＝${t.plays}プレイ　払出 <b>${t.pays}</b>こ　写真 前${nB}／後${nA}${clean($("#memoIn").value)?`<div class="cf-memo">メモ：${esc(clean($("#memoIn").value))}</div>`:""}</div>`;
 }
 const nowHM = () => { const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
-function confirmSheet(html, okLabel){
+function confirmSheet(html, okLabel, opt){
+  opt = opt || {};
   return new Promise(res=>{
-    const ov=document.createElement("div"); ov.className="cf-ov"; ov.innerHTML=`<div class="cf-card" role="dialog" aria-modal="true"><div class="cf-ttl">この内容で保存します</div>${html}<div class="cf-acts"><button type="button" class="cf-back" id="cfBack">戻って直す</button><button type="button" class="cf-ok" id="cfSave">${okLabel||"保存する"}</button></div></div>`;
+    const ov=document.createElement("div"); ov.className="cf-ov"; ov.innerHTML=`<div class="cf-card" role="dialog" aria-modal="true"><div class="cf-ttl">${esc(opt.title||"この内容で保存します")}</div>${html}<div class="cf-acts"><button type="button" class="cf-back" id="cfBack">${esc(opt.cancel||"戻って直す")}</button><button type="button" class="cf-ok" id="cfSave">${okLabel||"保存する"}</button></div></div>`;
     document.body.appendChild(ov);
     const done = v => { ov.remove(); res(v); };
     ov.querySelector("#cfBack").onclick = ()=>done(false);
@@ -3369,7 +3385,8 @@ function validateVisit(){
   });
   // 累計が前回より少ない＝リセット扱い。「今回分」を入れてしまったミスが多い
   ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`);
-    else if (d.has && d.cur>0 && d.cur===d.prev && !(R && R.noSales)) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回と同じです。売上が動いていなければ 今回分 0円 で OK`); });
+    else if (d.has && !d.blank && d.cur>0 && d.cur===d.prev && !(R && R.noSales)) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回と同じです。売上が動いていなければ 今回分 0円 で OK`);
+    else if (d.blank && !(R && R.noSales) && (R && (R.type==="box" ? f==="sBox" : f!=="sBox"))) ask.push(`${FN[f]} の累計が空です。前回の ${yen(d.prev)}円 のまま（今回分 0円）として記録します。機械の累計を見たなら入れてください`); });
   // 同じ日に同じ機械の記録
   const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
   if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
@@ -3546,6 +3563,109 @@ function cancelEdit(){
   EDIT=null; $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
   F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
   renderEditBar(); renderMachineRow(); buildRooms(true); render(); toast("修正をやめました");
+}
+
+/* ===================== 集金（店舗ごとの売上確定） =====================
+   集金額 ＝ 機械に表示されている累計（今回）− 前回の集金時の累計。巡回記録の今回分の合計は突き合わせ用の参考値。
+   確定した金額は記録に固定され、あとで巡回記録を直しても変わらない（違いが出たら履歴に ⚠ を出す）。
+   月の集計（ダッシュボード）は変えない。集金カードの「前回の集金から」だけが確定でリセットされる */
+const COL_FIELDS = t => t==="box" ? [["sBox","BOX"]] : [["sAB","A＋B"],["sCD","C＋D"]];
+function lastCollect(storeName){ return Store.rows("collect").find(r=>r.store===storeName) || null; }
+function visitSalesBetween(storeName, fromAt, toAt){     // 巡回記録の今回分の合計（記録した日時 fromAt より後、toAt まで）
+  return Store.data.weekly.filter(r=>r.store===storeName && String(r.createdAt||"")>String(fromAt||"") && (!toAt || String(r.createdAt||"")<=String(toAt)))
+    .reduce((a,r)=>a+(num(r.sales)||num(r.plays)*PLAY_PRICE),0);
+}
+function collectRows(storeName){                         // 機械×メーターごとの 前回集金時の累計 と 直近の巡回で入れた累計
+  const st = storeOf(storeName); if (!st) return [];
+  const lc = lastCollect(storeName), out=[];
+  st.machines.forEach(m=>{
+    const last = Store.data.weekly.filter(r=>r.store===storeName && r.machine===m).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
+    COL_FIELDS(machineType(m)).forEach(([f,label])=>{
+      const pv = lc ? (lc.readings||[]).find(x=>x.machine===m && x.f===f) : null;
+      out.push({machine:m, f, label, prev: pv ? num(pv.cur) : "", cur: last ? num(cumOf(last)[f]) : "", lastWeek: last ? last.week : ""});
+    });
+  });
+  return out;
+}
+const colSales = (prev,cur) => { const p=num(prev), c=num(cur); return c<p ? {sales:c, reset:true} : {sales:c-p, reset:false}; };
+function renderCollectBox(){
+  const el=$("#collectBox"); if (!el) return;
+  const st = storeOf(F.store);
+  if (!st || EDIT){ el.hidden=true; el.innerHTML=""; return; }
+  const lc = lastCollect(F.store);
+  const since = visitSalesBetween(F.store, lc ? lc.createdAt : "", "");
+  const n = Store.data.weekly.filter(r=>r.store===F.store && String(r.createdAt||"")>String(lc ? lc.createdAt : "")).length;
+  el.hidden=false;
+  el.innerHTML = `<span>💰 ${lc ? `前回の集金 ${jpDate(lc.date)}（${yen(num(lc.total))}円）から` : "まだ集金していません。はじめから"}<br>巡回記録の売上 <b>${yen(since)}円</b>（${n}件）</span><button type="button" class="btn" id="colOpen">集金する</button>`;
+  el.querySelector("#colOpen").onclick = openCollectSheet;
+}
+function openCollectSheet(){
+  const store = F.store, st = storeOf(store); if (!st) return;
+  const rows = collectRows(store), lc = lastCollect(store);
+  const since = visitSalesBetween(store, lc ? lc.createdAt : "", "");
+  const ov=document.createElement("div"); ov.id="colSheet"; ov.className="cf-ov sh-ov";
+  const inp = (i,f,v) => `<input type="text" inputmode="numeric" data-i="${i}" data-f="${f}" value="${v===""?"":v}" placeholder="0">`;
+  ov.innerHTML = `<div class="cf-card sh-card" role="dialog" aria-modal="true">
+    <div class="sh-q">💰 ${esc(store)} の集金</div>
+    <div class="sh-sub">${lc ? `前回の集金 ${jpDate(lc.date)} ${esc(lc.time||"")}（${yen(num(lc.total))}円）` : "初回の集金です。「前回」には、前回集金したときの機械の累計を入れてください（分からなければ 0）"}<br>機械に表示されている累計を「今回」に入れる（直近の巡回で入れた累計を先に入れてあります）。集金額＝今回−前回</div>
+    <table class="cf-t col-t"><tr><td class="k"></td><td><span class="lb">前回の集金時の累計</span></td><td><span class="lb">今回の累計（機械の表示）</span></td><td class="s"><span class="lb">集金額</span></td></tr>
+    ${rows.map((r,i)=>`<tr><td class="k">${esc(r.machine)}<small>${r.label}${r.lastWeek?`　巡回 ${jpDate(r.lastWeek)}`:"　記録なし"}</small></td><td>${inp(i,"prev",r.prev)}</td><td>${inp(i,"cur",r.cur)}</td><td class="s" id="cs${i}"></td></tr>`).join("")}</table>
+    <div class="cf-tot">集金額（確定する売上） <b id="colTotal">0円</b><div class="cf-memo">巡回記録の今回分の合計（参考）：${yen(since)}円 ${lc?`（${jpDate(lc.date)} の集金より後の記録）`:""}</div></div>
+    <div class="field" style="margin-top:10px"><span class="lbl">実際に回収した現金（任意・差額の確認用）</span><input class="sh-num" id="colCash" type="text" inputmode="numeric" placeholder="入れなくてもOK"></div>
+    <div class="field"><span class="lbl">メモ</span><input class="sh-txt" id="colMemo" type="text" placeholder="例：両替機の分は別"></div>
+    <div class="cf-acts"><button type="button" class="cf-back" id="colCancel">やめる</button><button type="button" class="cf-ok" id="colNext">確認へ</button></div></div>`;
+  document.body.appendChild(ov);
+  const close = () => ov.remove();
+  const read = () => rows.map((r,i)=>{ const g=f=>ov.querySelector(`input[data-i="${i}"][data-f="${f}"]`).value.trim(); const pv=g("prev"), cv=g("cur"); const c=colSales(pv,cv);
+    return {machine:r.machine, f:r.f, label:r.label, prev:num(pv), cur:num(cv), rawCur:cv, lastWeek:r.lastWeek, sales:c.sales, reset:c.reset}; });
+  const calc = () => { const rs=read(); rs.forEach((x,i)=>{ $("#cs"+i, ov).innerHTML = `${yen(x.sales)}円${x.reset?`<span class="rs">今回＜前回：リセット扱い</span>`:""}`; });
+    $("#colTotal", ov).textContent = yen(rs.reduce((a,x)=>a+x.sales,0))+"円"; return rs; };
+  ov.addEventListener("input", calc); calc();
+  ov.querySelector("#colCancel").onclick = close;
+  ov.addEventListener("click", e=>{ if (e.target===ov) close(); });
+  ov.querySelector("#colNext").onclick = async () => {
+    const rs = calc(), warns=[];
+    const miss = rs.filter(x=>x.rawCur==="" && (x.lastWeek || x.prev>0));
+    if (miss.length){ alert("「今回の累計」が空です：\n・" + miss.map(x=>`${x.machine} ${x.label}`).join("\n・") + "\n機械に表示されている累計を入れてください"); return; }
+    rs.forEach(x=>{ if (x.reset) warns.push(`${x.machine} ${x.label}：今回 ${yen(x.cur)}円 が前回 ${yen(x.prev)}円 より少ない。機械がリセットされていなければ入力ミスです（今回の累計をそのまま集金額にします）`); });
+    const total = rs.reduce((a,x)=>a+x.sales,0);
+    const cashRaw = $("#colCash", ov).value.trim(), cash = cashRaw==="" ? "" : num(cashRaw);
+    if (since>0 && Math.abs(total-since) > Math.max(2000, since*0.1)) warns.push(`集金額 ${yen(total)}円 と巡回記録の合計 ${yen(since)}円 が大きく違います。累計の入れ間違いか、記録していない売上があります`);
+    if (cash!=="" && cash!==total) warns.push(`実際の現金 ${yen(cash)}円 と集金額 ${yen(total)}円 の差 ${yen(cash-total)}円`);
+    if (total<=0) warns.push("集金額が 0 円です");
+    const memo = clean($("#colMemo", ov).value);
+    const body = `<div class="cf-sub">${jpDate(todayStr())} ${nowHM()}　${esc(me())}　${esc(store)}</div>
+      ${warns.length?`<div class="cf-warn">${warns.map(w=>`<div>⚠ ${esc(w)}</div>`).join("")}</div>`:""}
+      <table class="cf-t">${rs.map(x=>`<tr><td class="k">${esc(x.machine)}</td><td>${x.label}　${yen(x.prev)}円 → ${yen(x.cur)}円</td><td style="text-align:right;white-space:nowrap"><b>${yen(x.sales)}円</b></td></tr>`).join("")}</table>
+      <div class="cf-tot">集金額 <b>${yen(total)}円</b>${cash!==""?`　実際の現金 ${yen(cash)}円（差 ${yen(cash-total)}円）`:""}<div class="cf-memo">${lc?`前回の集金 ${jpDate(lc.date)} 以降`:"初回"}　巡回記録の合計 ${yen(since)}円${memo?`　メモ：${esc(memo)}`:""}</div></div>`;
+    ov.hidden = true;
+    const ok1 = await confirmSheet(body, "次へ（もう一度確認）", {title:"集金の内容を確認（1回目）", cancel:"やめる"});
+    if (!ok1){ ov.hidden=false; return; }
+    const ok2 = await confirmSheet(`<div class="cf-warn">確定すると ${esc(store)} の売上 <b>${yen(total)}円</b>（${lc?`${jpDate(lc.date)} の集金から`:"はじめから"}きょうまで）が集金済みになり、集金カードの売上は 0 円から数え直します。<br>間違えたときは「集金の履歴」の 🗑 で削除できます。</div>${body}`, "確定する", {title:"本当に確定しますか？（2回目）", cancel:"やめる"});
+    if (!ok2){ ov.hidden=false; return; }
+    const rec = {store, date:todayStr(), time:nowHM(), fromDate: lc ? lc.date : "", fromAt: lc ? lc.createdAt : "", fromId: lc ? lc.id : "",
+      readings: rs.map(x=>({machine:x.machine, f:x.f, label:x.label, prev:x.prev, cur:x.cur, sales:x.sales, reset:x.reset})),
+      total, visitSales:since, cash, memo, staff:me()};
+    close();
+    if (await Store.add("collect", rec)) toast(`集金を確定しました：${store} ${yen(total)}円`);
+  };
+}
+function renderCollectList(){
+  const el=$("#colList"), rows=Store.rows("collect"); if (!el) return;
+  $("#colCt").textContent = rows.length+"件";
+  if (!rows.length){ el.innerHTML=`<div class="empty"><b>💰</b>まだ集金の記録がありません。<br>店舗を選ぶと出る「集金する」から確定します。</div>`; return; }
+  el.innerHTML = rows.map(r=>{
+    const now = visitSalesBetween(r.store, r.fromAt||"", r.createdAt);
+    const drift = Math.round(now)!==Math.round(num(r.visitSales));
+    const lines = (r.readings||[]).map(x=>`${esc(x.machine)} ${esc(x.label||"")} ${yen(num(x.prev))}→${yen(num(x.cur))}＝${yen(num(x.sales))}${x.reset?"（リセット）":""}`).join("　");
+    const cash = r.cash==="" || r.cash===null || r.cash===undefined ? "" : `　現金 ${yen(num(r.cash))}円（差 ${yen(num(r.cash)-num(r.total))}円）`;
+    return `<div class="rowitem" style="--sc:${storeColor(r.store)}"><span class="sw"></span><div class="bd">
+      <div class="t1">${esc(r.store)}　<span style="font-family:var(--fs-mono)">${yen(num(r.total))}円</span></div>
+      <div class="t2">${jpDate(r.date)} ${esc(r.time||"")}　${r.fromDate?`${jpDate(r.fromDate)} の集金から`:"初回"}　担当 ${esc(r.staff||r.by||"")}${cash}</div>
+      <div class="t2" style="white-space:normal">${lines}</div>
+      <div class="t2">巡回記録の合計 ${yen(num(r.visitSales))}円${drift?`　<span class="tag dup">⚠ 巡回記録が後から変わっています（いま ${yen(now)}円）。集金額はそのまま</span>`:""}${r.memo?`　メモ：${esc(r.memo)}`:""}</div>
+    </div>${delBtn("collect",r)}</div>`;
+  }).join("");
 }
 
 function renderLogList(){
@@ -5017,7 +5137,7 @@ async function saveGoal(){
 /* ===================== 全体 render ===================== */
 function render(){
   renderWeekStrip(); renderStoreRow(); renderMachineRow(); renderLogStatus();
-  renderPrizeDatalist(); buildRooms(); renderLogList();
+  renderPrizeDatalist(); buildRooms(); renderLogList(); renderCollectBox(); renderCollectList();
   renderPrizeForm(); renderPrizeList(); renderStock(); renderCostForm(); renderCostList();
   renderDash(); renderQuest();
   if ($("#p-src") && $("#p-src").classList.contains("on")) renderSourcing();
