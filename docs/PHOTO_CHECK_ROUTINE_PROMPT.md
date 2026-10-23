@@ -16,7 +16,7 @@ claude.ai のルーティン画面で作る（または直す）ときの設定�
 - スプレッドシート「クレーンゲーム日報」（ファイルID 1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs）を Google Drive の download_file_content で exportMimeType=application/vnd.openxmlformats-officedocument.spreadsheetml.sheet として取得し、base64 を復号して xlsx として保存、python（openpyxl）で読む（出力が大きいときは保存先ファイルを python で処理する）。
 - タブ「写真」の 2 行目以降で、G 列（ファイルID）があり I 列（チェック日時）が空の行が対象。列：A 訪問日 / B 店舗 / C 機械 / D 担当 / E 種別（補充前／補充後） / F 写真URL / G ファイルID / H 登録日時 / I チェック日時 / J 空き部屋 / K 空き数 / L 報告の払出 / M 照合 / N POP数 / O 陳列スコア / P 所見 / Q 競合メモ / 最終列 アプリID。
 - Drive フォルダ「_チェック結果」（search_files で title = '_チェック結果' and mimeType = 'application/vnd.google-apps.folder'）の中にある JSON（title contains 'check_'、done_ 付きも含む）を読み、そこに既に載っている fid は取り込み待ちなので対象から外す。
-- 対象が 0 枚なら「新しい写真はありません」とだけ報告して終了。
+- 対象が 0 枚なら写真の作業（2〜4）は飛ばし、6 の「修正完了」の確認だけして報告する。
 - 報告の払出（reportedPays）は、タブ「_app_db」で同じアプリID（A 列 col=weekly、B 列 id）の F 列 JSON を読む。slots がある BOX 機は out=true の枠の数、rooms がある 4 人機は rooms[].pays の合計。読めなければ null。同じ JSON の slots[].filled（入れた景品）や rooms[].add/addPrize（補充）も、補充後写真の照合に使う。
 - 見比べ用に、同じ店舗・機械で直前の訪問の「補充後」写真（チェック済みでもよい）があれば、その G 列のファイルIDも控える。
 
@@ -45,8 +45,13 @@ claude.ai のルーティン画面で作る（または直す）ときの設定�
 - 置けたら、アプリ側の Apps Script（importPhotoChecks）が自動で「写真」タブに取り込む。あなたがスプレッドシートを編集する必要はない。
 - フォルダが見つからないときは、報告に「_チェック結果 フォルダが見つかりません。Apps Script の setup を実行してください」と書く。
 
+## 6. 「修正完了」の確認（写真が 0 枚でも必ずやる）
+- タブ「_app_db」で A 列 col=settings、B 列 id=issueFixed の行の F 列 JSON を読む。items[] の各要素は {col,id,who,at,when,msgs,kinds}（担当者がアプリの「⚠ 要確認」で「修正完了」を押したもの）。at が過去 48 時間以内のものが対象。無ければ「修正完了の報告はありません」と書く。
+- 対象ごとに _app_db の同じ col・id の行の F 列 JSON（記録）を読み、msgs に書かれた問題が直っているかを見る：売上がマイナス → sales が 0 以上か／今回分が前回と合わない → 同じ store・machine で createdAt がそれより前の直近の記録の cum と比べ、cum の各項目について（今回が 0 なら 0、今回＜前回なら今回、それ以外は 今回−前回）の合計（BOX 機は sBox、4 人機は sAB＋sCD）が sales と一致するか／払出数が未入力 → pays が null でないか／写真なし → photos に before と after があるか。行が無ければ「削除済み」。
+- 報告に「修正完了の確認：n 件。直っている m 件、直っていない k 件」と、直っていないものは 誰の・いつ・どの店舗・機械・何が残っているか を 1 件 1 行で書く。
+
 ## 5. 報告（最後のメッセージ）
-- 1 行目：枚数と結果（例「今日の写真 4 枚（補充前 2・補充後 2）：一致 3、不一致 1」）。
+- 1 行目：枚数と結果（例「今日の写真 4 枚（補充前 2・補充後 2）：一致 3、不一致 1」）。写真が 0 枚でも 6 の修正完了の確認は報告する。
 - 不一致・スコア 2 以下・補充後の写真の可能性・空き部屋 3 つ以上・補充前か補充後の片方しかない訪問 のものだけ、店舗／機械／担当／訪問日と所見を 1 件 1〜2 行で。問題がなければ「問題なし」。
 - 位置や POP の傾向で言えることがあれば最後に 1〜2 文。データが少ないうちは無理に言わない。
 - 詳しい手順の参考：GitHub リポジトリ skikuchi-hub/cursor- のブランチ claude/examuse-prize-handover-8s2xx8 にある docs/PHOTO_CHECK.md（読めなくても上の内容で足りる）。

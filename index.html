@@ -3595,42 +3595,48 @@ function dataIssues(){
   const out=[], all=Store.data.weekly||[], today=todayStr();
   const recent = all.filter(r=>daysSince(r.week) <= ISSUE_DAYS && r.source!=="sheet");
   recent.forEach(r=>{
-    const who = staffOf(r), sales = num(r.sales), push = (level,msg,fix) => out.push({id:r.id, col:"weekly", rec:r, who, level, msg, fix, when:`${jpDate(r.week)} ${r.time||""} ${r.store} ${r.machine}`});
-    if (sales < 0) push("bad", `売上が マイナス ${yen(sales)}円 になっています。累計を空のまま保存した可能性。開いて、機械の累計を入れ直して保存（売上を見ていない日なら「売上は見ていない」）`, "edit");
+    const who = staffOf(r), sales = num(r.sales), push = (level,msg,fix,kind) => out.push({id:r.id, col:"weekly", rec:r, who, level, msg, fix, kind, when:`${jpDate(r.week)} ${r.time||""} ${r.store} ${r.machine}`});
+    if (sales < 0) push("bad", `売上が マイナス ${yen(sales)}円 になっています。累計を空のまま保存した可能性。開いて、機械の累計を入れ直して保存（売上を見ていない日なら「売上は見ていない」）`, "edit", "neg");
     else if (!r.noSales && r.cum){
       const ex = expectedSales(r, all);
-      if (Math.round(ex)!==Math.round(sales)) push(sales>SALES_SANITY?"bad":"warn", `今回分 ${yen(sales)}円 が、前回の記録から計算し直すと ${yen(ex)}円 です（前の記録が消えた・直された・月またぎ）。開いてそのまま保存すると計算し直されます`, "edit");
-      else if (sales > SALES_SANITY) push("bad", `今回分 ${yen(sales)}円 は 1 回の訪問にしては大きすぎます。累計の桁違い・カウンターの数字を入れた可能性。開いて累計を直す`, "edit");
+      if (Math.round(ex)!==Math.round(sales)) push(sales>SALES_SANITY?"bad":"warn", `今回分 ${yen(sales)}円 が、前回の記録から計算し直すと ${yen(ex)}円 です（前の記録が消えた・直された・月またぎ）。開いてそのまま保存すると計算し直されます`, "edit", "calc:"+Math.round(ex));
+      else if (sales > SALES_SANITY) push("bad", `今回分 ${yen(sales)}円 は 1 回の訪問にしては大きすぎます。累計の桁違い・カウンターの数字を入れた可能性。開いて累計を直す`, "edit", "big");
     }
-    if (!r.noSales && (r.pays===null||r.pays===undefined)) push("warn", "払出数が入っていません（取られた数が空のまま）。開いて取られた数を入れる", "edit");
-    if ((r.photoMiss||[]).length && daysSince(r.week) <= 14) push("warn", `写真なし（${r.photoMiss.map(k=>PHOTO_KINDS[k]||k).join("・")} 撮り忘れ）。次回は 補充前・補充後 を 1 枚ずつ`, "");
+    if (!r.noSales && (r.pays===null||r.pays===undefined)) push("warn", "払出数が入っていません（取られた数が空のまま）。開いて取られた数を入れる", "edit", "pays");
+    if ((r.photoMiss||[]).length && daysSince(r.week) <= 14) push("warn", `写真なし（${r.photoMiss.map(k=>PHOTO_KINDS[k]||k).join("・")} 撮り忘れ）。次回は 補充前・補充後 を 1 枚ずつ`, "", "photo");
     const dup = recent.find(o=>o.id!==r.id && o.store===r.store && o.machine===r.machine && o.week===r.week && String(o.createdAt||"")<String(r.createdAt||""));
-    if (dup && Math.abs(num(dup.sales)-sales)<1 && sales>0) push("warn", `同じ日に同じ機械の記録が 2 件あり、売上も同じ ${yen(sales)}円 です。二重登録なら片方を削除（巡回ログの 🗑）`, "delete");
+    if (dup && Math.abs(num(dup.sales)-sales)<1 && sales>0) push("warn", `同じ日に同じ機械の記録が 2 件あり、売上も同じ ${yen(sales)}円 です。二重登録なら片方を削除（巡回ログの 🗑）`, "", "dup");
   });
   (Store.data.collect||[]).forEach(r=>{
     const now = visitSalesBetween(r.store, r.fromAt||"", r.createdAt);
-    if (Math.round(now)!==Math.round(num(r.visitSales))) out.push({id:r.id, col:"collect", rec:r, who:r.staff||r.by||"", level:"warn", when:`${jpDate(r.date)} ${r.time||""} ${r.store} 集金`,
+    if (Math.round(now)!==Math.round(num(r.visitSales))) out.push({id:r.id, col:"collect", rec:r, who:r.staff||r.by||"", level:"warn", kind:"drift:"+Math.round(now), when:`${jpDate(r.date)} ${r.time||""} ${r.store} 集金`,
       msg:`集金のあとで巡回記録が変わっています（集金時の合計 ${yen(num(r.visitSales))}円 → いま ${yen(now)}円）。集金額 ${yen(num(r.total))}円 はそのまま。おかしければ集金の履歴で削除してやり直す`, fix:""});
   });
-  const meName = me(), admin = ME && ME.role==="admin";
+  // 自分の記録だけ（2026-10-23 菊地さん「石原さんのミスは石原さんにだけ表示で大丈夫」）。「確認済み」にしたものは出さない（同じ記録に別の指摘が出たらまた出る）
+  const meName = me(), done = issueDone();
   // 同じ記録の指摘は 1 件にまとめる（ボタンが重複しないように）
-  const g = {}; out.filter(x=> admin || x.who===meName).forEach(x=>{
+  const g = {}; out.filter(x=> x.who===meName && !done[issueKey(x)]).forEach(x=>{
     const k = x.col+"/"+x.id;
-    if (!g[k]) g[k] = Object.assign({}, x, {msgs:[x.msg]}); else { g[k].msgs.push(x.msg); if (x.level==="bad") g[k].level="bad"; if (x.fix==="edit") g[k].fix="edit"; }
+    if (!g[k]) g[k] = Object.assign({}, x, {msgs:[x.msg], keys:[issueKey(x)]}); else { g[k].msgs.push(x.msg); g[k].keys.push(issueKey(x)); if (x.level==="bad") g[k].level="bad"; if (x.fix==="edit") g[k].fix="edit"; }
   });
   return Object.values(g).sort((a,b)=>(a.level==="bad"?0:1)-(b.level==="bad"?0:1) || String(b.rec.createdAt||"").localeCompare(String(a.rec.createdAt||"")));
 }
+const issueKey = x => `${x.col}/${x.id}/${x.kind||""}`;
+function issueDone(){ const d = Store.rows("settings").find(r=>r.id==="issueDone-"+me()); return (d && d.keys) || {}; }
+async function dismissIssue(keys){                 // 「確認済み」：その指摘を消す（本人の設定として保存。別の端末でも消える）
+  const cur = Object.assign({}, issueDone()), day = todayStr();
+  keys.forEach(k=>{ cur[k]=day; });
+  Object.keys(cur).forEach(k=>{ if (daysSince(cur[k]) > ISSUE_DAYS+7) delete cur[k]; });   // 古いものは掃除
+  await Store.put("settings", "issueDone-"+me(), {keys:cur});
+}
 function renderIssues(){
   const btn=$("#issueBtn"), bar=$("#issueBar"); if (!btn || !bar) return;
-  const list = dataIssues(), n=list.length, admin = ME && ME.role==="admin", meName=me();
+  const list = dataIssues(), n=list.length, meName=me();
   btn.hidden = n===0; $("#issueCnt").textContent = n;
   if (EDIT || n===0){ bar.hidden=true; }
   else {
-    const by={}; list.forEach(x=>{ by[x.who]=(by[x.who]||0)+1; });
-    const mineN = list.filter(x=>x.who===meName).length, bad = list.filter(x=>x.level==="bad").length;
-    $("#issueBarTxt").textContent = admin
-      ? `⚠ 確認が必要な記録 ${n}件（${Object.keys(by).map(k=>`${k} ${by[k]}`).join("・")}）${bad?`　うち要修正 ${bad}件`:""}`
-      : `⚠ ${meName}さんの記録に確認が必要なものが ${mineN}件あります${bad?`（うち要修正 ${bad}件）`:""}`;
+    const bad = list.filter(x=>x.level==="bad").length;
+    $("#issueBarTxt").textContent = `⚠ ${meName}さんの記録に確認が必要なものが ${n}件あります${bad?`（うち要修正 ${bad}件）`:""}`;
     bar.hidden=false;
   }
   btn.onclick = openIssueSheet; $("#issueBarOpen").onclick = openIssueSheet;
@@ -3638,12 +3644,22 @@ function renderIssues(){
 }
 function fillIssueSheet(ov, list){
   ov.innerHTML = `<div class="cf-card sh-card" role="dialog" aria-modal="true"><div class="sh-q">⚠ 要確認の記録（${list.length}件）</div>
-    <div class="sh-sub">保存した記録を点検して見つかったものです。直すと消えます。${ME && ME.role==="admin" ? "担当者本人のアプリにも同じ内容が出ています。" : ""}</div>
-    ${list.length ? list.map(x=>`<div class="iss-item ${x.level}"><div class="who">${esc(x.when)}　<b>${esc(x.who)}</b></div>${x.msgs.map(m=>`<div class="msg">・${esc(m)}</div>`).join("")}
-      <div class="acts">${x.fix==="edit" && x.col==="weekly" && canDelete(x.rec) ? `<button type="button" class="pri" data-edit-iss="${esc(x.id)}">開いて直す</button>` : ""}${x.col==="weekly" && canDelete(x.rec) ? `<button type="button" class="del" data-c="weekly" data-id="${esc(x.id)}">🗑</button>` : ""}</div></div>`).join("")
+    <div class="sh-sub">あなたが保存した記録を点検して見つかったものです。直したら「修正完了」（担当のAIが直っているか見に行きます）。直さないものは「削除」でこの通知だけ消えます（記録は消えません）。</div>
+    ${list.length ? list.map((x,i)=>`<div class="iss-item ${x.level}"><div class="who">${esc(x.when)}</div>${x.msgs.map(m=>`<div class="msg">・${esc(m)}</div>`).join("")}
+      <div class="acts">${x.fix==="edit" && x.col==="weekly" && canDelete(x.rec) ? `<button type="button" class="pri" data-edit-iss="${esc(x.id)}">開いて直す</button>` : ""}<button type="button" class="pri" data-fixed-iss="${i}">修正完了</button><button type="button" data-done-iss="${i}">削除（何もしない）</button></div></div>`).join("")
       : `<div class="empty"><b>✅</b>いまは確認が必要な記録はありません</div>`}
     <div class="cf-acts" style="grid-template-columns:1fr"><button type="button" class="cf-back" id="issClose">閉じる</button></div></div>`;
   ov.querySelector("#issClose").onclick = () => ov.remove();
+  ov.querySelectorAll("[data-done-iss]").forEach(b=>b.onclick = async ()=>{ b.disabled=true; b.textContent="消しています…"; await dismissIssue(list[+b.dataset.doneIss].keys); toast("この通知を消しました（記録はそのまま）"); });
+  ov.querySelectorAll("[data-fixed-iss]").forEach(b=>b.onclick = async ()=>{ b.disabled=true; b.textContent="送っています…"; await markFixed(list[+b.dataset.fixedIss]); toast("修正完了を記録しました。あとで確認に行きます"); });
+}
+/* 「修正完了」：直した記録を共有の設定（issueFixed）に残す。担当の AI（毎日の写真チェックのルーティン）が _app_db から読んで、直っているか確かめる */
+async function markFixed(x){
+  const d = Store.rows("settings").find(r=>r.id==="issueFixed") || {items:[]};
+  const items = (d.items||[]).filter(it=>daysSince(String(it.at||"").slice(0,10)) <= 60).slice(-99);
+  items.push({col:x.col, id:x.id, who:me(), at:new Date().toISOString(), when:x.when, msgs:x.msgs, kinds:x.keys});
+  await Store.put("settings", "issueFixed", {items});
+  await dismissIssue(x.keys);
 }
 function openIssueSheet(){
   const ov=document.createElement("div"); ov.id="issueSheet"; ov.className="cf-ov sh-ov";
