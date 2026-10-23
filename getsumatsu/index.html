@@ -7544,7 +7544,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-19 新画面68';
+const APP_BUILD='2026-10-23 新画面69';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9028,6 +9028,8 @@ function stockBuild(p){
   const R_DEFAULT=['決済番号','決済タイプ','結果','顧客ID','自動課金番号','獲得パートナー','営業担当者名','獲得日','リストID','支払い単価','売上返金区分名称','支払い方法'];
   const PS_DEFAULT=['顧客ID','支払い方法','売上返金区分名称','獲得パートナー','営業担当者名','獲得日','電話番号','リストID','支払い単価'];
   const hdrFor=pt=>hdrOf[pt]||(hdrOf[pt]=(K==='R'?R_DEFAULT:PS_DEFAULT).slice());
+  /* OP 3社＋Owl Eye: 前月までの内訳にシートが無くても（例: Owl Eye のロボペイ分）、OP として払えるように OP の並びの見出しを用意する（2026-10-23） */
+  const OP_HDR=K==='R'?['決済番号','決済タイプ','結果','顧客ID','支払い単価','売上返金区分名称','支払い方法']:['顧客ID','支払い方法','売上返金区分名称','獲得日','支払い単価'];
   /* ロボペイ: 決済番号・決済タイプ・結果・オーダー・自動課金番号・決済日時は今月の CSV の値にする（前月の行を写すと前月の決済番号になってしまう） */
   const fillTx=(h,row,d)=>{if(K!=='R')return;h.forEach((k,i)=>{
     if(k==='決済番号')row[i]=d.payNo||row[i];else if(k==='決済タイプ')row[i]=d.payType||row[i];else if(k==='結果')row[i]=d.result||row[i];
@@ -9039,6 +9041,7 @@ function stockBuild(p){
      判定の順: 台帳の答え（要確認で選んだもの）→ OPリスト番号一覧（Mac が data/op_lists.json に置く）→ 毎月の支払明細書から覚えたもの */
   const OPL=(S.memory&&S.memory.opLists)||{lists:{},phones:{},table:null,opPrice:{}};
   const ans={};Object.entries(ledgerOf().opLists||{}).forEach(([k,a])=>{if(a&&!a.forgot)ans[k]=a});
+  Object.keys(OPL.opPrice||{}).forEach(pt=>{if(!hdrOf[pt]&&!/EN\./.test(pt))hdrOf[pt]=OP_HDR.slice()});
   const autoOp=new Set(Object.keys(OPL.opPrice||{}).filter(pt=>hdrOf[pt]&&!/EN\./.test(pt)));
   const digits=v=>String(v==null?'':v).replace(/\D/g,'').replace(/^0+/,'');
   const phones=Object.assign({},OPL.phones||{});
@@ -9076,9 +9079,14 @@ function stockBuild(p){
   const put=(pt,row,how,amt)=>{(out[pt]=out[pt]||{rows:[],how:{}}).rows.push({row,how,amt});out[pt].how[how]=(out[pt].how[how]||0)+1};
   const sumOf=new Set();
   const tx=(p.details||[]).filter(d=>d.kubunName&&d.kubunName!=='与信'&&d.customerId);
+  /* ロボペイ: 今月の決済が今月のうちに取消されたもの（CSV では 決済タイプ「取消 (仮実同時)」の1行だけ）は、払っていないので引かない。
+     前月までに払った決済の取消（決済日時が集計期間より前）だけを返金として引く（2026-10-23 永利さんの明細と突合して決定） */
+  const perFrom=K==='R'&&p.summary&&p.summary.from?parseDate(p.summary.from):null;
   tx.forEach(d=>{
     const id=stockId(d.customerId);
     const neg=d.kubunName==='返金'||(d.kubunName!=='売上'&&d.amount<0);
+    if(neg&&K==='R'&&perFrom&&/取消/.test(d.payType||'')&&d.date&&d.date>=perFrom){
+      check.push({id,kind:d.kubunName,method:d.method,amount:d.amount,why:`同じ月の決済の取消（${d.at||''}）: 払っていないので引かない`,soft:1});return}
     let hit=base[id],how='前月';
     if(!hit){const k=olderIdx.findIndex(o=>o[id]);if(k>=0){hit=olderIdx[k][id];how='過去'}}
     /* XRM に見つからない顧客は、前月に払っていても支払わない（2026-10 菊地さん指示） */
@@ -9116,6 +9124,7 @@ function stockBuild(p){
         const h=hdrOf[op],p2=opPriceOf(op),wsrc=hit['Wetopia株式会社']||Object.values(hit)[0];
         const row=h.map(k=>{const j=wsrc.hdr.indexOf(k);return k==='顧客ID'?id:k==='支払い方法'?d.method:k==='売上返金区分名称'?d.kubunName:/単価/.test(k)?(neg?-p2:p2)
           :k==='獲得日'&&h.indexOf('電話番号')<0?((x0&&x0.tel)||(wsrc.hdr.indexOf('電話番号')>=0?wsrc.r[wsrc.hdr.indexOf('電話番号')]:'')):j>=0?wsrc.r[j]:''});
+        fillTx(h,row,d);   /* OP の行も今月の決済番号・決済タイプ・結果にする（前月の WT 行を写したままだと前月の決済番号になる。2026-10-23 永利さんの明細と突合して発見） */
         put(op,row,neg?'返金・CB':'OP追加',neg?-p2:p2);
       }
       return;
