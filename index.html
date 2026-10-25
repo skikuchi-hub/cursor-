@@ -455,6 +455,7 @@ body.gbar-on #p-log{padding-bottom:64px}
 .rowitem .t1{font-size:13px;font-weight:700;line-height:1.4}
 .rowitem .t2{font-size:11.5px;color:var(--ink-3);margin-top:2px;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .rowitem .del{background:none;border:0;color:var(--ink-3);font-size:15px;padding:2px 4px;flex:none}
+.rowitem .pcl{font-family:var(--fs-body);white-space:normal;margin-top:4px;line-height:1.45}.rowitem .pcl .bad{color:var(--danger-ink);font-weight:700}
 .tag{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--surface-sunk);color:var(--ink-2);letter-spacing:.04em}
 .tag.sent{background:var(--aqua-wash);color:var(--aqua-ink)}
 .tag.todo{background:var(--rose-wash);color:var(--critical-ink)}
@@ -1803,7 +1804,7 @@ const Store = {
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
     overlaySourcing(r.__started||0);               // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
-    applySheetData(r.sheet_master, r.stores);
+    applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks;
     this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
     render();
@@ -1821,9 +1822,9 @@ const Store = {
       if (Array.isArray(r.staff) && r.staff.length) STAFF.splice(0, STAFF.length, ...r.staff);
       ME = r.me||null; if (ME && ME.name && STAFF.includes(ME.name)){ setMe(ME.name); lockStaff(ME.role!=="admin"); }
       applyPerms();
-      applySheetData(r.sheet_master, r.stores); this.mode="offline"; snapshotSeen(); }catch(e){}
+      applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks; this.mode="offline"; snapshotSeen(); }catch(e){}
   },
-  saveCache(r){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({docs:r.docs, staff:r.staff, me:r.me, sheet_master:r.sheet_master, stores:r.stores})); }catch(e){} },
+  saveCache(r){ try{ localStorage.setItem(CACHE_KEY, JSON.stringify({docs:r.docs, staff:r.staff, me:r.me, sheet_master:r.sheet_master, stores:r.stores, photo_checks:r.photo_checks})); }catch(e){} },
   loadLocal(){
     try{
       const raw = localStorage.getItem("crane-lab-v1");
@@ -3190,6 +3191,16 @@ async function uploadPhotos(id){
   if (okN) toast(`写真 ${okN}枚 を保存しました`);
   renderLogList();
 }
+/* 写真の自動チェックの結果（サーバーの bootstrap で 写真タブ I〜Q を fid ごとに受け取る）。記録の下に出し、問題があるものは登録者の「⚠ 要確認」にも出す */
+let PHOTO_CHECKS = {};
+const photoCheckOf = p => (p && p.fid && PHOTO_CHECKS[p.fid]) || null;
+const PC_BAD = /同一ファイル|同じ写真|補充後の写真の可能性|記録にない|記録では|記録と合わない|別の機械|違う機械|記録上/;
+function photoCheckIsIssue(c){ return !!c && (c.match==="不一致" || c.match==="不明" || (c.score!==null && c.score<=2) || (c.empty!==null && c.empty>=3) || PC_BAD.test(c.note||"")); }
+function photoCheckLine(r){
+  const ps = (r.photos||[]).filter(p=>photoCheckOf(p)); if (!ps.length) return "";
+  return `<div class="t2 pcl">${ps.map(p=>{ const c=photoCheckOf(p); const bad=photoCheckIsIssue(c);
+    return `<span class="${bad?"bad":""}">📷${p.kind==="after"?"後":"前"} ${esc(c.match||"")}${c.score!==null?` 陳列${c.score}`:""}${c.rooms?` 空き${esc(c.rooms)}`:""}：${esc(c.note||"")}</span>`; }).join("<br>")}</div>`;
+}
 function photoThumbs(r){
   const ps = (r.photos||[]).slice().sort((a,b)=>(a.kind==="after")-(b.kind==="after"));
   const mine = canDelete(r) && !r.source;
@@ -3603,6 +3614,8 @@ function dataIssues(){
       else if (sales > SALES_SANITY) push("bad", `今回分 ${yen(sales)}円 は 1 回の訪問にしては大きすぎます。累計の桁違い・カウンターの数字を入れた可能性。開いて累計を直す`, "edit", "big");
     }
     if (!r.noSales && (r.pays===null||r.pays===undefined)) push("warn", "払出数が入っていません（取られた数が空のまま）。開いて取られた数を入れる", "edit", "pays");
+    (r.photos||[]).forEach(p=>{ const c=photoCheckOf(p); if (!c || !photoCheckIsIssue(c) || daysSince(r.week) > 21) return;
+      push("warn", `写真チェック（${p.kind==="after"?"補充後":"補充前"}）：${c.match||""}${c.score!==null?`・陳列スコア ${c.score}`:""}${c.rooms?`・空き ${c.rooms}`:""}。${c.note||""}`, "edit", "pc:"+p.fid+":"+String(c.at||"").slice(0,10)); });
     if ((r.photoMiss||[]).length && daysSince(r.week) <= 14) push("warn", `写真なし（${r.photoMiss.map(k=>PHOTO_KINDS[k]||k).join("・")} 撮り忘れ）。次回は 補充前・補充後 を 1 枚ずつ`, "", "photo");
     const dup = recent.find(o=>o.id!==r.id && o.store===r.store && o.machine===r.machine && o.week===r.week && String(o.createdAt||"")<String(r.createdAt||""));
     if (dup && Math.abs(num(dup.sales)-sales)<1 && sales>0) push("warn", `同じ日に同じ機械の記録が 2 件あり、売上も同じ ${yen(sales)}円 です。二重登録なら片方を削除（巡回ログの 🗑）`, "", "dup");
@@ -3798,7 +3811,7 @@ function renderLogList(){
         <div class="t1">${esc(r.store)}　<span style="font-weight:400;color:var(--ink-3)">${esc(r.machine)}</span></div>
         <div class="t2">${jpDate(r.week)}${r.time?" "+esc(r.time):""}　${r.noSales?"補充だけ（売上なし）":`${yen(sales)}円＝${yen(r.plays)}プレイ`}　払出${yen(r.pays)}</div>
         ${roomLine?`<div class="t2" style="font-family:var(--fs-body);white-space:normal">🎁 ${roomLine}</div>`:""}
-        ${photoThumbs(r)}
+        ${photoThumbs(r)}${photoCheckLine(r)}
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${editBtn(r)}
           <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>${r.editedAt?`<span class="tag">修正済</span>`:""}

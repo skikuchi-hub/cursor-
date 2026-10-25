@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-23b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-25a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -414,6 +414,7 @@ function bootstrap(me) {
     docs: readAllDocs(),
     sheet_master: cachedJson("sheet_master", 120, readPrizeMaster),
     stores: cachedJson("stores", 300, readPastStores),
+    photo_checks: cachedJson("photo_checks", 300, readPhotoChecks),   // 写真の自動チェックの結果（fid → 結果）。アプリで登録者に見せる
     time: nowIso()
   };
 }
@@ -918,10 +919,23 @@ function importPhotoChecks() {
     f.setName("done_" + name); n++;
   }
   PropertiesService.getScriptProperties().setProperty("photoChecksAt", String(Date.now()));
+  if (m > 0) dropCache("photo_checks");
   try { syncStockSheet_(); rebuildStock(); } catch (e) { Logger.log("在庫整理: " + e); }   // 在庫整理タブの手入力を取り込み、在庫を作り直す
   updateMetricsIfDue();   // 必要指標（在庫）の作り直しも 10 分ごとのトリガーで
   var msg = "チェック結果を取り込みました：" + n + " ファイル / " + m + " 枚";
   Logger.log(msg); return msg;
+}
+/* 写真タブの I〜Q（自動チェックの結果）を fid ごとに返す。2026-10-25 菊地さん「写真を見た結果もアプリで登録者に通知」 */
+function readPhotoChecks() {
+  var ps = ss().getSheetByName(PHOTO_SHEET); if (!ps) return {};
+  var last = ps.getLastRow(); if (last < 2) return {};
+  var v = ps.getRange(2, 1, last - 1, PHOTO_HEADERS.length).getValues(), out = {};
+  v.forEach(function (r) {
+    if (!r[6] || !r[8]) return;
+    out[String(r[6])] = { at: r[8] instanceof Date ? r[8].toISOString() : String(r[8]), rooms: String(r[9] || ""), empty: r[10] === "" ? null : num(r[10]), pays: r[11] === "" ? null : num(r[11]),
+      match: String(r[12] || ""), pop: r[13] === "" ? null : num(r[13]), score: r[14] === "" ? null : num(r[14]), note: String(r[15] || ""), comp: String(r[16] || "") };
+  });
+  return out;
 }
 /* アプリ起動（bootstrap）のたびに呼ばれる。10 分に 1 回だけ Drive を見に行く */
 function importPhotoChecksIfDue() {
