@@ -6350,6 +6350,14 @@ MODULES.subsele={
         [r.kind==='前月漏れ分'?'前月漏れ分':'',r.kind==='ストック'?'ストック先出し':''].filter(Boolean).join(' / ')]));
       rows.push([]);rows.push(['','','','','',P.amt,P.count+'件 支払計']);
       XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(rows),sheetName);
+      /* 支払明細書の「ショットOP」タブと同じ並び（法人名・コンテンツ名・会員ID・契約日・課金開始日・支払手数料。コンテンツ→契約日順）。2026-10-26 菊地さん「9月の Liberte 明細書のショットOPの項目で出力して」 */
+      const ORD={'クマモリ':0,'スマホ安心サポート':1,'データ復旧安心サービス':2,'データ復旧サービス':2,'ライフサポート24':3,'まもるん':4};
+      const corpOf=r=>/Liberte/.test(pn)?'LEF（リベルテ）':(r.corp||'LEF（Wetopia株式会社）');
+      const op=P.rows.filter(r=>r.price>0).map(r=>[corpOf(r),r.content,r.lmp+'_'+bnAbbr(r.content),fmtDate(r.date),fmtDate(r.bill),r.price])
+        .sort((a,b)=>{const ka=ORD[String(a[1]).replace(/\s/g,'')]??9,kb=ORD[String(b[1]).replace(/\s/g,'')]??9;return ka-kb||String(a[1]).localeCompare(String(b[1]))||String(a[3]).localeCompare(String(b[3]))||String(a[2]).localeCompare(String(b[2]))});
+      /* Wetopia の明細書の「ショットOP」タブは 法人名なしの5列（コンテンツ名・申込番号・契約日・課金開始日・支払手数料） */
+      const lib=/Liberte/.test(pn);const opRows=lib?[['法人名','コンテンツ名','会員ID','契約日','課金開始日','支払手数料'],...op]:[['コンテンツ名','申込番号','契約日','課金開始日','支払手数料'],...op.map(r=>r.slice(1))];
+      XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(opRows),`ショットOP（${lib?'Liberte':'Wetopia'}）`);
     });
     const pend=S.rows.filter(r=>!r.resolved||r.hold);
     if(pend.length){
@@ -7547,7 +7555,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-26 新画面79';
+const APP_BUILD='2026-10-26 新画面80';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
