@@ -5070,11 +5070,11 @@ async function loadTemplateIndex(){
   S.tplIndex=idx;
   return S.tplIndex;
 }
-/* パートナー名の表記ゆれを吸収して索引を引く */
+/* パートナー名の表記ゆれを吸収して索引を引く（濁点が分かれた NFD の名前（iMac のファイル名由来の「クラウドナイン」）も NFC に揃えて引く。新画面86） */
 function findTemplateMeta(partner){
   const idx=S.tplIndex||{};
   if(idx[partner])return {partner,...idx[partner]};
-  const norm=s=>String(s).replace(/株式会社|合同会社|有限会社|（.*?）|\(.*?\)|\s|　/g,'');
+  const norm=s=>String(s).normalize('NFC').replace(/株式会社|合同会社|有限会社|（.*?）|\(.*?\)|\s|　/g,'');
   const key=norm(partner);
   const newest=ks=>ks.length?ks.map(k=>({partner:k,...idx[k]})).sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')))[0]:null;
   const ex=newest(Object.keys(idx).filter(k=>norm(k)===key));if(ex)return ex;
@@ -5157,7 +5157,7 @@ function keepOnlySheets(wb,keep){
 function findTemplate(partner){
   const t=S.templates||{};
   if(t[partner])return t[partner];
-  const norm=s=>String(s).replace(/株式会社|合同会社|有限会社|（.*?）|\(.*?\)|\s|　/g,'');
+  const norm=s=>String(s).normalize('NFC').replace(/株式会社|合同会社|有限会社|（.*?）|\(.*?\)|\s|　/g,'');
   const key=norm(partner);
   for(const [k,v] of Object.entries(t)){if(norm(k)===key)return v}
   for(const [k,v] of Object.entries(t)){if(key&&norm(k).includes(key))return v}
@@ -7560,7 +7560,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-27 新画面85';
+const APP_BUILD='2026-10-27 新画面86';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
