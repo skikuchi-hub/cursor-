@@ -5001,16 +5001,18 @@ function templatePartner(wb){
       const line=(rows[i]||[]).map(c=>String(c??'')).join(' ');
       const m=line.match(/([^\s　]+(?:株式会社|合同会社|有限会社))\s*　?御中/);
       if(m)return m[1];
-      const m2=line.match(/((?:株式会社|合同会社|有限会社)[^\s　]+)\s*　?御中/);
+      const m2=line.match(/((?:株式会社|合同会社|有限会社)[^\s　]+(?:[ 　][A-Za-z][A-Za-z0-9.&-]*)*)\s*　?御中/);
       if(m2)return m2[1];
     }
   }
   return '';
 }
+/* ファイル名から宛先を取る（表紙で取れなかった時用）: 【2026年9月度明細】株式会社last Bet 御中.xlsx → 株式会社last Bet（新画面85。last Bet は社名に空白があり、ファイル名ごと索引キーになって 7月版が選ばれていた） */
+function partnerFromFileName(name){return String(name||'').replace(/\.xlsx?$/i,'').replace(/^【[^】]*】\s*　?/,'').replace(/[\s　]*(御中|様)[\s　]*$/,'').trim()}
 /* テンプレート保持（支払明細をアップロードした時に呼ぶ） */
 function fmtYm(ym){const m=String(ym||'').match(/^(20\d{2})(\d{2})$/);return m?`${m[1]}年${Number(m[2])}月`:String(ym||'')}
 function keepTemplate(wb,name,buf){
-  let partner=templatePartner(wb)||name.replace(/\.xlsx?$/i,'');
+  let partner=templatePartner(wb)||partnerFromFileName(name)||name.replace(/\.xlsx?$/i,'');
   S.templates=S.templates||{};
   const month=monthFromName(name)||'';
   /* 表記ゆれで別キーに二重保存しないよう、保存済みの索引キーへ寄せる */
@@ -5049,7 +5051,7 @@ async function saveTemplateFile(partner,buf,name,month){
     return true;
   }catch(e){console.error('tpl save',e);return false}
 }
-let TPL_IDX_Q=Promise.resolve();
+let TPL_IDX_Q=Promise.resolve();let TPL_READY=null;
 async function loadTemplateIndex(){
   let idx=(await Store.get(TPL_INDEX))||{};
   /* 保存済みのテンプレート本体はあるのに索引に無いものを拾い直す（索引の競合で消えた分の修復。2026-10-15） */
@@ -5074,15 +5076,18 @@ function findTemplateMeta(partner){
   if(idx[partner])return {partner,...idx[partner]};
   const norm=s=>String(s).replace(/株式会社|合同会社|有限会社|（.*?）|\(.*?\)|\s|　/g,'');
   const key=norm(partner);
-  for(const k of Object.keys(idx)){if(norm(k)===key)return {partner:k,...idx[k]}}
-  for(const k of Object.keys(idx)){if(key&&norm(k).includes(key))return {partner:k,...idx[k]}}
-  return null;
+  const newest=ks=>ks.length?ks.map(k=>({partner:k,...idx[k]})).sort((a,b)=>String(b.month||'').localeCompare(String(a.month||'')))[0]:null;
+  const ex=newest(Object.keys(idx).filter(k=>norm(k)===key));if(ex)return ex;
+  /* 部分一致が複数（ファイル名ごとに索引された last Bet 等）なら一番新しい月を使う（新画面85） */
+  return key?newest(Object.keys(idx).filter(k=>norm(k).includes(key)||(norm(partnerFromFileName(k))===key))):null;
 }
 /* 実体（ブック）を取り出す。未読込ならIndexedDBから復元する */
 async function getTemplateWb(partner){
   /* このセッションで読み込み済みなら、保存の成否に関わらずそれを使う */
   const mem=findTemplate(partner);
   if(mem)return mem;
+  /* 起動直後は索引（IndexedDB）の読み込みが終わる前に呼ばれることがあり、テンプレート無しで内訳が出ていた（新画面85） */
+  if(TPL_READY){try{await TPL_READY}catch(e){}}
   const meta=findTemplateMeta(partner);
   if(!meta)return null;
   S.templates=S.templates||{};
@@ -7555,7 +7560,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-27 新画面84';
+const APP_BUILD='2026-10-27 新画面85';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -9605,7 +9610,7 @@ renderProdGrid();
 (async()=>{
   const rec=await loadSavedXrm();
   if(rec){renderXrmStatus();updateRunBtn();if(typeof renderIn==='function')renderIn()}
-  await loadTemplateIndex();
+  TPL_READY=loadTemplateIndex();await TPL_READY;
   await loadBnData();
   renderStmtNeed();renderPayStatus();
   /* ルール台帳: 記憶を読み、スキル由来の初期値（rules.json）を取り込む */
