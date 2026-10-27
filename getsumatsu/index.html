@@ -7555,7 +7555,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-27 新画面82';
+const APP_BUILD='2026-10-27 新画面83';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11707,12 +11707,17 @@ async function addStatementSheets(wb,job,m){
         let tHdr=null,tHi=0,tplSheet=null;
         if(tpl){const sn=tpl.wb.SheetNames.find(x=>normHdr(x)===tabName);if(sn){const aoa=XLSX.utils.sheet_to_json(tpl.wb.Sheets[sn],{header:1,defval:null});tHi=sheetHeaderRow(aoa);tHdr=(aoa[tHi]||[]).map(normHdr);tplSheet=tpl.wb.Sheets[sn]}}
         if(!tHdr||!tHdr.includes('申込番号')){tHdr=['申込番号','店舗名','電話番号','取次日','支払い方法','商品1','商品2','商品3','商品4','支払い金額'];tHi=0;tplSheet=null}
-        const si=n=>srcHdr.indexOf(n);const iId=si('システムID'),iPay=si('支払方法'),iStore=si('店舗名')>=0?si('店舗名'):si('店舗'),iIn=si('入会日'),iProd=srcHdr.findIndex(h=>/商品名詳細/.test(h));
+        /* LPM は「販社様名」が店舗名（「店舗」列は商品）。電話番号・取次日・営業担当は 前月の明細書の同じお客様の行 → XRM の順で埋める */
+        const si=n=>srcHdr.indexOf(n);const iId=si('システムID'),iPay=si('支払方法'),iStore=isOts?(si('店舗名')>=0?si('店舗名'):si('店舗')):(si('販社様名')>=0?si('販社様名'):si('店舗')),iIn=si('入会日'),iProd=srcHdr.findIndex(h=>/商品名詳細/.test(h));
+        const prev=new Map();if(tplSheet){const a0=XLSX.utils.sheet_to_json(tplSheet,{header:1,defval:null});const h0=(a0[tHi]||[]).map(normHdr);const ia=h0.indexOf('申込番号');
+          if(ia>=0)a0.slice(tHi+1).forEach(r0=>{const k=r0&&r0[ia]!=null?String(r0[ia]).trim():'';if(k&&!prev.has(k))prev.set(k,Object.fromEntries(h0.map((n,j)=>[n,r0[j]])))})}
+        const XA=(()=>{try{return xrmAllIndex()}catch(e){return null}})();
         const aoa=[tHdr.slice()];
-        rows.forEach(r=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];const x=r.x||{};
-          const val=name=>{if(name==='申込番号')return raw[iId]!=null?raw[iId]:(r.key||'');if(name==='店舗名')return iStore>=0&&raw[iStore]!=null?raw[iStore]:'';
-            if(name==='電話番号')return x.tel||r.tel||'';if(name==='取次日')return x.date||x.ym||(iIn>=0&&raw[iIn]!=null?raw[iIn]:'')||'';
-            if(/営業担当/.test(name))return x.staff||'';if(name==='支払い方法')return iPay>=0&&raw[iPay]!=null?raw[iPay]:'';
+        rows.forEach(r=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];const x=r.x||{};const id=String(raw[iId]!=null?raw[iId]:(r.key||'')).trim();const pv=prev.get(id)||{};const xr=XA&&XA.get(id);
+          const pick=(a,b,c)=>a!=null&&a!==''?a:(b!=null&&b!==''?b:(c!=null&&c!==''?c:''));
+          const val=name=>{if(name==='申込番号')return id;if(name==='店舗名')return iStore>=0&&raw[iStore]!=null?raw[iStore]:'';
+            if(name==='電話番号')return pick(pv['電話番号'],xr&&xr.tel,x.tel||r.tel);if(name==='取次日')return pick(pv['取次日'],x.date||x.ym,iIn>=0?raw[iIn]:'');
+            if(/営業担当/.test(name))return pick(pv[name],xr&&xr.sales,x.staff);if(name==='支払い方法')return iPay>=0&&raw[iPay]!=null?raw[iPay]:'';
             const mm=name.match(/^商品(\d)$/);if(mm)return iProd>=0&&raw[iProd+(+mm[1]-1)]!=null?raw[iProd+(+mm[1]-1)]:'';
             if(/支払い?金額|支払手数料|単価/.test(name))return Number(r.price)||0;return ''};
           aoa.push(tHdr.map(val))});
