@@ -7555,7 +7555,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-26 新画面81';
+const APP_BUILD='2026-10-27 新画面82';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -11699,7 +11699,27 @@ async function addStatementSheets(wb,job,m){
     let ws=null;
     try{
       const tpl=await getTemplateWb(partner);
-      if(tpl){
+      /* Aster（LPM・オタスケ）: 支払明細書の LPM／OTS タブの並び（申込番号・店舗名・電話番号・取次日・[営業担当]・支払い方法・商品1〜4・支払い金額）で出す。
+         列名の重なりで探すと上位店の列（システムID・販社様名…）と合わず空のタブになっていた（2026-10-27 菊地さん。9月度は永利さんが同じ並びで作成） */
+      const isAster=!!(srcHdr&&srcHdr.includes('システムID')&&srcHdr.some(h=>/商品名詳細/.test(h)));
+      if(isAster){
+        const isOts=srcHdr.includes('法人名')||/OTS|オタスケ/.test(String(S.meisaiSheet||''));const tabName=isOts?'OTS':'LPM';
+        let tHdr=null,tHi=0,tplSheet=null;
+        if(tpl){const sn=tpl.wb.SheetNames.find(x=>normHdr(x)===tabName);if(sn){const aoa=XLSX.utils.sheet_to_json(tpl.wb.Sheets[sn],{header:1,defval:null});tHi=sheetHeaderRow(aoa);tHdr=(aoa[tHi]||[]).map(normHdr);tplSheet=tpl.wb.Sheets[sn]}}
+        if(!tHdr||!tHdr.includes('申込番号')){tHdr=['申込番号','店舗名','電話番号','取次日','支払い方法','商品1','商品2','商品3','商品4','支払い金額'];tHi=0;tplSheet=null}
+        const si=n=>srcHdr.indexOf(n);const iId=si('システムID'),iPay=si('支払方法'),iStore=si('店舗名')>=0?si('店舗名'):si('店舗'),iIn=si('入会日'),iProd=srcHdr.findIndex(h=>/商品名詳細/.test(h));
+        const aoa=[tHdr.slice()];
+        rows.forEach(r=>{const raw=(r.sheetRow&&srcRaw[r.sheetRow-1])||[];const x=r.x||{};
+          const val=name=>{if(name==='申込番号')return raw[iId]!=null?raw[iId]:(r.key||'');if(name==='店舗名')return iStore>=0&&raw[iStore]!=null?raw[iStore]:'';
+            if(name==='電話番号')return x.tel||r.tel||'';if(name==='取次日')return x.date||x.ym||(iIn>=0&&raw[iIn]!=null?raw[iIn]:'')||'';
+            if(/営業担当/.test(name))return x.staff||'';if(name==='支払い方法')return iPay>=0&&raw[iPay]!=null?raw[iPay]:'';
+            const mm=name.match(/^商品(\d)$/);if(mm)return iProd>=0&&raw[iProd+(+mm[1]-1)]!=null?raw[iProd+(+mm[1]-1)]:'';
+            if(/支払い?金額|支払手数料|単価/.test(name))return Number(r.price)||0;return ''};
+          aoa.push(tHdr.map(val))});
+        if(tplSheet){ws=cloneWorkbook({a:tplSheet}).a;clearDataRows(ws);aoa.slice(1).forEach((row,i)=>row.forEach((v,c)=>{if(v!==''&&v!=null)setCell(ws,tHi+1+i,c,v)}));fixSheetRef(ws)}
+        else ws=XLSX.utils.aoa_to_sheet(aoa);
+      }
+      else if(tpl){
         let tab=null,tHdr=null,tHi=0,overlap=0;
         if(srcHdr){   /* 列名の重なりが一番多いタブ */
           tpl.wb.SheetNames.filter(sn=>!/^表紙$/.test(sn)).forEach(sn=>{const aoa=XLSX.utils.sheet_to_json(tpl.wb.Sheets[sn],{header:1,defval:null});const hi=sheetHeaderRow(aoa);const h=(aoa[hi]||[]).map(normHdr);
