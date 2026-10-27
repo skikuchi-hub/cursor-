@@ -7560,7 +7560,7 @@ function importLedger(file){
 const SYNC_KEY='getsumatsu_sync';
 const SYNC_STALE_MS=6*3600*1000;      /* 起動時、前回同期からこれ以上たっていたら自動で同期 */
 let SYNC_BUSY=false,_syncPushTimer=null,SYNC_CTRL=null;
-const APP_BUILD='2026-10-27 新画面89';
+const APP_BUILD='2026-10-27 新画面90';
 /* 起動時の記憶（台帳・案件単価）の読み込みが終わるまで同期を待たせる。
    先に同期すると空の記憶に書き込み、あとから読み込んだ記憶で上書きされて学習が消えるため */
 let _memReadyResolve;const MEM_READY=new Promise(r=>{_memReadyResolve=r});
@@ -10640,11 +10640,6 @@ function makeCarryModule(cfg){
       {const itemKeys=new Set(S.rows.filter(r=>r.byItem).map(r=>r.key));let n=0;
         S.rows.forEach(r=>{if(r.carried&&!r.byItem&&!r.modo&&r.item&&itemKeys.has(r.key)){r.state='warn';r.why+=` / 「${r.item}」はこのお客様に払った記録が無い（新しい商品）。単価を確認してください`;n++}});
         if(n)progLine(`「${cfg.sheet}」: 過去に払った記録の無い商品 ${n}行（要確認）`)}
-      /* 菊地さんが「外して」と決めた案件（申込番号ごと・その月だけ）: 台帳 answers['skip:carry'][申込番号]={ym,why} → 支払なし。
-         2026-10-27 Aster LPM: 前月の明細書にも XRM にも無い4件（LMP00032787・LMP00033260・LMP00033516・LMP00022366）は Aster に確認中なので今月は払わない（新画面89） */
-      {const sk=(ledgerOf().answers||{})['skip:carry']||{};let n=0;S.rows.forEach(r=>{const a=sk[String(r.key||'').trim()];if(!a||(a.ym&&String(a.ym)!==String(B.month||''))||r.modo)return;
-          r.price=0;r.co=null;r.state='ok';r.resolved=true;r.manualSkip=true;r.why=`支払なし（菊地さん ${a.at?String(a.at).slice(0,10):''}: ${a.why||'今月は外す'}）`;n++});
-        if(n)progLine(`「${cfg.sheet}」: 菊地さんの指示で外した ${n}行（台帳 skip:carry）`)}
       /* デバイスケアは支払わない（固定ルール。9月度の支払明細書にも無く、2026-10-23 永利さんの明細でも0） */
       {let n=0;S.rows.forEach(r=>{if(/デバイスケア/.test(String(r.item||''))&&r.price){r.price=0;r.state='ok';r.resolved=true;r.why='デバイスケアは支払なし（固定ルール）';n++}});
         if(n)progLine(`「${cfg.sheet}」: デバイスケア ${n}行を支払なしに`)}
@@ -10728,6 +10723,11 @@ function makeCarryModule(cfg){
           (rule.extra||[]).forEach(x=>{const k=r.key+'|'+x.payee;if(seenC.has(k))return;seenC.add(k);
             add.push({...r,item:'（お客様ごと）',payTo:x.payee,price:x.perCustomer,product:x.product||r.product,extraFor:r.key,why:`店舗「${r.store}」の決まり: お客様ごとに ${x.payee} へ ${Number(x.perCustomer).toLocaleString()}円`})})});
         if(add.length){S.rows=S.rows.concat(add);S.rows.forEach((r,i)=>r.i=i+1);progLine(`「${cfg.sheet}」: 店舗の決まりでお客様ごとの支払 ${add.length}件を追加`)}}
+      /* 菊地さんが「外して」と決めた案件（申込番号ごと・その月だけ）: 台帳 answers['skip:carry'][申込番号]={ym,why} → 支払なし。
+         2026-10-27 Aster LPM: 前月の明細書にも XRM にも無い4件（LMP00032787・LMP00033260・LMP00033516・LMP00022366）は Aster に確認中なので今月は払わない（新画面90。店舗コードの単価付けより後に効かせる） */
+      {const sk=(ledgerOf().answers||{})['skip:carry']||{};let n=0;S.rows.forEach(r=>{const a=sk[String(r.key||'').trim()];if(!a||(a.ym&&String(a.ym)!==String(B.month||''))||r.modo)return;
+          r.price=0;r.co=null;r.state='ok';r.resolved=true;r.manualSkip=true;r.why=`支払なし（菊地さん ${a.at?String(a.at).slice(0,10):''}: ${a.why||'今月は外す'}）`;n++});
+        if(n)progLine(`「${cfg.sheet}」: 菊地さんの指示で外した ${n}行（台帳 skip:carry）`)}
       progLine(`「${cfg.sheet}」: 引き継ぎ ${S.rows.filter(r=>r.carried).length}件・XRMと台帳 ${S.rows.filter(r=>!r.carried&&r.resolved).length}件・要確認 ${S.rows.filter(r=>!r.resolved).length}件`);
     },
     tableRow:r=>[r.i,(r.modo?'<span class="badge b-min">戻入</span> ':'')+badge(r.state),esc(r.name||'—'),esc(r.key||r.tel||''),esc(r.payTo||'—'),esc(r.product||''),esc(r.why),r.price!=null?yen(r.price):'（空欄）'],
