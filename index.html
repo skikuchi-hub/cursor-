@@ -455,6 +455,8 @@ body.gbar-on #p-log{padding-bottom:72px}
 .rowitem .t1{font-size:13px;font-weight:700;line-height:1.4}
 .rowitem .t2{font-size:11.5px;color:var(--ink-3);margin-top:2px;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .rowitem .del{background:none;border:0;color:var(--ink-3);font-size:15px;padding:2px 4px;flex:none}
+.stk-merged{display:block;color:var(--sky-ink);font-weight:600}.stk-merged .chip{padding:1px 7px;font-size:10px;margin-left:2px}
+.stk-opt .stk-alias{max-width:46vw;font-size:12px}
 .rowitem .pcl{font-family:var(--fs-body);white-space:normal;margin-top:4px;line-height:1.45}.rowitem .pcl .bad{color:var(--danger-ink);font-weight:700}
 .tag{font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:5px;background:var(--surface-sunk);color:var(--ink-2);letter-spacing:.04em}
 .tag.sent{background:var(--aqua-wash);color:var(--aqua-ink)}
@@ -2124,6 +2126,10 @@ async function setPrizeOpt(name, patch){
   const opts = Object.assign({}, d.opts||{}); opts[name] = Object.assign({}, opts[name]||{}, patch);
   return Store.put("settings","prizeOpt",{opts});
 }
+/* 同じ景品を 1 つにまとめる（2026-10-30 菊地さん：nici と NICIビーンバッグキーリング売れ筋BEST14 は同じ種類なので数を足して 1 つに）。
+   景品ごとの設定 prizeOpt[名前].alias ＝ まとめ先の名前。買った数・払出・調整はまとめ先に合算し、一覧・景品えらびにはまとめ先だけ出す。スプシの景品マスタは触らない */
+function prizeAlias(n){ const o = prizeOpt(n); const a = clean(o.alias||""); return (a && a!==n) ? a : n; }
+function aliasNames(canon){ const d = Store.rows("settings").find(r=>r.id==="prizeOpt"); const o = (d && d.opts) || {}; return Object.keys(o).filter(n=> n!==canon && clean(o[n].alias||"")===canon); }
 /* BOX 1 枠に入れる個数（3 個セットなど）。アプリ登録の景品 → 景品ごとの設定 → 1 */
 function setOf(name){
   const p = Store.rows("prizes").find(p=>p.name===name); if (p && num(p.boxSet)>1) return Math.round(num(p.boxSet));
@@ -2137,8 +2143,9 @@ function stockAdj(name){ return stockDocs().filter(d=>d.name===name).reduce((a,d
 function lastCount(name){ return stockDocs().filter(d=>d.name===name).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)))[0]||null; }
 /* 在庫 ＝ 買った数 − 累計払出数 ＋ 棚卸の調整（倉庫＋機械の中の合計。2026-10-15 菊地さん：数えるときは機械の中の分も数える。サーバー側 rebuildStock と同じ式） */
 function stockOf(name){
+  name = prizeAlias(name);
   const p = Store.rows("prizes").find(p=>p.name===name);
-  const known = !!p || sheetRows().some(r=>r.name===name);
+  const known = !!p || sheetRows().some(r=>r.name===name) || aliasNames(name).length>0;
   if (!known) return null;
   const b = stockBreakdown(name);
   if (!b.qty && !b.adj && !b.pays) return null;      // 数量が登録されていない景品
@@ -2238,6 +2245,7 @@ function openSlotSheet(i, step){
     // いま景品が入っていて、この訪問でまだ何もしていない枠 → どうした？／それ以外（空き・この訪問で変えた枠）→ 何を入れた？
     step = (sl.filled && !slotChanged(sl)) ? "what" : "put";
   }
+  if (step==="put"){ R.pick=null; const ov=$("#slotSheet"); if (ov) ov.remove(); drawSlots(); return openSlotPicker(sl); }   // 「何を入れた？」は景品えらびシート
   R.pick = {i, step}; drawSlots();
 }
 function closeSlotSheet(){ if (R) R.pick=null; const ov=$("#slotSheet"); if (ov) ov.remove(); drawSlots(); }
@@ -2406,7 +2414,7 @@ function renderRoomSheet(){
     body = `<div class="sh-q">「${esc(name)}」を 何こ抜いた？</div><div class="sh-sub">${have}${b!==""?`。全部なら ${b}`:""}</div>${numBox(rm.take)}
       <button type="button" class="sh-ok" data-act="rs-ok">決定</button><button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
   } else if (p.step==="swap1"){
-    const v = num(rm.take)>0 ? num(rm.take) : (b===""?"":b);
+    const v = (p.tmp && p.tmp.take!==undefined && p.tmp.take!==null) ? p.tmp.take : (num(rm.take)>0 ? num(rm.take) : (b===""?"":b));   // もどってきたときは入れた数を保つ
     body = `<div class="sh-q">① 古い「${esc(name)}」を 何こ抜いた？</div><div class="sh-sub">${have}${b!==""?`。全部抜いたなら ${b}（そのまま決定でOK）`:""}</div>${numBox(v)}
       <button type="button" class="sh-ok" data-act="rs-ok">決定</button><button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
   } else if (p.step==="swap2"){
@@ -2430,7 +2438,7 @@ function onRoomSheetClick(e){
   const a = b.dataset.act;
   const numIn = () => { const el=$("#rsNum"); const v = el ? String(el.value).replace(/[^\d]/g,"") : ""; return v==="" ? null : Math.min(999, +v); };
   if (a==="rs-close") return closeRoomSheet();
-  if (a==="rs-back"){ p.step = (p.step==="swap3") ? "swap2" : (p.step==="swap2") ? "swap1" : "what"; return renderRoomSheet(); }
+  if (a==="rs-back"){ if (p.step==="swap3") return openSwapPicker(p, rm); p.step = (p.step==="swap2") ? "swap1" : "what"; return renderRoomSheet(); }
   if (a==="rs-add"){ p.step="add"; return renderRoomSheet(); }
   if (a==="rs-take"){ p.step="take"; return renderRoomSheet(); }
   if (a==="rs-swap"){ p.step="swap1"; return renderRoomSheet(); }
@@ -2442,7 +2450,7 @@ function onRoomSheetClick(e){
     if (p.step==="add"){ if (!(n>0)){ toast("入れた数を入れてください"); return; } rm.add=n; if (!rm.swap) rm.addPrize=rm.prize; toast(`部屋${p.k}：「${clean(rm.prize)}」を ${n} こ足した`); return closeRoomSheet(); }
     if (p.step==="take"){ if (n===null){ toast("抜いた数を入れてください"); return; } rm.take=n; toast(`部屋${p.k}：${n} こ抜いた（在庫にもどす）`); return closeRoomSheet(); }
     if (p.step==="fix"){ if (n===null){ toast("いま入っている数を入れてください（0 でも可）"); return; } rm.before=n; rm.fixBefore=true; toast(`部屋${p.k}：いま ${n} こ入っている、で記録を合わせます`); return closeRoomSheet(); }
-    if (p.step==="swap1"){ if (n===null){ toast("抜いた数を入れてください（0 でも可）"); return; } p.tmp.take=n; p.step="swap2"; return renderRoomSheet(); }
+    if (p.step==="swap1"){ if (n===null){ toast("抜いた数を入れてください（0 でも可）"); return; } p.tmp.take=n; return openSwapPicker(p, rm); }
     if (p.step==="swap2"){ const nm = clean(($("#rsName")||{}).value||""); if (!nm){ toast("新しい景品を選ぶか、名前を打ってください"); return; } p.tmp.name=nm; p.step="swap3"; return renderRoomSheet(); }
     if (p.step==="swap3"){ if (!(n>0)){ toast("入れた数を入れてください"); return; }
       rm.take = p.tmp.take; rm.addPrize = p.tmp.name; rm.add = n; rm.swap = true;
@@ -2472,7 +2480,7 @@ function orderByHints(names, storeName){
 }
 /* 4人機の景品名：機械タイプ「4人機用」の景品をプルダウンで出し、打った文字で絞り込む */
 function prizeNames4p(){
-  return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name))).filter(Boolean);
+  return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name))).filter(n=>n && prizeAlias(n)===n);   // まとめた景品はまとめ先だけ
 }
 function attachCombo(inp, onPick){
   const box = document.createElement("div"); box.className="combo";
@@ -2522,42 +2530,74 @@ function editPrize(k){
 /* 4人機の景品えらび：入力欄の下にプルダウンを出す方式は iPhone で使いづらかった（キーボードに隠れる・スクロールできない・
    指が触れただけで選ばれる。2026-10-30 菊地さん）。画面上から出るシートに一覧（この店の当たり → 在庫多め → その他、在庫数つき）を出し、
    名前で絞り込み、候補にない名前はそのまま新しい名前として使える */
-function openPrizePicker(k){
-  if (!R) return; const rm = R.rooms.find(x=>x.k===k); if (!rm) return;
+function pickPrize(o){
+  // o: {title, sub, cur, base:[名前…], extras:[{label, value, cls}], noneHint, onPick(name|extra.value), onCancel, cancelLabel}
   const old=$("#pzPick"); if (old) old.remove();
   const ov=document.createElement("div"); ov.id="pzPick"; ov.className="cf-ov sh-ov pk-ov";
-  const cur = clean(rm.prize);
-  ov.innerHTML = `<div class="cf-card sh-card pk-card" role="dialog" aria-modal="true"><div class="sh-q">部屋 ${esc(k)} の景品${cur?`　いま「${esc(cur)}」`:""}</div>
-    <div class="sh-sub">タップで選ぶ（一覧は上下にスクロール）。名前を打つと絞り込み。候補にない名前は、そのまま新しい名前として使えます</div>
+  const cur = clean(o.cur||"");
+  ov.innerHTML = `<div class="cf-card sh-card pk-card" role="dialog" aria-modal="true"><div class="sh-q">${o.title}</div>
+    <div class="sh-sub">${o.sub || "タップで選ぶ（一覧は上下にスクロール）。名前を打つと絞り込み。候補にない名前は、そのまま新しい名前として使えます"}</div>
     <input class="pk-search" id="pkSearch" type="search" placeholder="名前で絞り込む（任意）" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="done">
     <div class="pk-list" id="pkList"></div>
-    <div class="pk-acts"><button type="button" class="cf-back" id="pkClose">やめる（変えない）</button></div></div>`;
+    <div class="pk-acts"><button type="button" class="cf-back" id="pkClose">${esc(o.cancelLabel||"やめる（変えない）")}</button></div></div>`;
   document.body.appendChild(ov);
   const list=ov.querySelector("#pkList"), q=ov.querySelector("#pkSearch");
-  const pick = name => {
-    rm.prize = clean(name); if (!rm.swap) rm.addPrize = rm.prize;     // 名前の変更は入れ替えではない（⇄ の流れで決めた入れ替え先だけ残す）
-    ov.remove();
-    const btn = document.querySelector(`#roomGrid .pname[data-k="${k}"]`);
-    if (btn){ btn.className = "pname "+(rm.prize?"":"none"); btn.innerHTML = esc(rm.prize||"景品を選ぶ")+'<span class="pen">✎</span>'; }
-    updateDerived(); saveDraft();
-  };
+  let done=false;
+  const finish = v => { if (done) return; done=true; ov.remove(); o.onPick && o.onPick(v); };
+  const cancel = () => { if (done) return; done=true; ov.remove(); o.onCancel && o.onCancel(); };
   const draw = () => {
     const raw = clean(q.value), qq = raw.toLowerCase();
-    const ord = orderByHints(prizeNames4p(), F.store);
+    const ord = orderByHints(o.base||[], F.store);
     const names = ord.names.filter(n=> !qq || n.toLowerCase().includes(qq));
     const rows = [];
     if (qq && !names.some(n=>n.toLowerCase()===qq)) rows.push(`<button type="button" class="pk-item new" data-pick="${esc(raw)}"><span class="nm">「${esc(raw)}」を新しい名前として使う</span></button>`);
     names.slice(0,80).forEach(n=>{ const st=stockOf(n); rows.push(`<button type="button" class="pk-item" data-pick="${esc(n)}" aria-pressed="${n===cur}"><span class="nm">${esc(n)}${ord.tag(n)}</span><span class="st">${st===null?"":`在庫 ${st}`}</span></button>`); });
-    if (!names.length && !qq) rows.push(`<div class="pk-none">候補がありません。景品タブで「4人機用」の景品を登録すると出ます。下の欄に名前を打てばそのまま使えます</div>`);
-    if (cur && !qq) rows.push(`<button type="button" class="pk-item clear" data-pick=""><span class="nm">空の部屋にする（名前を消す）</span></button>`);
+    if (!names.length && !qq) rows.push(`<div class="pk-none">${o.noneHint || "候補がありません。景品タブで景品を登録すると出ます。上の欄に名前を打てばそのまま使えます"}</div>`);
+    if (!qq) (o.extras||[]).forEach(x=> rows.push(`<button type="button" class="pk-item ${x.cls||"clear"}" data-pick="${esc(x.value)}"><span class="nm">${esc(x.label)}</span></button>`));
     list.innerHTML = rows.join("");
   };
   q.addEventListener("input", draw);
-  q.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); const v=clean(q.value); if (v) pick(v); else q.blur(); } });
-  list.addEventListener("click", e=>{ const b=e.target.closest("[data-pick]"); if (!b) return; pick(b.dataset.pick); });
-  ov.querySelector("#pkClose").onclick = ()=>ov.remove();
-  ov.addEventListener("click", e=>{ if (e.target===ov) ov.remove(); });
+  q.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); const v=clean(q.value); if (v) finish(v); else q.blur(); } });
+  list.addEventListener("click", e=>{ const b=e.target.closest("[data-pick]"); if (!b) return; finish(b.dataset.pick); });
+  ov.querySelector("#pkClose").onclick = cancel;
+  ov.addEventListener("click", e=>{ if (e.target===ov) cancel(); });
   draw();
+}
+function openPrizePicker(k){                                       // 4人機：部屋の景品名
+  if (!R) return; const rm = R.rooms.find(x=>x.k===k); if (!rm) return;
+  const cur = clean(rm.prize);
+  pickPrize({ title:`部屋 ${esc(k)} の景品${cur?`　いま「${esc(cur)}」`:""}`, cur, base: prizeNames4p(),
+    extras: cur ? [{label:"空の部屋にする（名前を消す）", value:""}] : [],
+    noneHint: "候補がありません。景品タブで「4人機用」の景品を登録すると出ます。上の欄に名前を打てばそのまま使えます",
+    onPick: name => {
+      rm.prize = clean(name); if (!rm.swap) rm.addPrize = rm.prize;     // 名前の変更は入れ替えではない（⇄ の流れで決めた入れ替え先だけ残す）
+      const btn = document.querySelector(`#roomGrid .pname[data-k="${k}"]`);
+      if (btn){ btn.className = "pname "+(rm.prize?"":"none"); btn.innerHTML = esc(rm.prize||"景品を選ぶ")+'<span class="pen">✎</span>'; }
+      updateDerived(); saveDraft();
+    } });
+}
+const prizeNamesBox = () => Array.from(new Set(allPrizes().filter(p=>p.use!=="4人機用").map(p=>p.name).concat(R && R.slots ? R.slots.map(x=>x.prize).filter(Boolean) : []))).filter(n=>n && prizeAlias(n)===n);
+function openSlotPicker(sl){                                        // カリーノ：枠に何を入れた？（2026-10-30 菊地さん：4人機と同じシートに）
+  const done = sl.out ? "🎉 取られた" : sl.ret ? "↩ 回収した" : slotGone(sl) ? "↗ 別の枠へ動かした" : "";
+  const now = sl.filled ? `いま入れてあるもの：<b>${esc(sl.filled)}</b>` : "いま：<b>空き</b>";
+  const extras = [{label:"何も入れない（空きのまま）", value:"__none"}];
+  if (slotChanged(sl)) extras.push({label:`まちがえた：この枠を元にもどす（着いたときの「${sl.prize||"空き"}」に）`, value:"__reset"});
+  pickPrize({ title:`枠 ${sl.i} に 何を入れた？`, sub:`${done?done+"　":""}${now}<br>タップで選ぶ（一覧は上下にスクロール）。名前を打つと絞り込み。候補にない名前もそのまま使えます`, cur: sl.filled, base: prizeNamesBox(), extras,
+    noneHint: "候補がありません。「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると出ます。上の欄に名前を打てばそのまま使えます",
+    cancelLabel: "閉じる",
+    onPick: v => {
+      if (v==="__none"){ sl.filled=""; }
+      else if (v==="__reset"){ sl.out=false; sl.ret=false; sl.filled=sl.prize||""; toast(`枠${sl.i} を元にもどしました`); }
+      else { sl.filled = clean(v); toast(`枠${sl.i} に「${sl.filled}」`); }
+      drawSlots(); updateDerived(); saveDraft();
+    } });
+}
+function openSwapPicker(p, rm){                                     // 4人機の入れ替え ②新しい景品は？
+  const ov=$("#roomSheet"); if (ov) ov.hidden=true;
+  pickPrize({ title:"② 新しい景品は？", cur: p.tmp.name||"", base: prizeNames4p().filter(n=>n!==clean(rm.prize)),   // いま入っている景品は除く
+    noneHint: "候補がありません。景品タブで「4人機用」の景品を登録すると出ます。上の欄に名前を打てばそのまま使えます", cancelLabel:"← もどる",
+    onPick: name => { p.tmp.name = clean(name); p.step="swap3"; if (ov) ov.hidden=false; renderRoomSheet(); },
+    onCancel: () => { p.step="swap1"; if (ov) ov.hidden=false; renderRoomSheet(); } });
 }
 function onRoomClick(e){
   const b = e.target.closest("[data-act]"); if(!b || !R) return;
@@ -2600,8 +2640,8 @@ function onSheetClick(e){
   e.preventDefault();
   const a = b.dataset.act, sl = R.slots.find(x=>x.i===R.pick.i); if (!sl) return closeSlotSheet();
   if (a==="sh-close"){ return closeSlotSheet(); }
-  if (a==="sh-out"){ sl.out=true; sl.ret=false; sl.filled=""; R.pick.step="put"; drawSlots(); return updateDerived(); }
-  if (a==="sh-ret"){ sl.ret=true; sl.out=false; sl.filled=""; R.pick.step="put"; drawSlots(); return updateDerived(); }
+  if (a==="sh-out"){ sl.out=true; sl.ret=false; sl.filled=""; closeSlotSheet(); updateDerived(); return openSlotPicker(sl); }
+  if (a==="sh-ret"){ sl.ret=true; sl.out=false; sl.filled=""; closeSlotSheet(); updateDerived(); return openSlotPicker(sl); }
   if (a==="sh-move"){ R.moveFrom=sl.i; R.pick=null; const ov=$("#slotSheet"); if (ov) ov.remove(); drawSlots(); toast(`動かした先の枠をタップしてください`); return; }
   if (a==="sh-put"){ sl.filled = b.dataset.v; closeSlotSheet(); toast(`枠${sl.i} に「${sl.filled}」`); return updateDerived(); }
   if (a==="sh-none"){ sl.filled=""; closeSlotSheet(); return updateDerived(); }
@@ -3948,6 +3988,15 @@ async function savePrize(){
 const STK = { v:{}, f:"", q:"" };          // v＝入力中の数（景品名→文字）、f＝機械タイプの絞り込み、q＝検索
 /* 景品ごとの在庫の内訳（スプシ「在庫整理」タブと同じ列・同じ式） */
 function stockBreakdown(name){
+  name = prizeAlias(name);
+  const parts = [name].concat(aliasNames(name)).map(stockBreakdownRaw);
+  if (parts.length===1) return parts[0];
+  const b = {}; ["qty","pays","add4p","boxUsed","ret","adj","pays4p","paysBox","ret4p","retBox"].forEach(f=>{ b[f] = parts.reduce((a,x)=>a+num(x[f]),0); });
+  b.inMach = Math.max(0, b.add4p - b.pays4p - b.ret4p) + Math.max(0, b.boxUsed - b.paysBox - b.retBox);
+  b.left = b.qty - b.pays + b.adj;
+  return b;
+}
+function stockBreakdownRaw(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
   const qty = p ? num(p.qty) : sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
   const b = {qty, pays:0, add4p:0, boxUsed:0, ret:0, adj:stockAdj(name), pays4p:0, paysBox:0, ret4p:0, retBox:0};
@@ -3969,9 +4018,9 @@ function stockBreakdown(name){
 }
 function stockRows(){
   const seen=new Set(), rows=[];
-  allPrizes().forEach(p=>{ const n=clean(p.name); if (!n || seen.has(n)) return; seen.add(n);
+  allPrizes().forEach(p=>{ const n=clean(p.name); if (!n || seen.has(n) || prizeAlias(n)!==n) return; seen.add(n);   // まとめた景品はまとめ先の行に含める
     const doc = p._sheet ? null : Store.rows("prizes").find(x=>x.id===p.id);
-    const bd=stockBreakdown(n); rows.push({name:n, kind:p.use||"", calc:stockOf(n)===null?null:bd.left, set:setOf(n), last:lastCount(n), bd, pid: doc ? doc.id : null, rawUse: doc ? (doc.use||"") : "", mine: !!doc && (ME && (ME.role==="admin" || (doc.by||doc.staff||"")===me()))}); });
+    const bd=stockBreakdown(n); rows.push({name:n, kind:p.use||"", calc:stockOf(n)===null?null:bd.left, set:setOf(n), last:lastCount(n), bd, merged: aliasNames(n), pid: doc ? doc.id : null, rawUse: doc ? (doc.use||"") : "", mine: !!doc && (ME && (ME.role==="admin" || (doc.by||doc.staff||"")===me()))}); });
   rows.sort((a,b)=> (a.kind||"").localeCompare(b.kind||"") || a.name.localeCompare(b.name,"ja"));
   return rows;
 }
@@ -3991,12 +4040,12 @@ function renderStock(){
     </div>
     <div class="stk-rows">${shown.map(r=>`
       <div class="stk" data-stk="${esc(r.name)}">
-        <div class="stk-nm">${esc(r.name)}<small>${esc(r.kind||"機械タイプ未設定")}${r.set>1?`　・BOX 1枠 ${r.set} こ`:""}</small></div>
+        <div class="stk-nm">${esc(r.name)}<small>${esc(r.kind||"機械タイプ未設定")}${r.set>1?`　・BOX 1枠 ${r.set} こ`:""}</small>${r.merged.length?`<small class="stk-merged">まとめ：${r.merged.map(m=>`${esc(m)}（買った ${stockBreakdownRaw(m).qty}）${ME&&ME.role==="admin"?` <button type="button" class="chip mini stk-split" data-split="${esc(m)}">分ける</button>`:""}`).join("　")}</small>`:""}</div>
         <div class="stk-bd">買った <b>${r.bd.qty}</b>　払出 <b>${r.bd.pays}</b>${r.bd.adj?`　調整 <b>${r.bd.adj>0?"+":""}${r.bd.adj}</b>`:""}　うち機械の中（目安） <b>${r.bd.inMach}</b></div>
         <div class="stk-calc">計算上の在庫（倉庫＋機械） <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
         <input class="numin stk-in" type="text" inputmode="numeric" maxlength="4" placeholder="数えた数" aria-label="${esc(r.name)} の数えた数" value="${esc(STK.v[r.name]||"")}">
         ${dif(r)}
-        <div class="stk-opt">${r.mine?`<label>機械タイプ <select class="stk-use" aria-label="${esc(r.name)} の機械タイプ">${["カリーノ用","4人機用"].map(u=>`<option value="${u}" ${r.rawUse===u?"selected":""}>${u}</option>`).join("")}</select></label>`:""}<label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
+        <div class="stk-opt">${ME&&ME.role==="admin"&&!r.merged.length?`<label>同じ景品にまとめる <select class="stk-alias" aria-label="${esc(r.name)} をまとめる先"><option value="">（まとめない）</option>${rows.filter(x=>x.name!==r.name&&!x.merged.includes(r.name)).map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("")}</select></label>`:""}${r.mine?`<label>機械タイプ <select class="stk-use" aria-label="${esc(r.name)} の機械タイプ">${["カリーノ用","4人機用"].map(u=>`<option value="${u}" ${r.rawUse===u?"selected":""}>${u}</option>`).join("")}</select></label>`:""}<label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
       </div>`).join("") || `<p class="hint" style="padding:10px 12px">該当する景品がありません</p>`}</div>
     <div class="stk-foot"><button type="button" class="save" id="stkSave" ${typed?"":"disabled"}>数えた分を保存（${typed} 件）</button>
       ${typed?`<button type="button" class="chip mini" id="stkClear">入力を消す</button>`:""}
@@ -5390,10 +5439,14 @@ function wire(){
         const row=e.target.closest(".stk"); if (!row) return; const name=row.dataset.stk;
         if (e.target.classList.contains("stk-set")){ const n=Math.max(1, Math.round(num(e.target.value)||1)); e.target.value=n; if (await setPrizeOpt(name,{boxSet:n})) toast(`${name}：BOX 1枠 ${n} こ`); renderStock(); return; }
         if (e.target.classList.contains("stk-both")){ if (await setPrizeOpt(name,{both:e.target.checked})) toast(e.target.checked?`${name}：両方の機械で使う`:`${name}：元の機械タイプに戻す`); render(); return; }
+        if (e.target.classList.contains("stk-alias")){ const to=e.target.value; if (!to) return;
+          if (!confirm(`「${name}」を「${to}」と同じ景品としてまとめます。\n買った数・払出・調整は「${to}」に足され、一覧と景品えらびには「${to}」だけが出ます（スプレッドシートの景品マスタは変わりません。あとで「分ける」で戻せます）。`)){ e.target.value=""; return; }
+          e.target.blur(); if (await setPrizeOpt(name,{alias:to})) toast(`「${name}」を「${to}」にまとめました`); render(); return; }   // blur：入力中は一覧を作り直さない仕組みを通すため
         if (e.target.classList.contains("stk-use")){ const r=stockRows().find(x=>x.name===name); if (!r || !r.pid) return; const u=e.target.value;
           if (await Store.update("prizes", r.pid, {use:u})) toast(`${name}：機械タイプを「${u}」に直しました（景品マスタも）`); render(); return; }
       });
-      el.addEventListener("click", e=>{ const c=e.target.closest("[data-stkf]"); if (c){ STK.f=c.dataset.stkf; renderStock(); return; }
+      el.addEventListener("click", async e=>{ const c=e.target.closest("[data-stkf]"); if (c){ STK.f=c.dataset.stkf; renderStock(); return; }
+        const sp=e.target.closest(".stk-split"); if (sp){ const m=sp.dataset.split; sp.blur(); if (await setPrizeOpt(m,{alias:""})) toast(`「${m}」を分けて元の行に戻しました`); render(); return; }
         if (e.target.closest("#stkSave")) return saveStock();
         if (e.target.closest("#stkClear")){ STK.v={}; renderStock(); return; }
         if (e.target.closest("#stkApply")) return applyCleanup(); }); } }

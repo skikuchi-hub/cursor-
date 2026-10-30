@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-10-25a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-10-30a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -1569,8 +1569,17 @@ function stockTable_(docs) {
   var appSet = {}; (docs.prizes || []).forEach(function (d) { if (num(d.boxSet) > 1) appSet[normKey_(d.name)] = num(d.boxSet); });
   var setOf = function (name) { var k = normKey_(name); if (appSet[k]) return appSet[k]; if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = base[k]; return b ? b.boxSet : 1; };
   Object.keys(base).forEach(function (k) { base[k].boxSet = setOf(base[k].name); });
+  // 同じ景品にまとめる（prizeOpt[名前].alias ＝ まとめ先。2026-10-30）：買った数・行はまとめ先へ、払出・調整もまとめ先の名前で数える
+  var canon = function (name) { var k = normKey_(name); var a = opt[k] && clean(opt[k].alias || ""); return (a && normKey_(a) !== k) ? a : name; };
+  Object.keys(opt).forEach(function (k) {
+    var a = clean(opt[k].alias || ""); if (!a || normKey_(a) === k || !base[k]) return;
+    var t = normKey_(a);
+    if (!base[t]) { base[t] = { name: a, kind: base[k].kind, qty: 0, cost: base[k].cost, boxSet: base[k].boxSet, rows: [] }; order.push(t); }
+    base[t].qty += base[k].qty; base[t].rows = (base[t].rows || []).concat(base[k].rows || []);
+    delete base[k]; var oi = order.indexOf(k); if (oi >= 0) order.splice(oi, 1);
+  });
   var mv = {};
-  var row = function (name) { var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, pays4p: 0, paysBox: 0, add4p: 0, boxUsed: 0, ret: 0, ret4p: 0, retBox: 0, adj: 0, lastCount: null }; return mv[k]; };
+  var row = function (name) { name = canon(name); var k = normKey_(name); if (!mv[k]) mv[k] = { name: name, pays: 0, pays4p: 0, paysBox: 0, add4p: 0, boxUsed: 0, ret: 0, ret4p: 0, retBox: 0, adj: 0, lastCount: null }; return mv[k]; };
   (docs.weekly || []).forEach(function (w) {
     (w.rooms || []).forEach(function (x) {
       var p = clean(x.prize), ap = clean(x.addPrize) || p;
