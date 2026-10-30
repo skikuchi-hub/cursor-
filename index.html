@@ -357,13 +357,13 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .xhead.fold[aria-expanded="true"] .chev::before{transform:rotate(180deg)}
 .xhead.fold[aria-expanded="false"] .ct::after{content:"　タップで表示";color:var(--sky-ink);font-family:var(--fs-body);font-weight:700}
 /* 入力順ガイド */
-.gbar{position:fixed;left:0;right:0;z-index:49;max-width:560px;margin:0 auto;padding:0 10px;pointer-events:none}
+.gbar{position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:49;max-width:560px;margin:0 auto;padding:0 10px;pointer-events:none}
 .gbar .in{display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;border-radius:12px;padding:8px 8px 8px 12px;box-shadow:0 10px 26px -10px rgba(27,45,91,.7);font-size:13px;font-weight:700;pointer-events:auto}
 .gbar .nx{font-size:10px;background:var(--gold);color:var(--navy);border-radius:6px;padding:2px 6px;flex:none;font-weight:900}
 .gbar .tx{flex:1;min-width:0;line-height:1.35}
 .gbar button{border:0;border-radius:8px;padding:8px 10px;font-size:12px;font-weight:800;background:rgba(255,255,255,.16);color:#fff;flex:none}
 .gbar button.go{background:var(--gold);color:var(--navy)}
-body.gbar-on #p-log{padding-bottom:64px}
+body.gbar-on #p-log{padding-bottom:72px}
 /* 入力欄を含む要素に animation / transform を付けると iOS Safari が入力中の文字を描き直さないことがあるので、枠は静的な影だけにする */
 .gnow{position:relative;border-radius:10px;background:var(--gold-wash);box-shadow:0 0 0 3px var(--gold),0 10px 20px -10px rgba(181,127,0,.7);z-index:1}
 .gnow::before{content:"つぎはここ";position:absolute;top:-12px;left:6px;background:var(--gold);color:var(--navy);font-size:10px;font-weight:900;padding:1px 7px;border-radius:999px;z-index:2;letter-spacing:.04em;white-space:nowrap}
@@ -3290,9 +3290,18 @@ function renderGuide(){
   if (GT.cell){ const c=document.querySelector(`#roomGrid [data-cell="${GT.cell}"]`); if (c) c.classList.add("gcell"); }
   $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`;
   $("#gbarSkip").hidden = !GT.skip;
-  const tb=document.querySelector(".tabbar"); bar.style.bottom = ((tb ? tb.offsetHeight : 58) + 6) + "px";
-  bar.hidden=false; document.body.classList.add("gbar-on");
+  bar.hidden=false; document.body.classList.add("gbar-on"); placeGbar();
 }
+/* 案内バーはタブバーの実際の上端のすぐ上に置く（2026-10-30 菊地さん：バーがメニューに隠れて見えない。
+   以前は offsetHeight から計算していたが、iOS のホーム画面起動ではセーフエリア分がずれて下に潜っていた） */
+function placeGbar(){
+  const bar=$("#gbar"), tb=document.querySelector(".tabbar"); if (!bar || !tb || bar.hidden) return;
+  const top = tb.getBoundingClientRect().top;
+  if (top > 0 && top < window.innerHeight) bar.style.bottom = Math.round(window.innerHeight - top + 6) + "px";
+  else bar.style.bottom = "";                                       // 測れないときは CSS の既定（66px＋セーフエリア）
+}
+window.addEventListener("resize", placeGbar);
+if (window.visualViewport) window.visualViewport.addEventListener("resize", placeGbar);
 function guideGo(){
   if (!GT || !GT.el) return;
   GT.el.scrollIntoView({block:"center", behavior:"smooth"});
