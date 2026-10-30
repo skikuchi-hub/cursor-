@@ -357,7 +357,7 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .xhead.fold[aria-expanded="true"] .chev::before{transform:rotate(180deg)}
 .xhead.fold[aria-expanded="false"] .ct::after{content:"　タップで表示";color:var(--sky-ink);font-family:var(--fs-body);font-weight:700}
 /* 入力順ガイド */
-.gbar{position:fixed;left:0;right:0;bottom:calc(66px + env(safe-area-inset-bottom,0px));z-index:49;max-width:560px;margin:0 auto;padding:0 10px;pointer-events:none}
+.gbar{position:fixed;left:0;right:0;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:49;max-width:560px;margin:0 auto;padding:0 10px;pointer-events:none}
 .gbar .in{display:flex;align-items:center;gap:8px;background:var(--navy);color:#fff;border-radius:12px;padding:8px 8px 8px 12px;box-shadow:0 10px 26px -10px rgba(27,45,91,.7);font-size:13px;font-weight:700;pointer-events:auto}
 .gbar .nx{font-size:10px;background:var(--gold);color:var(--navy);border-radius:6px;padding:2px 6px;flex:none;font-weight:900}
 .gbar .tx{flex:1;min-width:0;line-height:1.35}
@@ -3290,18 +3290,9 @@ function renderGuide(){
   if (GT.cell){ const c=document.querySelector(`#roomGrid [data-cell="${GT.cell}"]`); if (c) c.classList.add("gcell"); }
   $("#gbarTx").textContent = `${["","①","②","③"][GT.sec]||""} ${GT.txt}`;
   $("#gbarSkip").hidden = !GT.skip;
-  bar.hidden=false; document.body.classList.add("gbar-on"); placeGbar();
+  bar.style.bottom = "";                                           // 位置は CSS（タブバーの高さ 66px＋6px＋セーフエリア）。JS で測ると iPhone の Safari でツールバーが縮んだときにずれる（2026-10-30）
+  bar.hidden=false; document.body.classList.add("gbar-on");
 }
-/* 案内バーはタブバーの実際の上端のすぐ上に置く（2026-10-30 菊地さん：バーがメニューに隠れて見えない。
-   以前は offsetHeight から計算していたが、iOS のホーム画面起動ではセーフエリア分がずれて下に潜っていた） */
-function placeGbar(){
-  const bar=$("#gbar"), tb=document.querySelector(".tabbar"); if (!bar || !tb || bar.hidden) return;
-  const top = tb.getBoundingClientRect().top;
-  if (top > 0 && top < window.innerHeight) bar.style.bottom = Math.round(window.innerHeight - top + 6) + "px";
-  else bar.style.bottom = "";                                       // 測れないときは CSS の既定（66px＋セーフエリア）
-}
-window.addEventListener("resize", placeGbar);
-if (window.visualViewport) window.visualViewport.addEventListener("resize", placeGbar);
 function guideGo(){
   if (!GT || !GT.el) return;
   GT.el.scrollIntoView({block:"center", behavior:"smooth"});

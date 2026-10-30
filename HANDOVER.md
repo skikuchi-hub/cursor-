@@ -348,4 +348,5 @@ HANDOVER.md                  この文書
 
 ### 案内バー（つぎ…ここへ）がメニューに隠れる（2026-10-30 菊地さん）
 - iPhone のホーム画面起動では、タブバーの高さを `offsetHeight` で測った値がセーフエリア分ずれ、案内バーがタブバーの下に潜って見えなかった。
-- CSS の既定を `bottom:calc(66px + env(safe-area-inset-bottom))` にし、JS（`placeGbar`）はタブバーの実際の上端（`getBoundingClientRect().top`）から位置を決める。画面サイズが変わったとき（resize／visualViewport）も置き直す。巡回タブの下の余白も 72px に。
+- 原因は iPhone の Safari：開いた直後（ツールバーあり）はセーフエリアが 0 で、スクロールしてツールバーが縮むと 34px 増えてタブバーが高くなるのに、案内バーは最初に測った位置のままだった。
+- JS で測るのをやめ、CSS だけで `bottom:calc(72px + env(safe-area-inset-bottom))`（タブバーの中身 66px＋6px＋セーフエリア）。env() はツールバーの伸び縮みに自動で追従する。巡回タブの下の余白も 72px に。
