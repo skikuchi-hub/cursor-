@@ -585,6 +585,17 @@ td:first-child{font-family:var(--fs-body)}
 .combo button:first-child{border-top:0}
 .combo button:active{background:var(--surface-sunk)}
 .combo .none{padding:8px 10px;font-size:11.5px;color:var(--ink-3)}
+/* 4人機の景品えらび（画面上から出るシート。キーボードが出ても一覧が見える・一覧は指でスクロール） */
+.pk-ov{align-items:flex-start}
+.pk-card{border-radius:0 0 18px 18px;max-height:92vh;display:flex;flex-direction:column;padding-top:calc(12px + env(safe-area-inset-top,0px));box-shadow:0 10px 40px rgba(0,0,0,.25)}
+.pk-search{width:100%;box-sizing:border-box;font:inherit;font-size:16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--surface-2);color:inherit;margin:6px 0 8px}
+.pk-list{flex:1;min-height:120px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;border:1px solid var(--line);border-radius:12px}
+.pk-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;background:none;border:0;border-top:1px solid var(--line);padding:12px;font-size:14px;font-weight:600;color:var(--ink);font-family:inherit;min-height:50px;line-height:1.35}
+.pk-item:first-child{border-top:0}.pk-item[aria-pressed="true"]{background:var(--gold-wash)}.pk-item:active{background:var(--surface-sunk)}
+.pk-item .nm{flex:1;min-width:0}.pk-item .st{font-size:11px;color:var(--ink-3);white-space:nowrap;font-family:var(--fs-mono)}
+.pk-item.new{color:var(--navy);font-weight:800}.pk-item.clear{color:var(--ink-3);font-weight:500}
+.pk-none{padding:14px 12px;font-size:12px;color:var(--ink-3);line-height:1.5}
+.pk-acts{margin-top:10px}.pk-acts .cf-back{width:100%}
 .pname.none{color:var(--ink-3);font-weight:500}
 .pedit{
   flex:1;min-width:0;background:var(--surface);border:1.5px solid var(--violet);border-radius:var(--r-s);
@@ -2508,11 +2519,51 @@ function editPrize(k){
   inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
 }
 
+/* 4人機の景品えらび：入力欄の下にプルダウンを出す方式は iPhone で使いづらかった（キーボードに隠れる・スクロールできない・
+   指が触れただけで選ばれる。2026-10-30 菊地さん）。画面上から出るシートに一覧（この店の当たり → 在庫多め → その他、在庫数つき）を出し、
+   名前で絞り込み、候補にない名前はそのまま新しい名前として使える */
+function openPrizePicker(k){
+  if (!R) return; const rm = R.rooms.find(x=>x.k===k); if (!rm) return;
+  const old=$("#pzPick"); if (old) old.remove();
+  const ov=document.createElement("div"); ov.id="pzPick"; ov.className="cf-ov sh-ov pk-ov";
+  const cur = clean(rm.prize);
+  ov.innerHTML = `<div class="cf-card sh-card pk-card" role="dialog" aria-modal="true"><div class="sh-q">部屋 ${esc(k)} の景品${cur?`　いま「${esc(cur)}」`:""}</div>
+    <div class="sh-sub">タップで選ぶ（一覧は上下にスクロール）。名前を打つと絞り込み。候補にない名前は、そのまま新しい名前として使えます</div>
+    <input class="pk-search" id="pkSearch" type="search" placeholder="名前で絞り込む（任意）" autocomplete="off" autocorrect="off" autocapitalize="off" enterkeyhint="done">
+    <div class="pk-list" id="pkList"></div>
+    <div class="pk-acts"><button type="button" class="cf-back" id="pkClose">やめる（変えない）</button></div></div>`;
+  document.body.appendChild(ov);
+  const list=ov.querySelector("#pkList"), q=ov.querySelector("#pkSearch");
+  const pick = name => {
+    rm.prize = clean(name); if (!rm.swap) rm.addPrize = rm.prize;     // 名前の変更は入れ替えではない（⇄ の流れで決めた入れ替え先だけ残す）
+    ov.remove();
+    const btn = document.querySelector(`#roomGrid .pname[data-k="${k}"]`);
+    if (btn){ btn.className = "pname "+(rm.prize?"":"none"); btn.innerHTML = esc(rm.prize||"景品を選ぶ")+'<span class="pen">✎</span>'; }
+    updateDerived(); saveDraft();
+  };
+  const draw = () => {
+    const raw = clean(q.value), qq = raw.toLowerCase();
+    const ord = orderByHints(prizeNames4p(), F.store);
+    const names = ord.names.filter(n=> !qq || n.toLowerCase().includes(qq));
+    const rows = [];
+    if (qq && !names.some(n=>n.toLowerCase()===qq)) rows.push(`<button type="button" class="pk-item new" data-pick="${esc(raw)}"><span class="nm">「${esc(raw)}」を新しい名前として使う</span></button>`);
+    names.slice(0,80).forEach(n=>{ const st=stockOf(n); rows.push(`<button type="button" class="pk-item" data-pick="${esc(n)}" aria-pressed="${n===cur}"><span class="nm">${esc(n)}${ord.tag(n)}</span><span class="st">${st===null?"":`在庫 ${st}`}</span></button>`); });
+    if (!names.length && !qq) rows.push(`<div class="pk-none">候補がありません。景品タブで「4人機用」の景品を登録すると出ます。下の欄に名前を打てばそのまま使えます</div>`);
+    if (cur && !qq) rows.push(`<button type="button" class="pk-item clear" data-pick=""><span class="nm">空の部屋にする（名前を消す）</span></button>`);
+    list.innerHTML = rows.join("");
+  };
+  q.addEventListener("input", draw);
+  q.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); const v=clean(q.value); if (v) pick(v); else q.blur(); } });
+  list.addEventListener("click", e=>{ const b=e.target.closest("[data-pick]"); if (!b) return; pick(b.dataset.pick); });
+  ov.querySelector("#pkClose").onclick = ()=>ov.remove();
+  ov.addEventListener("click", e=>{ if (e.target===ov) ov.remove(); });
+  draw();
+}
 function onRoomClick(e){
   const b = e.target.closest("[data-act]"); if(!b || !R) return;
   e.preventDefault();
   const a = b.dataset.act;
-  if (a==="rename")   return editPrize(b.dataset.k);
+  if (a==="rename")   return openPrizePicker(b.dataset.k);
   if (a==="room-sheet") return openRoomSheet(b.dataset.k);
   if (a==="slots+" || a==="slots-"){
     const n = R.slots.length + (a==="slots+"?1:-1);
