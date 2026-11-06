@@ -1425,12 +1425,12 @@ body{font-variant-numeric:tabular-nums}
           <div class="gq-qnote" id="gqDexNote"></div>
         </div>
 
-        <!-- 景品ラボ：在庫回転・店舗との相性・原価率の調整ガイド（再現性のための数字） -->
+        <!-- 景品ラボ：店舗との相性・在庫回転・原価率の調整ガイド（再現性のための数字） -->
         <div class="gq-screen">
           <div class="gq-h">▶ けいひん ラボ <span class="gq-sub" id="gqLabSub"></span></div>
           <div class="gq-labtabs" id="gqLabTabs">
-            <button class="chip mini" data-lab="turn" aria-pressed="true">在庫回転</button>
-            <button class="chip mini" data-lab="fit" aria-pressed="false">店舗との相性</button>
+            <button class="chip mini" data-lab="fit" aria-pressed="true">店舗との相性</button>
+            <button class="chip mini" data-lab="turn" aria-pressed="false">在庫回転</button>
             <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
             <button class="chip mini" data-lab="pos" aria-pressed="false">部屋の位置</button>
           </div>
@@ -4897,7 +4897,7 @@ function posAgg(){
   });
   return Object.values(M).filter(m=>Object.keys(m.rooms).length);
 }
-let labTab="turn";
+let labTab="fit";                                                      // 最初は「店舗との相性」（2026-11-06 菊地さん）
 function renderLab(){
   const el=$("#gqLab"); if(!el) return;
   const byP=labAgg(); const list=Object.values(byP);
