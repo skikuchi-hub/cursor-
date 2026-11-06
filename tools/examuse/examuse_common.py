@@ -247,7 +247,7 @@ def save_images(mail):
     return main if main else paths
 
 # ---------------- 商品解析 ----------------
-QTY_RE = re.compile(r"^(?P<pre>.*?)(?<![\d/])(?P<n>\d{1,4})\s*(?:入り?|個入り?|個|ヶ|pcs|PCS|ケ)\s*(?:[/／]\s*(?:ケース|C/T|CT|カートン))?\s*[@＠]\s*[¥￥]?\s*(?P<p>\d[\d,]*)\s*(?:円|-|ー|―)?\s*(?P<post>.*)$")
+QTY_RE = re.compile(r"^(?P<pre>.*?)(?<![\d/])(?P<n>\d{1,4})\s*(?:入り?|個入り?|個|ヶ|pcs|PCS|ケ)\s*(?:単位|[/／]\s*(?:ケース|C/T|CT|カートン))?(?:(?!別途)[^@＠\n]){0,20}?(?<!別途)[@＠]\s*[¥￥]?\s*(?P<p>\d[\d,]*)\s*(?:円|-|ー|―)?\s*(?P<post>.*)$")
 # 「入数 72個 単価 630円」「1ケース72個 卸価格 ¥630」のように @ が無い 1 行形式（2026-11-02）
 QTY_PRICE2_RE = re.compile(r"^(?P<pre>.*?)(?:入数|入り数|ケース入数|1\s*(?:ケース|C/T|CT|カートン|c/t))?\s*[:：]?\s*(?<![\d/])(?P<n>\d{1,4})\s*(?:個入り?|入り?|個|ヶ|pcs|PCS|ケ)\s*(?:[/／]\s*(?:ケース|C/T|CT|カートン))?[\s　,、/／]*(?:単価|卸価格|卸値|卸|価格|税抜単価|税抜|特価)\s*[:：]?\s*[¥￥]?\s*(?P<p>\d[\d,]*)\s*(?:円|-|ー|―)?\s*(?P<post>.*)$")
 DELIV_RE = re.compile(r"(即納|次回|納期|入荷|発売|締切|出荷予定|\d{1,2}月[上中下]?|\d{1,2}/[上中下]|年内|予定)")
@@ -269,9 +269,13 @@ RESTRICT_RULES = [
 ]
 CODE_RE = re.compile(r"\b([A-Z]{2,5}-\d{3,6})\b")
 # 入数だけの行（例: 「発送単位：72個」「100個単位 （ハーフ送料1000円）」「72入り」）
-QTY_ONLY_RE = re.compile(r"^(?:発送単位|販売単位|出荷単位|入数|入り数|ケース入数|数量|1\s*(?:ケース|C/T|CT|カートン|c/t))?\s*[:：=＝]?\s*(?P<n>\d{1,4})\s*(?:個入り?|入り?|個|ヶ|pcs|PCS|ケ)\s*(?:単位|入り?|[/／]\s*(?:ケース|C/T|CT|カートン))?\s*(?P<post>.*)$")
+QTY_ONLY_RE = re.compile(r"^(?:発送単位|販売単位|出荷単位|単位|入数|入り数|ケース入数|数量|1\s*(?:ケース|C/T|CT|カートン|c/t))?\s*[:：=＝]?\s*(?P<n>\d{1,4})\s*(?:個入り?|入り?|個|ヶ|pcs|PCS|p|P|ケ)\s*(?:単位|入り?|[/／]\s*(?:ケース|C/T|CT|カートン))?\s*(?P<post>.*)$")
 # 単価だけの行（例: 「特価 @630」「単価＠900円」「@620-」）
-PRICE_ONLY_RE = re.compile(r"^(?:(?:特価|単価|卸価格|卸値|卸|価格|税抜単価|税抜|お値段|仕入価格|仕入値)\s*[:：]?\s*[@＠]?|[@＠])\s*[¥￥]?\s*(?P<p>\d[\d,]*)\s*(?:円|-|ー|―)?\s*(?:[/／]\s*(?:個|1個|pc))?\s*(?:[（(]?税抜[)）]?)?\s*(?P<post>.*)$")
+PRICE_ONLY_RE = re.compile(r"^(?:(?:特価プライス|プライス|卸単価|納品価格|納価|特価|単価|卸価格|卸値|卸|価格|税抜単価|税抜|お値段|仕入価格|仕入値|仕切り?値?)\s*[:：]?\s*[@＠]?|[@＠])\s*[¥￥]?\s*(?P<p>\d[\d,]*)\s*(?:円|-|ー|―)?\s*(?:[/／]\s*(?:個|1個|pc))?\s*(?:[（(]?税抜[)）]?)?\s*(?P<post>.*)$")
+# 商品名の末尾に入数だけが付いた行（例: 「●NICIセサミストリート キーリング3種72入」＋次の行「@980-」）（2026-11-06）
+NAME_QTY_RE = re.compile(r"^(?P<pre>.*\D)(?<![\d/])(?P<n>\d{1,4})\s*(?:入り?|個入り?)\s*$")
+# 商品名の候補にしない属性行（2026-11-06）
+CAND_SKIP_RE = re.compile(r"^(?:締め?日|締切|品番|JAN|サイズ|商品サイズ|パッケージサイズ|種類|アソート|メーカー|個口|上代|全\s*\d+\s*種|インナー|ディスプレイ)")
 # 本文をブロックに分ける区切り線（＊＊＊… / ***…）
 BLOCK_SEP_RE = re.compile(r"(?m)^[ 　]*[*＊]{5,}[ 　]*$")
 RETAIL_RE = re.compile(r"(?:上代|メーカー希望小売価格|希望小売価格|参考上代|定価)\s*[:：]?\s*[¥￥]?\s*(\d[\d,]*)")
@@ -382,10 +386,11 @@ def parse_free_format(lines, subject):
     MARK = "★●■◆◎○〇◇□▲△☆※💫⭐🎀【"
     for raw in lines:
         line = raw.strip()
-        if not line or re.fullmatch(r"[_\-=＝ー―\s]+", line): continue
+        if not line: continue
+        if re.fullmatch(r"[_\-=＝ー―\s]+", line): cand_marker = False; continue   # 区切り線のあとは次の行を商品名の候補にする
         def _emit(name, qty, price, src, posts):
             nonlocal pending_deliv, cand, cand_marker, pend
-            name, tail = _split_name_tail(_clean_name(name).lstrip("★●■◆◎○〇◇□▲△☆・ "))
+            name, tail = _split_name_tail(_clean_name(name).lstrip("★●■◆◎○〇◇□▲△☆・*＊ "))
             p = {"name": name, "qty_per_case": qty, "price": price, "src": src}
             if tail: p["note"] = tail
             for post in posts:
@@ -404,9 +409,14 @@ def parse_free_format(lines, subject):
             prods.append(p); cand = None; cand_marker = False; pend = {}
         m = QTY_RE.match(line) or QTY_PRICE2_RE.match(line)
         if m:
-            pre = _clean_name(re.sub(r"(?:入数|入り数|ケース入数|1\s*(?:ケース|C/T|CT|カートン))\s*[:：]?\s*$", "", m.group("pre")))
+            pre = _clean_name(re.sub(r"(?:入数|入り数|ケース入数|発送単位|出荷単位|販売単位|カートン単位|ケース単位|単位|1\s*(?:ケース|C/T|CT|カートン))\s*[:：]?\s*$", "", m.group("pre")))
             name = pre if len(re.sub(r"[\W_]", "", pre)) >= 2 else (cand or "")
             _emit(name, _num(m.group("n")), _num(m.group("p")), line, [m.group("post")])
+            continue
+        mn = NAME_QTY_RE.match(line)
+        if mn and len(re.sub(r"[\W_]", "", mn.group("pre"))) >= 4 and not NOISE_RE.search(line) and not QTY_ONLY_RE.match(line):
+            cand = mn.group("pre").strip(); cand_marker = line[0] in MARK
+            pend = {"qty": _num(mn.group("n")), "src": [line], "post": []}
             continue
         # 入数と単価が別々の行にある形式（「発送単位：72個」＋「特価 @630」、「100個単位」＋「単価＠900円」）
         mq = QTY_ONLY_RE.match(line); mp = PRICE_ONLY_RE.match(line) if not mq else None
@@ -449,7 +459,9 @@ def parse_free_format(lines, subject):
             pending_deliv.append(line); continue
         if NOISE_RE.search(line) or len(line) > 70: continue
         if len(re.sub(r"[\W_]", "", line)) < 2: continue
-        is_marker = line[0] in MARK
+        if line[0] == "※" or CAND_SKIP_RE.match(line): continue
+        line = re.sub(r"^(?:商品名|品名)\s*[:：]\s*|^[*＊]+\s*", "", line)   # 「*」は商品名にも注意書きにも使われるので見出し扱いしない
+        is_marker = line[0] in MARK and not re.fullmatch(r"【[^】]*】", line)   # 「【サンリオ カフェラテシリーズ】」のようなシリーズ見出しは優先しない
         if is_marker or not cand_marker:
             cand = line; cand_marker = is_marker
     if prods and pending_deliv and not prods[-1].get("delivery"): prods[-1]["delivery"] = "、".join(pending_deliv)
