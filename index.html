@@ -898,23 +898,6 @@ body{font-variant-numeric:tabular-nums}
 .gq-newslist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:#eef3fb}
 .gq-newslist li{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px;line-height:1.5}
 .gq-newslist li b{color:#f5c542}
-/* ボーナスプール */
-.gq-pool{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:10px 12px}
-.gq-poolnum{font-family:var(--fs-mono);font-size:16px;color:#f5c542;font-variant-numeric:tabular-nums;line-height:1}
-.gq-poolnum b{font-size:34px;font-weight:700}
-.gq-poolmeta{font-size:11px;color:#a8b8d4;text-align:right;line-height:1.5}
-.gq-poolmeta b{color:#eef3fb}
-.gq-poolsplit{display:flex;flex-direction:column;gap:5px;margin-top:8px}
-.gq-share{display:flex;align-items:center;gap:8px;font-size:12px;color:#eef3fb}
-.gq-share .nm{width:76px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gq-share .gq-bar{height:8px}
-.gq-share .gq-bar i{background:linear-gradient(#ffe08a,#e4a900)}
-.gq-share .yen{width:78px;flex:none;text-align:right;font-family:var(--fs-mono);font-variant-numeric:tabular-nums;color:#f5c542;font-weight:700}
-.gq-share .ct{width:44px;flex:none;text-align:right;font-size:10.5px;color:#a8b8d4}
-.gq-share.me .nm{color:#f5c542}
-.gq-poolrate{margin-top:10px;border-top:1px dashed #2a4a8c;padding-top:8px}
-.gq-poolrate label{font-size:11.5px;color:#a8b8d4;display:flex;align-items:center;gap:6px}
-.gq-poolrate .gq-in{width:72px}
 /* 店舗パトロール */
 .gq-hps{display:flex;flex-direction:column;gap:6px}
 .gq-hp{display:flex;align-items:center;gap:9px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px}
@@ -1379,20 +1362,6 @@ body{font-variant-numeric:tabular-nums}
         <div class="gq-screen gq-news" id="gqNews" hidden>
           <div class="gq-h">▶ そくほう <span class="gq-sub">前回ひらいてから</span></div>
           <ul class="gq-newslist" id="gqNewsList"></ul>
-        </div>
-
-        <!-- みんなのボーナスプール -->
-        <div class="gq-screen">
-          <div class="gq-h">▶ みんなの ボーナスプール <span class="gq-sub" id="gqPoolSub"></span></div>
-          <div class="gq-pool">
-            <div class="gq-poolnum">¥<b id="gqPool">0</b></div>
-            <div class="gq-poolmeta" id="gqPoolMeta"></div>
-          </div>
-          <div class="gq-poolsplit" id="gqPoolSplit"></div>
-          <div class="gq-qnote" id="gqPoolNote"></div>
-          <div class="gq-poolrate" id="gqPoolRate" hidden>
-            <label>プールの率 <input class="gq-in" id="gqRateIn" type="number" inputmode="decimal" min="0" max="10" step="0.1"> ％（粗利に対して）</label>
-          </div>
         </div>
 
         <!-- 店舗パトロール（体力ゲージ） -->
@@ -4703,55 +4672,9 @@ function monSVG(s, uid){
 function byDay(col, day){ return mine(Store.data[col]).filter(r=>localDay(r.createdAt)===day); }
 
 /* ===================== パーティ（協力）の仕掛け ===================== */
-/* ボーナスプール：今月の粗利（売上 − 景品原価 − 場所代）× 率。率は settings/team の bonusRate（％、既定 2.5）。管理者だけ変更可。
-   分け方は「巡回回数の比率」（行動量を評価）。 */
 const salesOfRec = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
-const DEFAULT_BONUS_RATE = 2.5;
-function teamRate(){ const t=(Store.data.settings||[]).find(r=>r.id==="team"); const v=t?num(t.bonusRate):0; return v>0 ? v : DEFAULT_BONUS_RATE; }
-function teamMonth(mon){
-  const W=(Store.data.weekly||[]).filter(r=>monthOf(r.week)===mon && !r._local_hidden);
-  const sales=W.reduce((a,r)=>a+salesOfRec(r),0), cost=W.reduce((a,r)=>a+num(r.cost),0);
-  const place=Math.round(sales*PLACE_RATE), gross=sales-cost-place;
-  const rate=teamRate(), pool=Math.max(0, Math.round(gross*rate/100));
-  const visits={}; W.forEach(r=>{ const w=staffOf(r); visits[w]=(visits[w]||0)+1; });
-  const n=W.length;
-  const perVisit = n>0 ? Math.round(pool/n) : 0;
-  return {W, sales, cost, place, gross, rate, pool, visits, n, perVisit};
-}
 /* 管理者が「トレーナー」で自分以外を選んだときは、そのスタッフに見えている成績画面を再現する（管理者だけの情報は隠す） */
 const adminView = () => !!(ME && ME.role==="admin" && gqWho===ME.name);
-let poolShown = null;
-function renderPool(mon){
-  const el=$("#gqPool"); if(!el) return;
-  const t=teamMonth(mon);
-  if (poolShown===null || poolShown===t.pool) el.textContent = t.pool.toLocaleString("ja-JP");
-  else countTo(el, t.pool, 900);
-  poolShown = t.pool;
-  const admin = adminView();
-  $("#gqPoolSub").textContent = admin ? `${+mon.slice(5)}月・粗利の ${t.rate}％` : `${+mon.slice(5)}月`;
-  $("#gqPoolMeta").innerHTML = admin
-    ? `今月の粗利 <b>${yen(t.gross)}</b>円<br>売上 ${yen(t.sales)}円 − 景品 ${yen(t.cost)}円 − 場所代 ${yen(t.place)}円`
-    : `みんなの巡回 <b>${t.n}</b>回<br>巡回1回あたり <b>¥${t.perVisit.toLocaleString("ja-JP")}</b>`;
-  const members = Array.from(new Set(STAFF.concat(Object.keys(t.visits)))).filter(w=>t.visits[w]||STAFF.includes(w));
-  const maxV = Math.max(1, ...members.map(w=>t.visits[w]||0));
-  $("#gqPoolSplit").innerHTML = members.map(w=>{
-    const v=t.visits[w]||0, share = v*t.perVisit;                                  // 巡回回数 × 巡回1回あたりの単価
-    return `<div class="gq-share ${w===gqWho?"me":""}"><span class="nm">${esc(w)}</span><div class="gq-bar"><i style="width:${(v/maxV*100).toFixed(0)}%"></i></div><span class="ct">${v}回</span><span class="yen">¥${share.toLocaleString("ja-JP")}</span></div>`;
-  }).join("");
-  $("#gqPoolNote").innerHTML = t.n>0
-    ? `<b>巡回1回あたり ¥${t.perVisit.toLocaleString("ja-JP")}</b>（プール ÷ みんなの巡回 ${t.n}回）× 自分の巡回回数 ＝ 取り分。`
-      + (admin ? ` 月末の数字で確定。` : ` <b style="color:#f5c542">もう1店まわると ≈ +¥${t.perVisit.toLocaleString("ja-JP")}</b>。売上が伸びるほど単価も上がる。`)
-    : (admin ? `今月の巡回が入るとプールが育ちはじめる。粗利の ${t.rate}％ を、巡回1回あたりの単価 × 回数で分ける。`
-             : `今月の巡回が入るとプールが育ちはじめる。巡回1回あたりの単価 × 自分の巡回回数 が取り分。`);
-  const rateBox=$("#gqPoolRate"); if (rateBox){ rateBox.hidden = !admin; const inp=$("#gqRateIn"); if (inp && document.activeElement!==inp) inp.value = t.rate; }
-}
-async function saveTeamRate(){
-  const v = num($("#gqRateIn").value); if (!(v>0) || v>10) { toast("率は 0.1〜10 の範囲で入れてください"); return; }
-  const cur=(Store.data.settings||[]).find(r=>r.id==="team")||{};
-  await Store.put("settings","team",Object.assign({},cur,{bonusRate:v}));
-  toast(`プールの率を ${v}％ にしました`); renderQuest();
-}
-
 /* 店舗パトロール：最終訪問からの日数で体力。週1が最低ライン、2〜3日に1回が理想 */
 function daysSince(dateStr){ if(!dateStr) return null; const a=new Date(dateStr+"T00:00:00"), b=new Date(todayStr()+"T00:00:00"); return Math.round((b-a)/864e5); }
 function storeLast(storeName){
@@ -4867,11 +4790,11 @@ function renderDex(){
 }
 
 /* 速報：前回ひらいたとき（端末に残っていた内容）からの差分 */
-let SEEN = null;                                                       // {ids:Set, pool:number, hpBad:number}
+let SEEN = null;                                                       // {ids:Set}
 function snapshotSeen(){
   try {
     const mon=todayStr().slice(0,7);
-    SEEN = { ids:new Set((Store.data.weekly||[]).map(r=>r.id)), pool:teamMonth(mon).pool };
+    SEEN = { ids:new Set((Store.data.weekly||[]).map(r=>r.id)) };
   } catch(e){ SEEN=null; }
 }
 function renderNews(mon){
@@ -4882,14 +4805,12 @@ function renderNews(mon){
   const others=fresh.filter(r=>staffOf(r)!==gqWho);
   if (others.length){ const by={}; others.forEach(r=>{ by[staffOf(r)]=(by[staffOf(r)]||0)+1; });
     items.push(`🕹️ ${Object.keys(by).map(w=>`<b>${esc(w)}</b> が ${by[w]}台`).join("、")} 巡回した（${esc(Array.from(new Set(others.map(r=>r.store.replace(/店$/,"")))).join("・"))}）`); }
-  const t=teamMonth(mon); const dp=t.pool-SEEN.pool;
-  if (dp>0) items.push(`💰 ボーナスプールが <b>+¥${dp.toLocaleString("ja-JP")}</b> 育った（いま ¥${t.pool.toLocaleString("ja-JP")}）`);
   const bad = STORES.filter(s=>{ const r=storeLast(s.n); const d=r?daysSince(r.week):null; return d===null||d>=7; });
   if (bad.length) items.push(`🔴 <b>${esc(bad.map(s=>s.n.replace(/店$/,"")).join("・"))}</b> が週1を割りそう／割っている`);
   box.hidden = !items.length;
   $("#gqNewsList").innerHTML = items.map(x=>`<li>${x}</li>`).join("");
 }
-function renderTeam(mon){ renderNews(mon); renderPool(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderDex(); renderLab(); }
+function renderTeam(mon){ renderNews(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderDex(); renderLab(); }
 
 /* ===================== 景品ラボ：景品ごとの数字（再現性のため） =====================
    4人機は部屋ごとのカウンター差＝その部屋（＝その景品）のプレイ数、在庫差＝払出。前回訪問から今回までの区間で、
@@ -5510,7 +5431,6 @@ function wire(){
   // 目標設定
   let gqT; const gqSave = () => { clearTimeout(gqT); gqT=setTimeout(saveGoal, 600); };
   $("#gqMonthly").oninput = gqSave; $("#gqDays").oninput = gqSave;
-  let rateT; $("#gqRateIn").onchange = () => { clearTimeout(rateT); rateT=setTimeout(saveTeamRate, 300); };
   $("#gqLabTabs").onclick = e => { const b=e.target.closest("[data-lab]"); if(!b) return; labTab=b.dataset.lab; $$("#gqLabTabs .chip").forEach(c=>c.setAttribute("aria-pressed", String(c===b))); renderLab(); };
 
   // 転記ドロワー
