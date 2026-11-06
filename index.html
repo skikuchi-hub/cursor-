@@ -286,6 +286,13 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save-cancel:active{background:var(--surface-sunk)}
 /* 仕入れ（EXAmuse の新着商品カード） */
 .src-top{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.src-q{position:relative;margin-bottom:8px}
+.src-q input.txt{padding-left:34px;padding-right:38px;background:var(--surface)}
+.src-q .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:2;pointer-events:none}
+.src-q input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}
+.src-q .x{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:none;color:var(--ink-3);font-size:18px;line-height:1}
+.src-hit{font-size:12px;color:var(--ink-2);margin:0 2px 10px}
+.sc .stb{display:inline-block;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--surface-sunk);color:var(--ink-2);margin-right:6px;vertical-align:1px}
 .src-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:var(--r-m);background:var(--navy);color:#fff;margin-bottom:12px}
 .src-sum b{font-size:16px}
 .src-sum .btn{background:var(--gold);color:#1b2d5b;border:0;font-weight:900;padding:9px 12px;border-radius:9px;font-size:13px;white-space:nowrap}
@@ -1542,6 +1549,8 @@ body{font-variant-numeric:tabular-nums}
         <p class="hint" style="margin-top:5px">インフィニティからのメールが自動で並びます。写真と単価を見て <b>見送り／保留／発注</b> をタップ。「発注要求を出す」で、Mac が発注書と Mail の下書きを作ります。</p>
       </div>
       <div class="src-sum" id="srcSum" hidden><div><div style="font-size:11px;opacity:.8">発注予定</div><b id="srcSumTxt">0件</b></div><button type="button" class="btn" id="srcSubmit">発注要求を出す</button></div>
+      <div class="src-q"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" class="txt" id="srcQ" placeholder="商品名・品番・件名でさがす" autocomplete="off" enterkeyhint="search" aria-label="仕入れの商品をさがす"><button type="button" class="x" id="srcQx" aria-label="検索をクリア" hidden>×</button></div>
+      <div class="src-hit" id="srcHit" hidden></div>
       <div class="src-top" id="srcFilter"></div>
       <div id="srcList"><div class="empty"><b>📦</b>読み込み中…</div></div>
       <div class="card flush" id="srcReqCard" hidden style="margin-top:4px">
@@ -2906,7 +2915,7 @@ function updateReadouts(){
    品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
    判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", open:{}, fix:{}, sel:{}, busy:false, agg:null, local:{} };
+const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", q:"", open:{}, fix:{}, sel:{}, busy:false, agg:null, local:{} };
 /* 端末で変えた判断（key → {doc, at, pending}）。bootstrap の応答がその変更より前に取りに行ったものなら、応答で上書きせず端末の値を残す。
    送信中（pending）の間は同じ商品の二重タップを受け付けない */
 function setLocalSourcing(key, doc, pending){
@@ -3090,7 +3099,7 @@ function srcCard(it){
     ${it.img ? `<img class="pic" src="${esc(thumbSrc(it.img))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic none',textContent:'画像を表示できません'}))">` : `<div class="pic none">画像なし</div>`}
     <div class="bd">
       <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
-      <div class="sub">${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
+      <div class="sub">${SRC.q.trim() ? `<span class="stb">${esc(SRC_LABEL[st]||st)}</span>` : ""}${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
       <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
       ${big ? `<div class="sizeng">📏 一辺 ${big}cm（${SIZE_LIMIT_CM}cm 超）→ <b>見送り候補</b></div>` : ""}
@@ -3106,17 +3115,33 @@ function srcCard(it){
     </div>
   </div>`;
 }
+/* 検索（2026-11-06 菊地さん）：商品名・品番・件名・メーカー・種類・メモ・メール原文から。空白区切りはすべてを含むもの。
+   ひらがな／カタカナ、全角／半角、大文字／小文字、記号の違いは無視する */
+const srcFold = s => normName(s).replace(/[\u3041-\u3096]/g, c=>String.fromCharCode(c.charCodeAt(0)+0x60));
+function srcMatch(it, words){
+  const hay = srcFold([it.name, it.code, it.subject, it.maker, it.variety, it.memo, it.raw, it.key].filter(Boolean).join(" "));
+  return words.every(w=>hay.includes(w));
+}
 function renderSourcing(){
   const list=$("#srcList"); if (!list) return;
   SRC.agg = null;
   const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
+  const words = String(SRC.q||"").split(/[\s\u3000]+/).map(srcFold).filter(Boolean);
   const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
   const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"],["received","受取済"],["cancelled","キャンセル"]];
   if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
   $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
-  const shown = items.filter(it=>srcState(it)===SRC.filter);
-  if (SRC.filter==="todo") shown.sort((a,b)=>(srcTooBig(a)?1:0)-(srcTooBig(b)?1:0) || srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順（13cm 超は後ろ）
+  // 検索中は状態のボタンに関係なく、すべての商品から探す（カードに状態を出す）
+  $("#srcFilter").hidden = !!words.length;
+  const shown = words.length ? items.filter(it=>srcMatch(it, words)) : items.filter(it=>srcState(it)===SRC.filter);
+  const hit=$("#srcHit"); hit.hidden = !words.length;
+  if (words.length){
+    const by = {}; shown.forEach(it=>{ const st=srcState(it); by[st]=(by[st]||0)+1; });
+    hit.innerHTML = shown.length ? `<b>${shown.length}件</b> 見つかりました（${groups.filter(([k])=>by[k]).map(([k,l])=>`${l} ${by[k]}`).join("・")}）` : "";
+  }
+  if (!words.length && SRC.filter==="todo") shown.sort((a,b)=>(srcTooBig(a)?1:0)-(srcTooBig(b)?1:0) || srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順（13cm 超は後ろ）
   list.innerHTML = shown.length ? shown.map(srcCard).join("")
+    : words.length && SRC.items.length ? `<div class="empty"><b>🔍</b>「${esc(SRC.q.trim())}」に合う商品はありません。</div>`
     : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : SRC.error ? `<span style="color:var(--critical-ink)">読み込めませんでした：${esc(SRC.error)}</span>` : (Store.online() ? (SRC.at ? "まだ商品が届いていません。" : "読み込み中…") : "オンラインのときに読み込まれます。")}</div>`;
   // 発注予定のまとめ
   const orders = items.filter(it=>srcState(it)==="order");
@@ -3167,6 +3192,10 @@ function wireSourcing(){
   $("#srcReload").onclick = ()=>loadSourcing(true);
   $("#srcSubmit").onclick = srcSubmit;
   $("#srcFilter").onclick = e=>{ const b=e.target.closest("[data-sf]"); if(!b) return; SRC.filter=b.dataset.sf; renderSourcing(); };
+  let qt=0; const q=$("#srcQ"), qx=$("#srcQx");
+  q.addEventListener("input", ()=>{ qx.hidden = !q.value; clearTimeout(qt); qt=setTimeout(()=>{ SRC.q=q.value; renderSourcing(); }, 200); });
+  q.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); q.blur(); } });   // 「検索」キーでキーボードを閉じる
+  qx.onclick = ()=>{ q.value=""; qx.hidden=true; SRC.q=""; renderSourcing(); q.focus(); };
   $("#srcList").addEventListener("click", async e=>{
     const card=e.target.closest(".sc"); if(!card) return; const key=card.dataset.key; const it=SRC.items.find(x=>x.key===key); if(!it) return;
     const b=e.target.closest("button"); if(!b) return;
