@@ -1070,7 +1070,7 @@ body{font-variant-numeric:tabular-nums}
     </div>
     <div class="hdr-row">
       <div class="brand"><b>クレーンログ</b></div>
-      <a class="hdr-btn" id="openX" data-zero="1" href="https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit" target="_blank" rel="noopener">📗 シート<span class="cnt" id="xCount" hidden>0</span></a>
+      <a class="hdr-btn" id="openX" data-zero="1" hidden href="https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit" target="_blank" rel="noopener">📗 シート<span class="cnt" id="xCount" hidden>0</span></a>
       <button type="button" class="hdr-btn iss" id="issueBtn" hidden>⚠ 要確認<span class="cnt" id="issueCnt">0</span></button>
     </div>
     <div class="hdr-sub">
@@ -1660,6 +1660,7 @@ let ME = null;                                   // {name, role:"admin"|"staff"}
 /* 仕入れタブは 管理者か、スタッフタブ「仕入れ」にチェックのある人だけ */
 const canSource = () => !!(ME && (ME.role==="admin" || ME.sourcing));
 function applyPerms(){
+  { const x=$("#openX"); if (x) x.hidden = !(ME && ME.role==="admin"); }   // 右上の「📗 シート」は管理者だけ（2026-11-07 菊地さん）
   const t=document.querySelector('.tab[data-p="p-src"]'); if (!t) return;
   const ok=canSource(); t.hidden=!ok;
   if (!ok && $("#p-src").classList.contains("on")){ document.querySelector('.tab[data-p="p-log"]').click(); }
