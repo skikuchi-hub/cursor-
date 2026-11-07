@@ -987,6 +987,14 @@ body{font-variant-numeric:tabular-nums}
 .gq-labi .srow .gq-bar{height:7px}
 .gq-labi .srow .gq-bar i{background:linear-gradient(#7fb8ea,#2f7fc6)}
 .gq-labi .srow.best .sn{color:#f5c542}
+/* 景品人気ランキング（店舗ごと 1〜4 位） */
+.gq-labi .rank{display:flex;flex-direction:column;gap:4px;margin-top:6px}
+.gq-labi .rkrow{display:flex;align-items:center;gap:8px;font-size:13px;color:#eef3fb}
+.gq-labi .rkrow .rk{flex:none;width:36px;font-weight:900;color:#a8b8d4;font-variant-numeric:tabular-nums}
+.gq-labi .rkrow:first-child .rk{color:#f5c542;font-size:15px}
+.gq-labi .rkrow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.gq-labi .rkrow:first-child .nm{color:#f5c542}
+.gq-labi .rkrow .ct{flex:none;font-size:11px;color:#a8b8d4;font-variant-numeric:tabular-nums}
 .gq-labi .srow.best .gq-bar i{background:linear-gradient(#ffe08a,#e4a900)}
 .gq-labi .srow .v{width:92px;flex:none;text-align:right;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .gq-gym{display:flex;align-items:center;gap:10px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px}
@@ -1435,7 +1443,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="gq-screen">
           <div class="gq-h">▶ けいひん ラボ <span class="gq-sub" id="gqLabSub"></span></div>
           <div class="gq-labtabs" id="gqLabTabs">
-            <button class="chip mini" data-lab="fit" aria-pressed="true">店舗との相性</button>
+            <button class="chip mini" data-lab="fit" aria-pressed="true">人気ランキング</button>
             <button class="chip mini" data-lab="turn" aria-pressed="false">在庫回転</button>
             <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
             <button class="chip mini" data-lab="pos" aria-pressed="false">部屋の位置</button>
@@ -5022,20 +5030,17 @@ function renderLab(){
     $("#gqLabSub").textContent = rows.length ? (stale?`滞留 ${stale}`:`滞留なし`) : "";
     note = `在庫は景品マスタの「残り在庫」（買った数 − 補充に使った数）。ペースは前回訪問から今回までの払出を日数で割ったもの。<b style="color:#f5c542">在庫が多くて出ない景品</b>は、出がいい店へ移す・獲得率をゆるめる、のどちらか。`;
   } else if (labTab==="fit"){
-    // 店舗ごとの当たり景品（売上/日。BOX は払出/日）
+    // 景品人気ランキング：店舗ごとに、その店で取られた数（払出）が多い景品の 1〜4 位だけ（2026-11-07 菊地さん「余計な情報は削除」）
     const byStore={};
-    list.forEach(P=>Object.entries(P.stores).forEach(([st,S])=>{ (byStore[st]=byStore[st]||[]).push({prize:P.prize, S, unit:P.unit}); }));
+    list.forEach(P=>Object.entries(P.stores).forEach(([st,S])=>{ if (S.pays>0) (byStore[st]=byStore[st]||[]).push({prize:P.prize, pays:S.pays, perDay:S.paysPerDay}); }));
     html = STORES.map(s=>{
-      const arr=(byStore[s.n]||[]).slice().sort((a,b)=>(b.S.salesPerDay??-1)-(a.S.salesPerDay??-1) || b.S.paysPerDay-a.S.paysPerDay).slice(0,4);
-      if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">2回目の訪問から、景品ごとの数字が出ます。</div></div>`;
-      const max=Math.max(1,...arr.map(x=>x.S.salesPerDay??x.S.paysPerDay*PLAY_PRICE*10));
-      return `<div class="gq-labi good"><div class="hd"><b>${esc(s.n)}</b><span class="tag">当たり景品</span></div>
-        <div class="stores">${arr.map((x,i)=>{ const v=x.S.salesPerDay; const w=((v??x.S.paysPerDay*PLAY_PRICE*10)/max*100).toFixed(0);
-          return `<div class="srow ${i===0?"best":""}"><span class="sn">${esc(x.prize)}</span><div class="gq-bar"><i style="width:${w}%"></i></div><span class="v">${v!==null?`${yen(Math.round(v))}円/日`:`${n1(x.S.paysPerDay*7)}こ/週`}</span></div>`; }).join("")}</div>
-        <div class="act">${arr[0].S.nOf?`いちばん上は 獲得率 1/${Math.round(arr[0].S.nOf)}。`:""}この店で売れた順。入れ替えるときの第一候補。</div></div>`;
+      const arr=(byStore[s.n]||[]).slice().sort((a,b)=>b.pays-a.pays || b.perDay-a.perDay).slice(0,4);
+      if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">景品が取られた記録が入ると、ランキングが出ます。</div></div>`;
+      return `<div class="gq-labi good"><div class="hd"><b>${esc(s.n)}</b><span class="tag">人気ランキング</span></div>
+        <div class="rank">${arr.map((x,i)=>`<div class="rkrow"><span class="rk">${i+1}位</span><span class="nm">${esc(x.prize)}</span><span class="ct">${x.pays}こ</span></div>`).join("")}</div></div>`;
     }).join("");
-    $("#gqLabSub").textContent = "店舗ごと";
-    note = `同じ景品でも店で出かたが違う。<b style="color:#f5c542">売上/日</b>はその部屋のカウンター差×100円÷日数（BOX機は払出/週）。カウンターを入れていない区間は数字に入らない。`;
+    $("#gqLabSub").textContent = "店舗ごと 1〜4位";
+    note = `店舗ごとに、取られた数が多い景品の順（累計の払出）。補充・入れ替えの第一候補。`;
   } else if (labTab==="pos"){
     const ms=posAgg();
     html = ms.map(m=>{
