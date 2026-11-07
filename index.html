@@ -1046,7 +1046,7 @@ body{font-variant-numeric:tabular-nums}
 .updbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;
   margin:0;padding:8px 14px;background:var(--gold-wash);color:var(--gold-text);font-size:12.5px;font-weight:700;border-bottom:1px solid var(--line)}
 .updbar .btn{padding:7px 12px;font-size:12px}
-/* 補充候補の印：この店の当たり／在庫多め */
+/* 補充候補の印：当たり（全店）／在庫多め */
 .hinttag{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:700;vertical-align:middle;line-height:1.5}
 .hinttag.hit{background:var(--gold-wash);color:var(--gold-text)}
 .hinttag.stale{background:var(--sky-wash);color:var(--sky-ink)}
@@ -2538,15 +2538,15 @@ function roomSwapPlaces(a, c){
   return true;
 }
 document.addEventListener("click", onRoomSheetClick);
-/* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
-   けいひんラボと同じ区間データ（labAgg）から作る */
+/* 補充候補の並び：全店を合わせた「当たり景品」（課金された回数＝4人機のカウンター差の累計 → 払出ペース → 払出数 の順）を先頭に、
+   次に「在庫多め（滞留）」の景品。けいひんラボと同じ区間データ（labAgg）から作る。
+   2026-11-07 菊地さん「この店限定ではなく全店総じての当たりを上位に」（storeName は互換のため残しているが使わない） */
 function prizeHints(storeName){
   const hit=new Map(), stale=new Set();
   try {
     const agg = labAgg();
     Object.values(agg).forEach(P=>{
-      const S=P.stores[storeName];
-      if (S && (S.pays>0 || (S.salesPerDay||0)>0)) hit.set(P.prize, (S.salesPerDay||0)*1000 + S.paysPerDay*100 + S.pays);
+      if (P.pays>0 || (P.playsKnown && P.plays>0)) hit.set(P.prize, (P.playsKnown?P.plays:0)*1000 + P.pacePerWeek*100 + P.pays);
       if (P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14))) stale.add(P.prize);
     });
   } catch(e){}
@@ -2556,7 +2556,7 @@ function orderByHints(names, storeName){
   const h = prizeHints(storeName);
   const score = n => h.hit.has(n) ? 2e9 + h.hit.get(n) : h.stale.has(n) ? 1e9 : 0;
   const sorted = names.slice().sort((a,b)=> score(b)-score(a));
-  return {names:sorted, tag:n=> h.hit.has(n) ? `<span class="hinttag hit">★この店の当たり</span>` : h.stale.has(n) ? `<span class="hinttag stale">在庫多め</span>` : ""};
+  return {names:sorted, tag:n=> h.hit.has(n) ? `<span class="hinttag hit">★当たり（全店）</span>` : h.stale.has(n) ? `<span class="hinttag stale">在庫多め</span>` : ""};
 }
 /* 4人機の景品名：機械タイプ「4人機用」の景品をプルダウンで出し、打った文字で絞り込む */
 function prizeNames4p(){
