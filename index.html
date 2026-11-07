@@ -854,6 +854,17 @@ body{font-variant-numeric:tabular-nums}
 }
 .gq-goalcalc{font-size:12.5px;margin-top:8px;color:#eef3fb}
 .gq-goalcalc b{color:#f5c542;font-size:16px}
+.gq-pay{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:10px 11px}
+.gq-pay .big{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.gq-pay .big b{font-family:var(--fs-mono);font-size:24px;color:#f5c542;font-variant-numeric:tabular-nums}
+.gq-pay .nudge{margin-top:8px;padding:7px 9px;background:#1b2d5b;border-radius:6px;font-size:12.5px;color:#eef3fb;line-height:1.5}
+.gq-pay .nudge b{color:#f5c542}
+.gq-pay .days{margin-top:8px;font-size:11.5px;color:#a8b8d4;line-height:1.6}
+.gq-pay .days b{color:#eef3fb;font-variant-numeric:tabular-nums}
+.gq-payset{margin-top:10px;border-top:1px dashed #2a4a8c;padding-top:10px;font-size:11.5px;color:#a8b8d4;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wk-pay{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;color:var(--ink-2);margin-top:4px}
+.wk-pay b{color:var(--ink);font-variant-numeric:tabular-nums}
+.wk-pay span:last-child{color:var(--gold-ink,var(--ink-2));font-weight:700;text-align:right}
 .gq-road{overflow-x:auto;scrollbar-width:thin;margin:0 -4px}
 .gq-road>svg{display:block;min-width:420px;width:100%;height:auto}
 .gq-roadnote{font-size:12px;color:#eef3fb;margin-top:6px;line-height:1.5}
@@ -1066,6 +1077,7 @@ body{font-variant-numeric:tabular-nums}
         </div>
         <div class="wk-bar"><i id="wkBar" style="width:0%"></i></div>
         <div class="wk-sub"><span id="wkSales">売上 0円</span><span id="wkLast">まだ入力なし</span></div>
+        <div class="wk-pay" id="wkPay" hidden><span id="wkPayNow"></span><span id="wkPayNext"></span></div>
       </div>
 
       <div class="editbar" id="editBar" hidden><span id="editBarTxt">記録を修正中</span><button type="button" class="btn" id="editCancel">やめる</button></div>
@@ -1360,6 +1372,13 @@ body{font-variant-numeric:tabular-nums}
         </div>
 
         <!-- 速報（前回開いてから変わったこと） -->
+        <!-- 巡回の報酬（1店舗の巡回ごとに定額。人件費として粗利からも引く） -->
+        <div class="gq-screen" id="gqPayScreen" hidden>
+          <div class="gq-h">▶ こんげつの きゅうりょう <span class="gq-sub" id="gqPayMonth"></span></div>
+          <div class="gq-pay" id="gqPay"></div>
+          <div class="gq-payset" id="gqPaySet" hidden>1店舗の巡回あたり <input class="gq-in" id="gqRate" type="number" inputmode="numeric" min="0" step="100" placeholder="0" style="width:90px"> 円（人件費＋ガソリン代。管理者だけ変えられる）</div>
+        </div>
+
         <div class="gq-screen gq-news" id="gqNews" hidden>
           <div class="gq-h">▶ そくほう <span class="gq-sub">前回ひらいてから</span></div>
           <ul class="gq-newslist" id="gqNewsList"></ul>
@@ -1505,7 +1524,7 @@ body{font-variant-numeric:tabular-nums}
             <div class="xhead"><span class="nm">月次サマリー（店舗別）</span><span class="ct" id="sumMonth">—</span></div>
             <div class="tblwrap">
               <table id="sumTbl">
-                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価</th><th>原価率</th><th>場所代</th><th>経費</th><th>粗利</th><th>粗利率</th></tr></thead>
+                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価</th><th>原価率</th><th>場所代</th><th>経費</th><th>人件費</th><th>粗利</th><th>粗利率</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -1675,6 +1694,31 @@ function iso(d){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 const monthOf = wk => (wk||"").slice(0,7);
+/* ===== 巡回の報酬（人件費） =====
+   担当ごとに「1店舗の巡回あたり ○円」（人件費＋ガソリン代）。共有の設定 settings/visitPay の rates[名前]。
+   設定が無い名前は VISIT_PAY_DEFAULT（柳瀬さん＝1,600円）。1店舗の巡回＝同じ担当・同じ店舗・同じ訪問日の記録のまとまり（機械が何台でも 1 回）。
+   成績タブの粗利・月次サマリーでは人件費として引く。EXP には影響させない（まわるほど損に見えないように） */
+const VISIT_PAY_DEFAULT = [[/^柳瀬/, 1600]];
+function visitRate(who){
+  const d = Store.rows("settings").find(r=>r.id==="visitPay"); const rates = (d && d.rates) || {};
+  if (rates[who]!==undefined && rates[who]!=="") return num(rates[who]);
+  const def = VISIT_PAY_DEFAULT.find(([re])=>re.test(who||"")); return def ? def[1] : 0;
+}
+async function setVisitRate(who, yenV){
+  const d = Store.rows("settings").find(r=>r.id==="visitPay") || {rates:{}};
+  const rates = Object.assign({}, d.rates||{}); rates[who] = num(yenV);
+  return Store.put("settings","visitPay",{rates});
+}
+/* 店舗巡回の一覧（担当・店舗・訪問日で 1 件）。rows を渡せばその範囲、省略すると全記録 */
+function storeVisits(rows, who, mon){
+  const seen = new Map();
+  (rows || Store.data.weekly || []).forEach(r=>{
+    if (who && staffOf(r)!==who) return; if (mon && monthOf(r.week)!==mon) return;
+    const k = staffOf(r)+"|"+r.store+"|"+r.week; if (!seen.has(k)) seen.set(k, {who:staffOf(r), store:r.store, day:r.week, n:0}); seen.get(k).n++;
+  });
+  return Array.from(seen.values()).sort((a,b)=>a.day.localeCompare(b.day));
+}
+const laborOf = rows => storeVisits(rows).reduce((a,v)=>a+visitRate(v.who),0);   // rows に含まれる記録の人件費（店舗巡回 × 単価）
 function addDays(isoStr,n){ const d=new Date(isoStr+"T00:00:00"); d.setDate(d.getDate()+n); return iso(d); }
 function jpDate(isoStr){ const p=(isoStr||"").split("-"); return p.length===3 ? `${+p[1]}/${+p[2]}` : isoStr; }
 function jpMonth(m){ const p=(m||"").split("-"); return p.length===2 ? `${p[0]}年${+p[1]}月` : m; }
@@ -2858,6 +2902,10 @@ function renderWeekStrip(){
   const bar=$("#wkBar"); bar.parentElement.hidden = !(goal>0);
   if (goal>0){ bar.style.width = Math.min(100, Math.round(n/goal*100))+"%"; bar.dataset.full = n>=goal ? "1" : "0"; }
   $("#wkSales").textContent = `売上 ${yen(sales)}円`;
+  { const rate = visitRate(who), vs = storeVisits(rows, who, mon), box=$("#wkPay");
+    if (box){ box.hidden = !(rate>0);
+      if (rate>0){ $("#wkPayNow").innerHTML = `報酬 <b>${yen(vs.length*rate)}円</b>（${vs.length} 店舗 × ${yen(rate)}円）`;
+                   $("#wkPayNext").textContent = `あと 1 店舗で +${yen(rate)}円`; } } }
   const last = rows.slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
   if (last){
     const d = new Date(last.createdAt||""); const when = isNaN(d) ? jpDate(last.week) : `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
@@ -4321,12 +4369,13 @@ function renderDash(){
     : `${jpMonth(selMonth)}のログはまだありません。入力すると、ここが埋まります。`;
   if (demoOn()) $("#tSalesSub").innerHTML = "サンプルの数字です。入力を始めると本物に変わります。";
   const exMonthAll = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
-  const grossM = a.gross - exMonthAll;                                   // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費
+  const laborM = laborOf(rows);                                          // 人件費＝店舗巡回 × 担当ごとの単価
+  const grossM = a.gross - exMonthAll - laborM;                          // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費
   { const tp=$("#tProfitTile"); if (tp) tp.hidden = !adminView(); }   // 粗利は管理者だけ（プールの率を逆算されないように）
   $("#tProfit").textContent = yen(grossM);
   const gp=$("#tProfitPill");
   gp.className="pill "+(a.sales===0?"flat":grossM>0?"ok":"bad");
-  gp.textContent = a.sales===0 ? "—" : `粗利率 ${pct(grossM/a.sales,0)}${exMonthAll?`・経費 ${yen(exMonthAll)}円 ひき`:""}`;
+  gp.textContent = a.sales===0 ? "—" : `粗利率 ${pct(grossM/a.sales,0)}${exMonthAll?`・経費 ${yen(exMonthAll)}円`:""}${laborM?`・人件費 ${yen(laborM)}円`:""}${(exMonthAll||laborM)?" ひき":""}`;
   $("#tCost").textContent = a.ratio===null?"—":pct(a.ratio,1);
   const cp=$("#tCostPill"); const cs=costStatus(a.ratio);
   cp.className="pill "+(a.ratio===null?"flat":cs); cp.textContent=STATUS_WORD[cs];
@@ -4473,18 +4522,18 @@ function drawSummary(rows){
   const exCommon = exOf("共通"), exAll = exRows.reduce((a,x)=>a+num(x.net),0);
   const used = STORES.filter(s=>rows.some(r=>r.store===s.n) || exOf(s.n)>0);
   if(!used.length && !exCommon){
-    tb.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--ink-3);padding:20px 8px">${jpMonth(selMonth)}のログがありません</td></tr>`;
+    tb.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--ink-3);padding:20px 8px">${jpMonth(selMonth)}のログがありません</td></tr>`;
     return;
   }
-  // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費
-  const line = (label,a,color,ex)=>{ const gross=a.gross-ex, gr=a.sales>0?gross/a.sales:null; return `<tr>
+  // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費（店舗巡回 × 担当の単価）
+  const line = (label,a,color,ex,lab)=>{ lab=lab||0; const gross=a.gross-ex-lab, gr=a.sales>0?gross/a.sales:null; return `<tr>
     <td>${color?`<span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:${color};margin-right:6px"></span>`:""}${esc(label)}</td>
     <td>${yen(a.plays)}</td><td>${yen(a.sales)}</td><td>${yen(a.cost)}</td>
     <td style="color:${a.ratio>COST_TARGET?"var(--warning-ink)":"var(--ink)"}">${pct(a.ratio,1)}</td>
-    <td>${yen(a.place)}</td><td>${yen(ex)}</td><td style="color:${gross<0?"var(--critical-ink)":"var(--ink)"}">${yen(gross)}</td><td>${pct(gr,1)}</td></tr>`; };
-  tb.innerHTML = used.map(s=>line(s.n, agg(rows.filter(r=>r.store===s.n)), storeColor(s.n), exOf(s.n))).join("")
-    + (exCommon ? `<tr><td>共通（店舗なし）</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${yen(exCommon)}</td><td>${yen(-exCommon)}</td><td>—</td></tr>` : "")
-    + `<tr style="font-weight:700;background:var(--surface-2)">${line("全店 合計", agg(rows), null, exAll).replace(/^<tr>|<\/tr>$/g,"")}</tr>`;
+    <td>${yen(a.place)}</td><td>${yen(ex)}</td><td>${yen(lab)}</td><td style="color:${gross<0?"var(--critical-ink)":"var(--ink)"}">${yen(gross)}</td><td>${pct(gr,1)}</td></tr>`; };
+  tb.innerHTML = used.map(s=>{ const sr=rows.filter(r=>r.store===s.n); return line(s.n, agg(sr), storeColor(s.n), exOf(s.n), laborOf(sr)); }).join("")
+    + (exCommon ? `<tr><td>共通（店舗なし）</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${yen(exCommon)}</td><td>—</td><td>${yen(-exCommon)}</td><td>—</td></tr>` : "")
+    + `<tr style="font-weight:700;background:var(--surface-2)">${line("全店 合計", agg(rows), null, exAll, laborOf(rows)).replace(/^<tr>|<\/tr>$/g,"")}</tr>`;
 }
 
 /* --- tooltip --- */
@@ -5047,6 +5096,7 @@ function renderQuest(){
   $("#gqExpBar").style.width = Math.min(100,(exp-base)/(next-base)*100).toFixed(1)+"%";
   const caught = W.reduce((a,r)=>a+num(r.pays),0);
   $("#gqCaught").textContent = caught.toLocaleString();
+  renderPay(W, mon, today);
 
   // 進化（すがたはレベルで決まる）
   const stage = evoStage(L); gqStage = stage;
@@ -5338,6 +5388,25 @@ function badgeList(W, L, g, monthN){
   ];
   return list;
 }
+/* こんげつの きゅうりょう：店舗巡回 × 単価。見える化して「もう 1 店舗」を後押しする */
+function renderPay(W, mon, today){
+  const scr=$("#gqPayScreen"); if (!scr) return;
+  const rate = visitRate(gqWho), admin = !!(ME && ME.role==="admin");
+  scr.hidden = !(rate>0 || admin);
+  if (scr.hidden) return;
+  $("#gqPayMonth").textContent = jpMonth(mon);
+  const vs = storeVisits(W, gqWho, mon), total = vs.length*rate;
+  const todayVs = vs.filter(v=>v.day===today);
+  const byDay = {}; vs.forEach(v=>{ (byDay[v.day]=byDay[v.day]||[]).push(v.store); });
+  const days = Object.keys(byDay).sort().reverse().slice(0,7);
+  const g = Store.goal(gqWho); const daily = (g.monthly>0 && g.days>0) ? Math.ceil(g.monthly/g.days) : 0;
+  $("#gqPay").innerHTML = rate>0 ? `
+    <div class="big"><span>${vs.length} 店舗 × ${yen(rate)}円</span><b>${yen(total)}円</b></div>
+    <div class="nudge">${todayVs.length ? `きょうは <b>${todayVs.length} 店舗</b>（${yen(todayVs.length*rate)}円）。` : "きょうはまだ 0 店舗。"}もう 1 店舗まわると <b>+${yen(rate)}円</b> → こんげつ <b>${yen(total+rate)}円</b>${todayVs.length>=2?`、あと 2 店舗なら <b>${yen(total+rate*2)}円</b>`:""}。</div>
+    ${days.length?`<div class="days">${days.map(d=>`${jpDate(d)}：<b>${byDay[d].length} 店舗</b> ${yen(byDay[d].length*rate)}円　<span style="color:#7f93b8">${byDay[d].map(esc).join("・")}</span>`).join("<br>")}</div>`:""}`
+    : `<div class="big"><span>単価が未設定</span><b>—</b></div><div class="days">下の欄に 1 店舗あたりの金額を入れると、${esc(gqWho)} さんの報酬がここに出て、粗利からも人件費として引かれます。</div>`;
+  const set=$("#gqPaySet"); if (set){ set.hidden = !admin; const inp=$("#gqRate"); if (inp && document.activeElement!==inp) inp.value = rate||""; }
+}
 async function saveGoal(){
   const monthly=num($("#gqMonthly").value), days=num($("#gqDays").value);
   await Store.put("settings","goal-"+gqWho,{monthly, days});
@@ -5474,6 +5543,7 @@ function wire(){
   // 目標設定
   let gqT; const gqSave = () => { clearTimeout(gqT); gqT=setTimeout(saveGoal, 600); };
   $("#gqMonthly").oninput = gqSave; $("#gqDays").oninput = gqSave;
+  { const r=$("#gqRate"); let rT; if (r) r.oninput = ()=>{ clearTimeout(rT); rT=setTimeout(async()=>{ if (!(ME && ME.role==="admin")) return; await setVisitRate(gqWho, r.value); toast(`${gqWho}：1店舗 ${yen(num(r.value))}円 にしました`); renderQuest(); renderDash(); renderWeekStrip(); }, 700); }; }
   $("#gqLabTabs").onclick = e => { const b=e.target.closest("[data-lab]"); if(!b) return; labTab=b.dataset.lab; $$("#gqLabTabs .chip").forEach(c=>c.setAttribute("aria-pressed", String(c===b))); renderLab(); };
 
   // 転記ドロワー
