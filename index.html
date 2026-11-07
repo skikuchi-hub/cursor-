@@ -1456,6 +1456,7 @@ body{font-variant-numeric:tabular-nums}
             <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
             <button class="chip mini" data-lab="pos" aria-pressed="false">部屋の位置</button>
             <button class="chip mini" data-lab="dex" aria-pressed="false">ずかん</button>
+            <button class="chip mini" data-lab="cost" aria-pressed="false">げんかりつ</button>
           </div>
           <div class="gq-lab" id="gqLab"></div>
           <div class="gq-qnote" id="gqLabNote"></div>
@@ -1479,13 +1480,6 @@ body{font-variant-numeric:tabular-nums}
           <div class="gq-h">▶ パーティの こうけん <span class="gq-sub" id="gqRankSub"></span></div>
           <div class="gq-ranks" id="gqRanks"></div>
           <div class="gq-qnote">こんげつの EXP（売上・景品登録・拠点ボーナス・ジムランク − 経費）。順位より <b style="color:#f5c542">パーティ合計</b> がだいじ。全店を週1回まわれた週は、その週にまわった人に +100 EXP。</div>
-        </div>
-
-        <!-- 原価率チェック（取れなさすぎ・取れすぎの見張り） -->
-        <div class="gq-screen">
-          <div class="gq-h">▶ げんかりつ チェック <span class="gq-sub" id="gqCostSub"></span></div>
-          <div class="gq-costs" id="gqCosts"></div>
-          <div class="gq-qnote">目安は <b style="color:#f5c542">25〜30%</b>。低すぎると「取れない」とお客さんがコンビニに苦情を入れるので、下げすぎ注意。仕入 300円以下の景品だけ 5〜10% も可。</div>
         </div>
 
         <!-- 売上の記録（従来のグラフ） -->
@@ -4859,6 +4853,7 @@ function renderBosses(mon){
 }
 
 /* 原価率チェック：店舗×機械の直近の記録。目安 25〜30%。低すぎ（取れない）は苦情のもと */
+const COST_CHECK_NOTE = `目安は <b style="color:#f5c542">25〜30%</b>。低すぎると「取れない」とお客さんがコンビニに苦情を入れるので、下げすぎ注意。仕入 300円以下の景品だけ 5〜10% も可。`;
 function renderCostCheck(){
   const el=$("#gqCosts"); if(!el) return;
   const latest={};
@@ -4877,7 +4872,7 @@ function renderCostCheck(){
       <div class="nm">${esc(r.store.replace(/店$/,""))} <span>${esc(r.machine)}・${jpDate(r.week)}${r.prize?`・${esc(r.prize)}`:""}</span></div>
       <span class="pct">${cls==="nounit"?"—":pct(ratio,0)}</span><span class="tag">${word}</span></div>`).join("")
     : `<div class="gq-qnote">巡回ログが入ると、機械ごとの原価率が出ます。</div>`;
-  $("#gqCostSub").textContent = rows.length ? (flagged ? `要注意 ${flagged}台` : "全台 問題なし") : "";
+  $("#gqLabSub").textContent = rows.length ? (flagged ? `要注意 ${flagged}台` : "全台 問題なし") : "";
 }
 
 let DEX_OPEN = false;
@@ -4935,7 +4930,7 @@ function renderNews(mon){
   box.hidden = !items.length;
   $("#gqNewsList").innerHTML = items.map(x=>`<li>${x}</li>`).join("");
 }
-function renderTeam(mon){ renderNews(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderLab(); }
+function renderTeam(mon){ renderNews(mon); renderPatrol(); renderBosses(mon); renderLab(); }
 
 /* ===================== 景品ラボ：景品ごとの数字（再現性のため） =====================
    4人機は部屋ごとのカウンター差＝その部屋（＝その景品）のプレイ数、在庫差＝払出。前回訪問から今回までの区間で、
@@ -5026,6 +5021,7 @@ let labTab="fit";                                                      // 最初
 function renderLab(){
   const el=$("#gqLab"); if(!el) return;
   if (labTab==="dex"){ el.innerHTML = `<div class="gq-dex" id="gqDex"></div>`; renderDex(); return; }
+  if (labTab==="cost"){ el.innerHTML = `<div class="gq-costs" id="gqCosts"></div>`; renderCostCheck(); $("#gqLabNote").innerHTML = COST_CHECK_NOTE; return; }   // げんかりつチェック（2026-11-07 菊地さん：ラボのタブに移動）
   const byP=labAgg(); const list=Object.values(byP);
   const short = n => String(n).replace(/店$/,"");
   const n1 = v => v===null||v===undefined ? "—" : (v>=10 ? Math.round(v) : v.toFixed(1));
