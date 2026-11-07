@@ -5070,12 +5070,12 @@ function renderLab(){
         : fast ? `<b>あと ${n1(P.weeksLeft)}週</b> で売り切り。次の仕入れ候補。` : "";
       return {P, cls, tag, act, sort: stale?0:fast?1:2};
     }).sort((a,b)=>a.sort-b.sort || (b.P.stock||0)-(a.P.stock||0));
-    html = rows.map(({P,cls,tag,act})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
-      <div class="kv"><span>在庫 <b>${P.stock===null?"—":P.stock}</b>${P.qty?`／${P.qty}`:""}</span><span>払出 <b>${P.pays}</b>こ</span><span>ペース <b>${n1(P.pacePerWeek)}</b>こ/週</span>${P.weeksLeft!==null?`<span>売り切り <b>${n1(P.weeksLeft)}</b>週</span>`:""}</div>
-      ${act?`<div class="act">${act}</div>`:""}</div>`).join("");
+    // 見せるのは 景品名・判定・在庫・あと何週 だけ（2026-11-07 菊地さん「余計な情報を削って見やすく」）
+    html = rows.map(({P,cls,tag})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
+      <div class="kv"><span>在庫 <b>${P.stock===null?"—":P.stock}</b></span><span>あと <b>${P.weeksLeft!==null ? n1(P.weeksLeft) : "—"}</b>週</span></div></div>`).join("");
     const stale=rows.filter(r=>r.cls==="bad").length;
     $("#gqLabSub").textContent = rows.length ? (stale?`滞留 ${stale}`:`滞留なし`) : "";
-    note = `在庫は景品マスタの「残り在庫」（買った数 − 補充に使った数）。ペースは前回訪問から今回までの払出を日数で割ったもの。<b style="color:#f5c542">在庫が多くて出ない景品</b>は、出がいい店へ移す・獲得率をゆるめる、のどちらか。`;
+    note = `「あと○週」＝今のペースで在庫がなくなるまで。<b style="color:#f5c542">滞留</b>＝在庫が 5 以上あるのに出ていない景品（出る店へ移すか、獲得率をゆるめる）。`;
   } else if (labTab==="fit"){
     // 景品人気ランキング：店舗ごとに、その景品の部屋で課金された回数（4人機のカウンター差の累計）が多い景品の 1〜4 位だけ
     //（2026-11-07 菊地さん「取られた数ではなく課金された数で」。BOX 機は枠ごとのカウンターが無いので入らない）
