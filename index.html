@@ -1372,7 +1372,7 @@ body{font-variant-numeric:tabular-nums}
         </div>
 
         <!-- 速報（前回開いてから変わったこと） -->
-        <!-- 巡回の報酬（1店舗の巡回ごとに定額。人件費として粗利からも引く） -->
+        <!-- 給与（1店舗の巡回ごとに定額。本人には「給与」と見せ、粗利からは人件費として引く） -->
         <div class="gq-screen" id="gqPayScreen" hidden>
           <div class="gq-h">▶ こんげつの きゅうりょう <span class="gq-sub" id="gqPayMonth"></span></div>
           <div class="gq-pay" id="gqPay"></div>
@@ -1694,7 +1694,7 @@ function iso(d){
   return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0");
 }
 const monthOf = wk => (wk||"").slice(0,7);
-/* ===== 巡回の報酬（人件費） =====
+/* ===== 給与（巡回 1 店舗ごとの定額。本人への表記は「給与」、事業側は「人件費」） =====
    担当ごとに「1店舗の巡回あたり ○円」（人件費＋ガソリン代）。共有の設定 settings/visitPay の rates[名前]。
    設定が無い名前は VISIT_PAY_DEFAULT（柳瀬さん＝1,600円）。1店舗の巡回＝同じ担当・同じ店舗・同じ訪問日の記録のまとまり（機械が何台でも 1 回）。
    成績タブの粗利・月次サマリーでは人件費として引く。EXP には影響させない（まわるほど損に見えないように） */
@@ -2904,7 +2904,7 @@ function renderWeekStrip(){
   $("#wkSales").textContent = `売上 ${yen(sales)}円`;
   { const rate = visitRate(who), vs = storeVisits(rows, who, mon), box=$("#wkPay");
     if (box){ box.hidden = !(rate>0);
-      if (rate>0){ $("#wkPayNow").innerHTML = `報酬 <b>${yen(vs.length*rate)}円</b>（${vs.length} 店舗 × ${yen(rate)}円）`;
+      if (rate>0){ $("#wkPayNow").innerHTML = `給与 <b>${yen(vs.length*rate)}円</b>（${vs.length} 店舗 × ${yen(rate)}円）`;
                    $("#wkPayNext").textContent = `あと 1 店舗で +${yen(rate)}円`; } } }
   const last = rows.slice().sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")))[0];
   if (last){
@@ -5388,7 +5388,7 @@ function badgeList(W, L, g, monthN){
   ];
   return list;
 }
-/* こんげつの きゅうりょう：店舗巡回 × 単価。見える化して「もう 1 店舗」を後押しする */
+/* こんげつの きゅうりょう（給与）：店舗巡回 × 単価。見える化して「もう 1 店舗」を後押しする */
 function renderPay(W, mon, today){
   const scr=$("#gqPayScreen"); if (!scr) return;
   const rate = visitRate(gqWho), admin = !!(ME && ME.role==="admin");
@@ -5404,7 +5404,7 @@ function renderPay(W, mon, today){
     <div class="big"><span>${vs.length} 店舗 × ${yen(rate)}円</span><b>${yen(total)}円</b></div>
     <div class="nudge">${todayVs.length ? `きょうは <b>${todayVs.length} 店舗</b>（${yen(todayVs.length*rate)}円）。` : "きょうはまだ 0 店舗。"}もう 1 店舗まわると <b>+${yen(rate)}円</b> → こんげつ <b>${yen(total+rate)}円</b>${todayVs.length>=2?`、あと 2 店舗なら <b>${yen(total+rate*2)}円</b>`:""}。</div>
     ${days.length?`<div class="days">${days.map(d=>`${jpDate(d)}：<b>${byDay[d].length} 店舗</b> ${yen(byDay[d].length*rate)}円　<span style="color:#7f93b8">${byDay[d].map(esc).join("・")}</span>`).join("<br>")}</div>`:""}`
-    : `<div class="big"><span>単価が未設定</span><b>—</b></div><div class="days">下の欄に 1 店舗あたりの金額を入れると、${esc(gqWho)} さんの報酬がここに出て、粗利からも人件費として引かれます。</div>`;
+    : `<div class="big"><span>単価が未設定</span><b>—</b></div><div class="days">下の欄に 1 店舗あたりの金額を入れると、${esc(gqWho)} さんの給与がここに出て、粗利からも人件費として引かれます。</div>`;
   const set=$("#gqPaySet"); if (set){ set.hidden = !admin; const inp=$("#gqRate"); if (inp && document.activeElement!==inp) inp.value = rate||""; }
 }
 async function saveGoal(){
