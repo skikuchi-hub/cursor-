@@ -1734,6 +1734,10 @@ function storeVisits(rows, who, mon){
   return Array.from(seen.values()).sort((a,b)=>a.day.localeCompare(b.day));
 }
 const laborOf = rows => storeVisits(rows).reduce((a,v)=>a+visitRate(v.who),0);   // rows に含まれる記録の人件費（店舗巡回 × 単価）
+/* 給与（1店舗 1,600円）にガソリン代が含まれている人のガソリン代は、記録は残すが経費として数えない（二重計上を防ぐ。2026-11-07 菊地さん）。
+   粗利・月次サマリー・EXP の経費差し引き すべてでこの判定を使う */
+const expCounted = r => !(r && r.kind==="ガソリン代" && visitRate(staffOf(r))>0);
+const expCountedRows = rows => (rows||[]).filter(expCounted);
 function addDays(isoStr,n){ const d=new Date(isoStr+"T00:00:00"); d.setDate(d.getDate()+n); return iso(d); }
 function jpDate(isoStr){ const p=(isoStr||"").split("-"); return p.length===3 ? `${+p[1]}/${+p[2]}` : isoStr; }
 function jpMonth(m){ const p=(m||"").split("-"); return p.length===2 ? `${p[0]}年${+p[1]}月` : m; }
@@ -4261,6 +4265,9 @@ function renderCostForm(){
   const an=$("#exStoreAutoNote"); if (an) an.hidden = !(exStoreAuto && exStore);
   const gas = exNoStore();
   $("#exStoreField").hidden = gas; $("#exStoreNote").hidden = !gas;
+  { const n=$("#exStoreNote"); if (n) n.textContent = gas && visitRate(me())>0
+      ? `ガソリン代は給与（1店舗 ${yen(visitRate(me()))}円）に含まれているので、記録として残すだけで経費には計上されません。`
+      : "ガソリン代は店舗に属さない経費として登録します（店舗の選択は不要）。"; }
   const pe=$("#exPayee"); if (pe && !pe.value && !pe.dataset.touched) pe.value = lastPayee($("#exKind").value);
   const ok = $("#exDate").value && (gas || exStore) && num($("#exNet").value)!==0;
   $("#saveCost").disabled = !ok;
@@ -4299,7 +4306,7 @@ function renderCostList(){
       <div class="bd">
         <div class="t1">${esc(r.kind)}${r.item?"　"+esc(r.item):""}</div>
         <div class="t2">${esc(r.date)}　${esc(r.store)}${r.payee?"　"+esc(r.payee):""}${r.staff?"　"+esc(r.staff):""}</div>
-        <div class="t2">${yen(r.net)}円（税抜）${r.memo?"　"+esc(r.memo):""}</div>
+        <div class="t2">${yen(r.net)}円（税抜）${r.memo?"　"+esc(r.memo):""}${expCounted(r)?"":`　<span class="tag">給与に含む（経費には計上しない）</span>`}</div>
         <div style="margin-top:6px">${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}</div>
       </div>
       ${r.source==="sheet"?"":delBtn("expenses",r)}
@@ -4383,7 +4390,7 @@ function renderDash(){
     ? `${a.plays.toLocaleString()}プレイ・${a.n}件のログ　／　引継ぎ前実績がある${withBench.length}店で比べると <b>${pct(nowSame/benchTotal,0)}</b>（${yen(benchTotal)}円 → ${yen(nowSame)}円）`
     : `${jpMonth(selMonth)}のログはまだありません。入力すると、ここが埋まります。`;
   if (demoOn()) $("#tSalesSub").innerHTML = "サンプルの数字です。入力を始めると本物に変わります。";
-  const exMonthAll = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
+  const exMonthAll = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
   const laborM = laborOf(rows);                                          // 人件費＝店舗巡回 × 担当ごとの単価
   const grossM = a.gross - exMonthAll - laborM;                          // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費
   { const tp=$("#tProfitTile"); if (tp) tp.hidden = !adminView(); }   // 粗利は管理者だけ（プールの率を逆算されないように）
@@ -4532,7 +4539,7 @@ function drawSummary(rows){
   $("#sumMonth").textContent = jpMonth(selMonth);
   const tb = $("#sumTbl tbody");
   // 経費（経費台帳の日付がその月のもの）。店舗ごと＋「共通」
-  const exRows = activeExpenses().filter(x=>(x.date||"").slice(0,7)===selMonth);
+  const exRows = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth);
   const exOf = store => exRows.filter(x=>x.store===store).reduce((a,x)=>a+num(x.net),0);
   const exCommon = exOf("共通"), exAll = exRows.reduce((a,x)=>a+num(x.net),0);
   const used = STORES.filter(s=>rows.some(r=>r.store===s.n) || exOf(s.n)>0);
@@ -4672,7 +4679,7 @@ function closeDrawer(){ $("#scrim").classList.remove("on"); $("#drawer").classLi
    Lv：Lv1〜9 は 1,000 EXP ごと、Lv10〜19 は 2,000 ごと、Lv20〜29 は 3,000 ごと…（10レベルごとに必要量が +1,000） */
 const YEN_PER_EXP = 100;
 const expOf = r => Math.floor((num(r.sales) || num(r.plays)*PLAY_PRICE) / YEN_PER_EXP);
-const expCostOf = r => Math.floor(num(r.net) / YEN_PER_EXP);
+const expCostOf = r => expCounted(r) ? Math.floor(num(r.net) / YEN_PER_EXP) : 0;   // 給与に含むガソリン代は EXP も減らさない
 const expSum = rows => rows.reduce((a,r)=>a+expOf(r),0);
 const expCostSum = rows => rows.reduce((a,r)=>a+expCostOf(r),0);
 const EXP_PER_PRIZE = 100;                                            // 景品登録 1件 = +100 EXP
