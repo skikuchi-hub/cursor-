@@ -1438,13 +1438,6 @@ body{font-variant-numeric:tabular-nums}
           <div class="gq-qnote">目安は <b style="color:#f5c542">25〜30%</b>。低すぎると「取れない」とお客さんがコンビニに苦情を入れるので、下げすぎ注意。仕入 300円以下の景品だけ 5〜10% も可。</div>
         </div>
 
-        <!-- 景品ずかん -->
-        <div class="gq-screen">
-          <div class="gq-h">▶ けいひん ずかん <span class="gq-sub" id="gqDexSub"></span></div>
-          <div class="gq-dex" id="gqDex"></div>
-          <div class="gq-qnote" id="gqDexNote"></div>
-        </div>
-
         <!-- 景品ラボ：店舗との相性・在庫回転・原価率の調整ガイド（再現性のための数字） -->
         <div class="gq-screen">
           <div class="gq-h">▶ けいひん ラボ <span class="gq-sub" id="gqLabSub"></span></div>
@@ -1453,6 +1446,7 @@ body{font-variant-numeric:tabular-nums}
             <button class="chip mini" data-lab="turn" aria-pressed="false">在庫回転</button>
             <button class="chip mini" data-lab="ratio" aria-pressed="false">原価率ガイド</button>
             <button class="chip mini" data-lab="pos" aria-pressed="false">部屋の位置</button>
+            <button class="chip mini" data-lab="dex" aria-pressed="false">ずかん</button>
           </div>
           <div class="gq-lab" id="gqLab"></div>
           <div class="gq-qnote" id="gqLabNote"></div>
@@ -4860,7 +4854,8 @@ function renderCostCheck(){
 
 let DEX_OPEN = false;
 document.addEventListener("click", e=>{ const b=e.target.closest("[data-dexmore]"); if(!b) return; DEX_OPEN=!DEX_OPEN; renderDex(); if (!DEX_OPEN) $("#gqDex").scrollIntoView({block:"start"}); });
-/* 景品ずかん：使った景品ごとに払出数・人気度（★）。景品マスタにあってまだ使っていないものは「みはっけん」 */
+/* 景品ずかん：使った景品ごとに払出数・人気度（★）。景品マスタにあってまだ使っていないものは「みはっけん」。
+   景品ラボの「ずかん」タブの中に出す（2026-11-07 菊地さん。#gqLab の中に #gqDex を作ってから呼ぶ） */
 function renderDex(){
   const el=$("#gqDex"); if(!el) return;
   const stats={};
@@ -4885,8 +4880,8 @@ function renderDex(){
     + (rest.length ? `<button type="button" class="gq-dexmore" data-dexmore aria-expanded="${DEX_OPEN?"true":"false"}">${DEX_OPEN?"▴ とじる":`▾ ${DEX_TOP+1}位以下 ${rest.length}件 を見る`}</button>` : "")
     + (rest.length && DEX_OPEN ? rest.map(card).join("") : "")
     + unseenHtml;
-  $("#gqDexSub").textContent = `はっけん ${names.length}／${names.length+unseen.length}`;
-  $("#gqDexNote").innerHTML = names.length
+  $("#gqLabSub").textContent = `はっけん ${names.length}／${names.length+unseen.length}`;
+  $("#gqLabNote").innerHTML = names.length
     ? `★は払出数の順位（上位20%が★5）。<b style="color:#f5c542">${esc(ranked[0])}</b> がいちばん取られている景品。新しい景品を使うと図鑑が埋まる。`
     : `景品を使って巡回を記録すると、図鑑が埋まっていきます。`;
 }
@@ -4912,7 +4907,7 @@ function renderNews(mon){
   box.hidden = !items.length;
   $("#gqNewsList").innerHTML = items.map(x=>`<li>${x}</li>`).join("");
 }
-function renderTeam(mon){ renderNews(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderDex(); renderLab(); }
+function renderTeam(mon){ renderNews(mon); renderPatrol(); renderBosses(mon); renderCostCheck(); renderLab(); }
 
 /* ===================== 景品ラボ：景品ごとの数字（再現性のため） =====================
    4人機は部屋ごとのカウンター差＝その部屋（＝その景品）のプレイ数、在庫差＝払出。前回訪問から今回までの区間で、
@@ -5002,6 +4997,7 @@ function posAgg(){
 let labTab="fit";                                                      // 最初は「店舗との相性」（2026-11-06 菊地さん）
 function renderLab(){
   const el=$("#gqLab"); if(!el) return;
+  if (labTab==="dex"){ el.innerHTML = `<div class="gq-dex" id="gqDex"></div>`; renderDex(); return; }
   const byP=labAgg(); const list=Object.values(byP);
   const short = n => String(n).replace(/店$/,"");
   const n1 = v => v===null||v===undefined ? "—" : (v>=10 ? Math.round(v) : v.toFixed(1));
