@@ -1469,7 +1469,7 @@ body{font-variant-numeric:tabular-nums}
         <div class="gq-screen">
           <div class="gq-h">▶ パーティの こうけん <span class="gq-sub" id="gqRankSub"></span></div>
           <div class="gq-ranks" id="gqRanks"></div>
-          <div class="gq-qnote">こんげつの EXP（売上・景品登録・拠点ボーナス・ジムランク − 経費）。順位より <b style="color:#f5c542">パーティ合計</b> がだいじ。全店を週1回まわれた週は、全員に +100 EXP。</div>
+          <div class="gq-qnote">こんげつの EXP（売上・景品登録・拠点ボーナス・ジムランク − 経費）。順位より <b style="color:#f5c542">パーティ合計</b> がだいじ。全店を週1回まわれた週は、その週にまわった人に +100 EXP。</div>
         </div>
 
         <!-- 売上の記録（従来のグラフ） -->
@@ -4803,10 +4803,12 @@ function renderPatrol(){
   const next = rows.filter(x=>x.d===null || x.d>=3).slice(0,3).map(x=>x.s.n.replace(/店$/,""));
   $("#gqHpNote").innerHTML = (bad ? `<b style="color:#ff9f93">${bad}店</b> が週1を割っています。` : `全店 週1以内をキープ中。`)
     + (next.length ? ` つぎに行くなら：<b style="color:#f5c542">${esc(next.join(" → "))}</b>。` : "")
-    + (streak ? ` 全店週1達成 <b style="color:#f5c542">${streak}週連続</b>（週ごとに全員 +100 EXP）。` : " 全店を週1回まわれた週は、全員に +100 EXP。");
+    + (streak ? ` 全店週1達成 <b style="color:#f5c542">${streak}週連続</b>（その週にまわった人に +100 EXP）。` : " 全店を週1回まわれた週は、その週にまわった人に +100 EXP。");
 }
 const TEAM_WEEK_EXP = 100;
-function teamBonusExp(){ return teamWeeksCovered().length * TEAM_WEEK_EXP; }
+/* チームボーナス：全店を週1回まわれた週のうち、その週に自分も 1 件以上記録した人だけ +100（2026-11-07 菊地さん。
+   以前は誰にでも付いたので、記録 0 件の菊地さん・柳瀬さんが最初から 200 EXP になっていた） */
+function teamBonusExp(W){ const mine=new Set((W||[]).map(r=>weekKeyOf(r.week)).filter(Boolean)); return teamWeeksCovered().filter(wk=>mine.has(wk)).length * TEAM_WEEK_EXP; }
 
 /* 前の運営者とのバトル：店舗ごとに「引継ぎ前の月平均」をボスの体力に見立て、今月の売上（全員ぶん）で削る */
 function renderBosses(mon){
@@ -5091,7 +5093,7 @@ function renderQuest(){
   const monthN = W.filter(r=>localDay(r.createdAt).slice(0,7)===mon).length;
   // EXP ＝ 売上・景品登録・拠点ボーナス − 経費 ＋ バッジ（1こ +100）。バッジ「Lv.5」はレベルに依存するので、数が落ち着くまで数回計算する
   const gymRanks = gymRankTotal(W), rankBonus = rankBonusFor(gqWho);
-  const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonus + teamBonusExp();
+  const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonus + teamBonusExp(W);
   let exp=baseExp, L=lvFromExp(exp), badges=badgeList(W, L, g, monthN);
   for (let i=0;i<3;i++){ const e2 = baseExp + badges.filter(b=>b[2]).length*BADGE_EXP; if (e2===exp) break; exp=e2; L=lvFromExp(exp); badges=badgeList(W, L, g, monthN); }
   const badgeN = badges.filter(b=>b[2]).length;
@@ -5315,7 +5317,7 @@ function statsFor(who, mon){
     const Wm = W.filter(r=>localDay(r.createdAt).startsWith(mon));
     const monthN = Wm.length;
     const gymRanks = gymRankTotal(W);
-    const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonusFor(who) + teamBonusExp();
+    const baseExp = expTotal(W, X, P) + milestoneHits(W, g.monthly).length*MILESTONE_EXP + gymRanks*GYM_EXP + rankBonusFor(who) + teamBonusExp(W);
     let exp=baseExp, L=lvFromExp(exp), badges=badgeList(W, L, g, monthN);
     for (let i=0;i<3;i++){ const e2 = baseExp + badges.filter(b=>b[2]).length*BADGE_EXP; if (e2===exp) break; exp=e2; L=lvFromExp(exp); badges=badgeList(W, L, g, monthN); }
     return { who, L, exp, stage: evoStage(L), monthExp: monthExpFor(who, mon),
