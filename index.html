@@ -1627,6 +1627,16 @@ const SERIES = ["--s1","--s2","--s3","--s4","--s5","--s6"];
 const storeColor = n => `var(${SERIES[Math.max(0, STORES.findIndex(s=>s.n===n)) % SERIES.length]})`;
 const storeOf = n => STORES.find(s=>s.n===n);
 const benchAvg = s => s.bench ? Math.round(s.bench.reduce((a,b)=>a+b,0)/s.bench.length) : null;
+/* ボスの体力＝直近 5 か月の月平均売上（毎月更新）。引継ぎ前の月（2026/4〜8）のあとに、自分たちの終わった月（mon より前・記録のある月）を
+   つないで、新しいほうから 5 か月の平均。月が進むたびに古い月が外れ、自分たちの月が入る（2026-11-07 菊地さん「月平均額は毎月更新して」） */
+const BOSS_MONTHS = 5;
+function bossHp(s, mon){
+  const byM={}; (Store.data.weekly||[]).forEach(r=>{ if (r.store!==s.n) return; const m=monthOf(r.week); if (!m || m>=mon) return; byM[m]=(byM[m]||0)+salesOfRec(r); });
+  const ours = Object.keys(byM).sort().map(m=>byM[m]).filter(v=>v>0);
+  const all = (s.bench||[]).concat(ours); if (!all.length) return {hp:null, n:0, own:0};
+  const win = all.slice(-BOSS_MONTHS);
+  return {hp:Math.round(win.reduce((a,b)=>a+b,0)/win.length), n:win.length, own:Math.min(ours.length, win.length)};
+}
 
 const SHEET_URL = "https://docs.google.com/spreadsheets/d/1yEl5weYRtWN5Ydp2lSxnqnQCyC9W-SameJpIF8o6eYs/edit";
 
@@ -4812,18 +4822,18 @@ function renderBosses(mon){
   let down=0, withBench=0;
   const ICONS=["🐲","👹","🦖","👾","🤖"];
   el.innerHTML = STORES.map((s,i)=>{
-    const hpMax=benchAvg(s), dmg=byS[s.n]||0;
-    if (!hpMax) return `<div class="gq-boss"><span class="ic">❔</span><div class="nm"><b>${esc(s.n)}</b><span>引継ぎ前のデータなし</span></div></div>`;
+    const bh=bossHp(s, mon), hpMax=bh.hp, dmg=byS[s.n]||0;
+    if (!hpMax) return `<div class="gq-boss"><span class="ic">❔</span><div class="nm"><b>${esc(s.n)}</b><span>前の月のデータなし（来月から出る）</span></div></div>`;
     withBench++;
     const left=Math.max(0,hpMax-dmg), pct=Math.max(0,Math.min(100,left/hpMax*100)); const isDown = dmg>=hpMax; if (isDown) down++;
     return `<div class="gq-boss ${isDown?"down":""}"><span class="ic">${isDown?"🏆":ICONS[i%ICONS.length]}</span>
-      <div class="nm"><b>${esc(s.n)}</b><span>${isDown?`げきは！ 引継ぎ前 ${yen(hpMax)}円 を ${yen(dmg-hpMax)}円 こえた`:`のこり ${yen(left)}円 で げきは`}</span></div>
+      <div class="nm"><b>${esc(s.n)}</b><span>${isDown?`げきは！ 月平均 ${yen(hpMax)}円 を ${yen(dmg-hpMax)}円 こえた`:`のこり ${yen(left)}円 で げきは`}${bh.own?`<small style="opacity:.75">（直近 ${bh.n}か月の平均・うち自分たちの月 ${bh.own}）</small>`:""}</span></div>
       <div class="pg"><div class="gq-bar"><i style="width:${pct.toFixed(0)}%"></i></div><small>HP ${yen(left)}／${yen(hpMax)}</small></div></div>`;
   }).join("");
   $("#gqBossSub").textContent = `${+mon.slice(5)}月・げきは ${down}／${withBench}`;
   $("#gqBossNote").innerHTML = down>=withBench && withBench>0
     ? `<span class="gq-clear">★ 全店 げきは！</span>　前の運営者を こえた。ここが スタートライン！`
-    : `ボスの体力＝引継ぎ前（2026/4〜8）の月平均売上。今月の売上で削って、月内に倒そう。`;
+    : `ボスの体力＝直近 ${BOSS_MONTHS}か月の月平均売上（引継ぎ前 2026/4〜8 のあとに自分たちの月をつないで、毎月更新）。今月の売上で削って、月内に倒そう。倒すほど来月のボスは強くなる。`;
 }
 
 /* 原価率チェック：店舗×機械の直近の記録。目安 25〜30%。低すぎ（取れない）は苦情のもと */
