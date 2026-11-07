@@ -4828,7 +4828,7 @@ function renderPatrol(){
   $("#gqHpSub").textContent = bad ? `アウト ${bad}店` : danger ? `あぶない ${danger}店` : "全店セーフ";
   const next = rows.filter(x=>x.d===null || x.d>=3).slice(0,3).map(x=>x.s.n.replace(/店$/,""));
   $("#gqHpNote").innerHTML = `星は 1 日に 1 つ減る。<b style="color:#ff9f93">5 日空いたらアウト</b>。`
-    + (next.length ? ` つぎに行く：<b style="color:#f5c542">${esc(next.join(" → "))}</b>` : " 今は行かなくていい店ばかり。")
+    + (next.length ? ` つぎに行く：<b style="color:#f5c542">${esc(next.join(" → "))}</b>` : "")   // 毎日行くのが理想なので「今は行かなくていい」とは言わない（2026-11-07 菊地さん）
     + (streak ? `　全店週1 ${streak}週連続` : "");
 }
 const TEAM_WEEK_EXP = 100;
