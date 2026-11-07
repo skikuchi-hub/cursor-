@@ -399,6 +399,7 @@ body.gbar-on #p-log{padding-bottom:72px}
 .cf-t .dim{color:var(--ink-3)}.cf-t .warn{color:var(--danger-ink);font-weight:700}
 .cf-tot{margin-top:10px;padding-top:8px;border-top:2px solid var(--line);font-size:13.5px}
 .cf-memo{font-size:12px;color:var(--ink-2);margin-top:4px}
+.cf-ph{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}.cf-ph figure{margin:0;text-align:center;font-size:10.5px;font-weight:700;color:var(--ink-3)}.cf-ph img{display:block;width:84px;height:84px;object-fit:cover;border-radius:8px;border:1px solid var(--line)}.cf-ph .cf-ph-note{flex-basis:100%;font-size:11.5px;color:var(--ink-2);font-weight:600}
 .cf-acts{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:14px}
 .cf-back{padding:14px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px}
 .cf-ok{padding:14px;border-radius:12px;border:0;background:var(--navy);color:var(--gold);font-weight:900;font-size:16px}
@@ -1632,11 +1633,22 @@ function applyPerms(){
 }
 function lockStaff(on){
   $$("#staffIn, .staff-sel").forEach(s=>s.disabled = on);
-  const b=$("#meBadge"); if (b) b.textContent = "担当："+me()+(on ? "" : "（管理者）");
+  const b=$("#meBadge"); if (b) b.textContent = "担当："+me()+(on ? rookieBadge() : "（管理者）");
   const h=$("#staffHint"); if (h) h.textContent = on ? `PINで「${me()}」として記録されます。変えたいときは管理者（菊地さん）に連絡してください。` : "管理者は担当を切り替えて記録できます。";
 }
 async function rememberAccountStaff(name){}      // 旧：アカウント連携（PIN 方式では不要）
 const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];
+/* 新人案内：巡回の記録が ROOKIE_N 件に満たない担当は「新人」として扱う（自動。記録が増えると自然に外れる）。
+   新人のあいだは ①写真はその場で撮影だけ（写真から選べない＝同じ写真・別の機械の写真を付けられない）、②入力の長い説明を最初から開く、
+   ③担当バッジに「新人案内」と残り回数を出す。管理者は対象外。 */
+const ROOKIE_N = 30;
+function myVisitCount(){ const n=me(); return ((Store.data||{}).weekly||[]).filter(r=>(r.by||r.staff)===n).length; }
+function isRookie(){ return !!(ME && ME.role!=="admin") && myVisitCount() < ROOKIE_N; }
+function rookieBadge(){ return isRookie() ? `（新人案内：あと ${ROOKIE_N - myVisitCount()} 回）` : ""; }
+function applyRookie(){
+  const inp=$("#photoIn"); if (inp){ if (isRookie()) inp.setAttribute("capture","environment"); else inp.removeAttribute("capture"); }
+  const b=$("#meBadge"); if (b && ME && ME.role!=="admin") b.textContent = "担当："+me()+rookieBadge();
+}
 /* 削除できるのは登録した本人（by、無ければ担当）と管理者だけ。API 側でも同じ条件で拒否する */
 const canDelete = r => !!r && (r._local || (ME && ME.role==="admin") || (ME && (r.by || r.staff) === ME.name));
 const delBtn = (c,r) => canDelete(r) ? `<button class="del" data-c="${c}" data-id="${esc(r.id)}" aria-label="削除">🗑</button>` : "";   // 担当なしの古いデータは最初の担当者の分として扱う
@@ -1791,6 +1803,7 @@ const Store = {
     if (Array.isArray(r.staff) && r.staff.length){ STAFF.splice(0, STAFF.length, ...r.staff); }
     ME = r.me || ME;
     if (ME && ME.name){ if (STAFF.indexOf(ME.name)<0) STAFF.push(ME.name); setMe(ME.name); lockStaff(ME.role!=="admin"); }
+    applyRookie();
     applyPerms();
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
@@ -1811,6 +1824,7 @@ const Store = {
     try{ const raw=localStorage.getItem(CACHE_KEY); if (!raw) return; const r=JSON.parse(raw);
       const d=r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
       if (Array.isArray(r.staff) && r.staff.length) STAFF.splice(0, STAFF.length, ...r.staff);
+      applyRookie();
       ME = r.me||null; if (ME && ME.name && STAFF.includes(ME.name)){ setMe(ME.name); lockStaff(ME.role!=="admin"); }
       applyPerms();
       applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks; this.mode="offline"; snapshotSeen(); }catch(e){}
@@ -2295,7 +2309,7 @@ function buildRooms(force){
     : boxEmpty()
       ? `何も入っていない機械です。<b>景品を入れた枠をタップ</b> → 入れた景品を選ぶ → <b>累計売上</b>。黄色の枠が「つぎはここ」。`
       : `<b>変わった枠をタップ</b> →「取られた／回収した／動かした」→「何を入れた？」 → <b>累計売上</b>。黄色の枠が「つぎはここ」。`)
-    + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong" hidden>`
+    + ` <button type="button" class="qhelp" data-qhelp aria-label="くわしく">？</button><span class="qlong"${isRookie()?"":" hidden"}>`
     + (t==="4p"
       ? "並びは「Z」の書き順（左上A・右上B・左下C・右下D）。取られた数は機械の払出表示（出ていなければ 0）。景品を足した・抜いた・別の景品に入れかえた部屋は「補充・回収・入れ替え」をタップして、どうしたかを選び、個数を入れるだけです。まちがえたら同じボタンから「元にもどす」。売上は A＋B と C＋D のペアごとに、機械に出ている今月の累計額をそのまま入力すると、前回訪問との差が今回分として記録されます。✎ は景品名の訂正だけで、個数は変わりません。初回は「いま入っている数」が、その部屋の在庫になります。カウンターは任意です。"
       : "枠の中身は前回のまま出ています。変わった枠をタップすると「どうした？」と聞かれるので、取られた（お客さんが取った＝払出）／回収した（機械から抜いて在庫に戻す）／別の枠に動かした、から選びます。つづけて「何を入れた？」で入れた景品を選べば完了。空きの枠をタップすると、すぐ「何を入れた？」になります。まちがえたら、その枠をもう一度タップして「元にもどす」。過去の記録は「最近の巡回ログ」の ✎ 編集から同じ操作で直せます。")
@@ -3240,7 +3254,21 @@ async function shrinkImage(file){
   } finally { URL.revokeObjectURL(url); }
 }
 const blobToB64 = blob => new Promise((ok,ng)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]||""); r.onerror=()=>ng(new Error("読めませんでした")); r.readAsDataURL(blob); });
+/* 写真の指紋（縮小後 JPEG の SHA-256）。同じ写真を 補充前／補充後 の両方に付ける・別の機械に付け直す ミスを、送る前に止めるために使う。
+   サーバー（Code.gs addPhoto）も同じ値を計算して記録の photos[].h に残し、同じ指紋の写真は 2 回保存しない */
+async function photoHash(blob){
+  try { if (!(crypto && crypto.subtle)) return ""; const d = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()); return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
+  catch(e){ return ""; }
+}
+/* 同じ指紋の写真が、いま付けている写真か、読み込み済みの記録（自分の端末が持っている分）にあれば、その場所を返す */
+function photoDupOf(h){
+  if (!h) return null;
+  const mine = PHOTOS.find(p=>p.h===h); if (mine) return {where:"form", kind:mine.kind};
+  for (const r of ((Store.data||{}).weekly||[])){ const p=(r.photos||[]).find(x=>x.h===h); if (p) return {where:"rec", rec:r, kind:p.kind||"before"}; }
+  return null;
+}
 function renderPhotoRow(){
+  applyRookie();   // 記録が増えて新人案内が外れたら、写真ボタンとバッジもそれに合わせる
   Object.keys(PHOTO_KINDS).forEach(k=>{
     const el=document.querySelector(`.photo-row[data-row="${k}"]`); if(!el) return;
     const list=PHOTOS.filter(p=>p.kind===k);
@@ -3251,13 +3279,21 @@ function renderPhotoRow(){
     if (sk){ sk.hidden = list.length>0 || !!EDIT || !F.machine; sk.setAttribute("aria-pressed", String(!!PHOTO_SKIP[k]));
              sk.textContent = PHOTO_SKIP[k] ? "撮り忘れ として記録します（押すと取り消し）" : "撮り忘れた（写真なしで進む）"; }
     renderGuide();
-    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${list.length}枚 添付済み（もう1枚足せる）` : (k==="before" ? "着いてすぐ、機械の正面を1枚（撮影 または 写真から選ぶ）" : "補充・入れ替えが終わったら1枚（撮影 または 写真から選ぶ）");
+    const mach = F.machine ? `【${F.machine}】` : "";   // どの機械に付くかを見せる（同じ店で 2 台続けて登録するときの取り違え防止）
+    const how = isRookie() ? "その場で撮影" : "撮影 または 写真から選ぶ";
+    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${mach}${list.length}枚 添付済み${list.length>1?"（2 枚以上は確認が出ます）":"（もう1枚足せる）"}` : (k==="before" ? `${mach}着いてすぐ、機械の正面を1枚（${how}）` : `${mach}補充・入れ替えが終わったら1枚（${how}）`);
   });
 }
 async function addPhotoFiles(files, kind){
   for (const f of Array.from(files||[])){
     if (PHOTOS.filter(p=>p.kind===kind).length>=PHOTO_MAX){ toast(`${PHOTO_KINDS[kind]}の写真は ${PHOTO_MAX} 枚まで`); break; }
-    try { const blob = await shrinkImage(f); PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false, kind}); }
+    try {
+      const blob = await shrinkImage(f); const h = await photoHash(blob);
+      const dup = photoDupOf(h);
+      if (dup && dup.where==="form"){ toast(dup.kind===kind ? `同じ写真はもう ${PHOTO_KINDS[kind]} に付いています` : `その写真はもう ${PHOTO_KINDS[dup.kind]} に付いています。補充前と補充後は別々に撮ってください`); continue; }
+      if (dup){ toast(`その写真は ${jpDate(dup.rec.week)} ${dup.rec.store}／${dup.rec.machine} の${PHOTO_KINDS[dup.kind]}として保存済みです。別の写真を選んでください`); continue; }
+      PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false, kind, h});
+    }
     catch(e){ toast("この写真は読めませんでした"); }
   }
   renderPhotoRow();
@@ -3271,7 +3307,7 @@ async function uploadPhotos(id){
       const p = PHOTOS[0]; p.up=true; renderPhotoRow();
       try {
         const data = await blobToB64(p.blob);
-        const r = await api("photo", {id, data, mime:"image/jpeg", kind:p.kind});
+        const r = await api("photo", {id, data, mime:"image/jpeg", kind:p.kind, h:p.h||""});
         Store.data.weekly = (Store.data.weekly||[]).map(x=> x.id===id ? r.rec : x);
         URL.revokeObjectURL(p.url); PHOTOS.shift(); okN++; renderPhotoRow();
       } catch(e){ p.up=false; renderPhotoRow(); toast(`写真を送れませんでした：${errMsg(e)}`); break; }
@@ -3466,7 +3502,12 @@ function visitSummaryHtml(warns){
     <div class="cf-sub">${when}　${esc(me())}</div>
     ${warns.length?`<div class="cf-warn">${warns.map(w=>`<div>⚠ ${esc(w)}</div>`).join("")}</div>`:""}
     <table class="cf-t">${sales}${rowsHtml}</table>
-    <div class="cf-tot">今回分 <b>${yen(t.sales)}円</b>＝${t.plays}プレイ　払出 <b>${t.pays}</b>こ　写真 前${nB}／後${nA}${clean($("#memoIn").value)?`<div class="cf-memo">メモ：${esc(clean($("#memoIn").value))}</div>`:""}</div>`;
+    <div class="cf-tot">今回分 <b>${yen(t.sales)}円</b>＝${t.plays}プレイ　払出 <b>${t.pays}</b>こ　写真 前${nB}／後${nA}${clean($("#memoIn").value)?`<div class="cf-memo">メモ：${esc(clean($("#memoIn").value))}</div>`:""}${photoConfirmHtml()}</div>`;
+}
+/* 確認カードに付ける写真のサムネイル。「この機械の写真か」を保存前に目で確かめてもらう（別の機械の写真・同じ写真の 2 回登録の最後の砦） */
+function photoConfirmHtml(){
+  const ps = PHOTOS.slice().sort((a,b)=>(a.kind==="after")-(b.kind==="after")); if (!ps.length) return "";
+  return `<div class="cf-ph">${ps.map(p=>`<figure><img src="${p.url}" alt=""><figcaption>${PHOTO_KINDS[p.kind]}</figcaption></figure>`).join("")}<div class="cf-ph-note">📷 ${esc(F.machine)} の写真ですか？ 補充前と補充後が同じ写真や、別の機械の写真なら「戻って直す」で外す</div></div>`;
 }
 const nowHM = () => { const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
 function confirmSheet(html, okLabel, opt){
@@ -3490,7 +3531,9 @@ function validateVisit(){
   else if (daysSince(F.week) > 60) ask.push(`訪問日 ${jpDate(F.week)} は 60 日以上前です`);
   // 写真は 補充前・補充後 の 2 枚が必須。撮り忘れたときは「撮り忘れた」を押せば、そのことを記録して保存できる
   if (!EDIT) ["before","after"].forEach(k=>{
-    if (PHOTOS.some(p=>p.kind===k)) return;
+    const n = PHOTOS.filter(p=>p.kind===k).length;
+    if (n>=2) ask.push(`${PHOTO_KINDS[k]}の写真が ${n} 枚あります。別の機械の写真が混ざっていませんか？（同じ ${F.machine} の写真なら そのまま保存）`);
+    if (n) return;
     if (PHOTO_SKIP[k]) ask.push(`${PHOTO_KINDS[k]}の写真なし（撮り忘れ）として記録します`);
     else block.push(`${PHOTO_KINDS[k]}の写真がありません。撮れなかったときは、写真ボタンの下の「撮り忘れた」を押してください`);
   });
@@ -3560,7 +3603,7 @@ async function saveLog(){
   }
   if (R.noSales) warns.push("売上は見ていない（補充だけ）として保存します。売上 0 円、累計は前回のまま");
   if (!$("#timeIn").value) $("#timeIn").value = nowHM();                       // 時刻は保存時の「いま」
-  if (!(await confirmSheet(visitSummaryHtml(warns), EDIT ? "修正を保存する" : "保存する"))) return;
+  if (!(await confirmSheet(visitSummaryHtml(warns), EDIT ? "修正を保存する" : "保存する", isRookie() ? {title:"この内容で保存します（新人案内：店舗・機械・写真・数を一つずつ確かめてから）"} : undefined))) return;
   const rooms = R.type==="4p" ? R.rooms.map(rm=>({
     k:rm.k, counter:rm.counter===""?"":num(rm.counter), prize:clean(rm.prize),
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),

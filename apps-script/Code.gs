@@ -781,6 +781,26 @@ function folderUnder(parent, name) {
 function photoRoot() { return folderUnder(DriveApp.getRootFolder(), PHOTO_ROOT); }
 function photoCheckDir() { return folderUnder(photoRoot(), PHOTO_CHECK_DIR); }
 
+/* 写真の指紋（SHA-256 の 16 進）。同じ写真を 補充前と補充後 の両方に付ける・別の機械の記録に付ける ミスを止めるために、
+   記録の photos[].h に残し、同じ指紋の写真が既にどこかの記録にあれば保存を断る（アプリ側も送る前に同じ検査をする） */
+function photoHash(bytes) {
+  var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes);
+  return d.map(function (b) { b = (b + 256) % 256; return (b < 16 ? "0" : "") + b.toString(16); }).join("");
+}
+/* _app_db の巡回記録のうち、指紋 h の写真を持つものを探す（自分の記録 id は除く）。json に '"h":"…"' を含む行だけ読む */
+function findPhotoByHash(h, skipId) {
+  if (!h) return null;
+  var sh = dbSheet(); var last = sh.getLastRow(); if (last < 2) return null;
+  var v = sh.getRange(2, 1, last - 1, 6).getValues(); var key = '"h":"' + h + '"';
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][0]) !== "weekly" || String(v[i][1]) === String(skipId)) continue;
+    if (String(v[i][5]).indexOf(key) < 0) continue;
+    var rec; try { rec = JSON.parse(v[i][5]); } catch (e) { continue; }
+    var p = (rec.photos || []).filter(function (x) { return x.h === h; })[0];
+    if (p) return { rec: rec, photo: p };
+  }
+  return null;
+}
 function addPhoto(me, id, data, mime, kind) {
   kind = kind === "after" ? "after" : "before";
   var row = findDbRow("weekly", id);
@@ -793,6 +813,11 @@ function addPhoto(me, id, data, mime, kind) {
   if (!b64) throw new Error("写真のデータがありません");
   var bytes = Utilities.base64Decode(b64);
   if (bytes.length > PHOTO_MAX_BYTES) throw new Error("写真が大きすぎます（" + Math.round(bytes.length / 1024 / 1024) + "MB）");
+  var h = photoHash(bytes);
+  var same = (rec.photos || []).filter(function (p) { return p.h === h; })[0];
+  if (same) throw new Error("同じ写真がもう " + PHOTO_KINDS[same.kind || "before"] + " に付いています。補充前と補充後は別々に撮ってください");
+  var other = findPhotoByHash(h, id);
+  if (other) throw new Error("この写真は " + String(other.rec.week || "").slice(5).replace("-", "/") + " " + clean(other.rec.store) + "／" + clean(other.rec.machine) + " の" + PHOTO_KINDS[other.photo.kind || "before"] + "として保存済みです。同じ写真は 2 回付けられません");
   var ext = /png/i.test(mime || "") ? "png" : "jpg";
   var n = (rec.photos || []).filter(function (p) { return (p.kind || "before") === kind; }).length + 1;
   var day = String(rec.week || "").slice(0, 10) || Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd");
@@ -800,7 +825,7 @@ function addPhoto(me, id, data, mime, kind) {
   var folder = folderUnder(folderUnder(photoRoot(), clean(rec.store) || "店舗不明"), day.slice(0, 7));
   var file = folder.createFile(Utilities.newBlob(bytes, ext === "png" ? "image/png" : "image/jpeg", name));
   try { file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW); } catch (e) {}
-  var p = { fid: file.getId(), url: "https://drive.google.com/file/d/" + file.getId() + "/view", at: nowIso(), by: me.name, kind: kind };
+  var p = { fid: file.getId(), url: "https://drive.google.com/file/d/" + file.getId() + "/view", at: nowIso(), by: me.name, kind: kind, h: h };
   rec.photos = (rec.photos || []).concat([p]);
   rec.id = id;
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
