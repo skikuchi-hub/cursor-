@@ -2456,6 +2456,7 @@ function renderRoomSheet(){
       <button type="button" class="sh-btn" data-act="rs-add"><span class="ic">＋</span><span><b>同じ景品を足した</b><small>在庫から補充した</small></span></button>
       <button type="button" class="sh-btn" data-act="rs-take"><span class="ic">↩</span><span><b>抜いて在庫にもどした</b><small>機械から出して持ち帰った</small></span></button>
       <button type="button" class="sh-btn" data-act="rs-swap"><span class="ic">⇄</span><span><b>別の景品に入れかえた</b><small>古いのを抜いて、新しいのを入れた</small></span></button>
+      <button type="button" class="sh-btn" data-act="rs-move"><span class="ic">⇅</span><span><b>別の部屋と場所を入れかえた</b><small>中身と数をそのまま。相手の部屋をタップするだけ</small></span></button>
       <button type="button" class="sh-btn plain" data-act="rs-fix"><span class="ic">#</span><span><b>数え直した：いま入っている数を入れ直す</b><small>記録の残り${b!==""?`（${b} こ）`:""}が実物と合わないとき</small></span></button>
       ${roomChanged(rm) ? `<button type="button" class="sh-btn plain" data-act="rs-reset"><span class="ic">⟲</span><span><b>まちがえた：この部屋を元にもどす</b></span></button>` : ""}
       <button type="button" class="sh-btn plain" data-act="rs-close"><span class="ic">✓</span><span><b>そのまま（何もしていない）</b></span></button>`;
@@ -2468,6 +2469,13 @@ function renderRoomSheet(){
   } else if (p.step==="take"){
     body = `<div class="sh-q">「${esc(name)}」を 何こ抜いた？</div><div class="sh-sub">${have}${b!==""?`。全部なら ${b}`:""}</div>${numBox(rm.take)}
       <button type="button" class="sh-ok" data-act="rs-ok">決定</button><button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
+  } else if (p.step==="move"){
+    // 部屋どうしの場所の入れ替え（2026-11-07 菊地さん「入力方法を簡略化」）：相手の部屋を 1 タップで、両方の部屋の 回収・補充 を自動で埋める
+    const others = R.rooms.filter(x=>x.k!==rm.k);
+    body = `<div class="sh-q">部屋 ${p.k} の「${esc(name)}」${b!==""?`（${b} こ）`:""}を どの部屋と入れかえた？</div><div class="sh-sub">中身と数をそのまま入れかえます。在庫は変わりません</div>
+      ${others.map(o=>{ const ob=roomBefore(o), op=clean(o.prize); const okRoom = !!op && ob!=="" && num(ob)>0;
+        return `<button type="button" class="sh-btn ${okRoom?"":"plain"}" data-act="rs-moveto" data-k="${o.k}" ${okRoom?"":"disabled"}><span class="ic">${o.k}</span><span><b>${esc(op||"（空き）")}</b><small>${op ? (ob===""?"いま入っている数が未入力":`${ob} こ`) : "空きの部屋とは入れかえられません（「別の景品に入れかえた」で）"}</small></span></button>`; }).join("")}
+      <button type="button" class="sh-btn plain" data-act="rs-back"><span class="ic">←</span><span><b>もどる</b></span></button>`;
   } else if (p.step==="swap1"){
     const v = (p.tmp && p.tmp.take!==undefined && p.tmp.take!==null) ? p.tmp.take : (num(rm.take)>0 ? num(rm.take) : (b===""?"":b));   // もどってきたときは入れた数を保つ
     body = `<div class="sh-q">① 古い「${esc(name)}」を 何こ抜いた？</div><div class="sh-sub">${have}${b!==""?`。全部抜いたなら ${b}（そのまま決定でOK）`:""}</div>${numBox(v)}
@@ -2497,8 +2505,13 @@ function onRoomSheetClick(e){
   if (a==="rs-add"){ p.step="add"; return renderRoomSheet(); }
   if (a==="rs-take"){ p.step="take"; return renderRoomSheet(); }
   if (a==="rs-swap"){ p.step="swap1"; return renderRoomSheet(); }
+  if (a==="rs-move"){ p.step="move"; return renderRoomSheet(); }
+  if (a==="rs-moveto"){ const o=R.rooms.find(x=>x.k===b.dataset.k); if (o && roomSwapPlaces(rm, o)) return closeRoomSheet(); return; }
   if (a==="rs-fix"){ p.step="fix"; return renderRoomSheet(); }
-  if (a==="rs-reset"){ rm.add=""; rm.take=""; rm.addPrize=rm.prize; rm.swap=false; if (rm.fixBefore){ rm.fixBefore=false; rm.before=""; } toast(`部屋${p.k} を元にもどしました`); return closeRoomSheet(); }
+  if (a==="rs-reset"){
+    const partner = rm.swapWith ? R.rooms.find(x=>x.k===rm.swapWith && x.swapWith===rm.k) : null;   // 場所の入れ替えは相手の部屋も一緒にもどす
+    [rm, partner].filter(Boolean).forEach(x=>{ x.add=""; x.take=""; x.addPrize=x.prize; x.swap=false; x.swapWith=""; if (x.fixBefore){ x.fixBefore=false; x.before=""; } });
+    toast(partner ? `部屋${p.k} と 部屋${partner.k} を元にもどしました` : `部屋${p.k} を元にもどしました`); return closeRoomSheet(); }
   if (a==="rs-pick"){ p.tmp.name = b.dataset.v; p.step="swap3"; return renderRoomSheet(); }
   if (a==="rs-ok"){
     const n = numIn();
@@ -2511,6 +2524,18 @@ function onRoomSheetClick(e){
       rm.take = p.tmp.take; rm.addPrize = p.tmp.name; rm.add = n; rm.swap = true;
       toast(`部屋${p.k}：「${clean(rm.prize)}」を ${num(rm.take)} こ抜いて「${p.tmp.name}」を ${n} こ入れた`); return closeRoomSheet(); }
   }
+}
+/* 部屋 a と部屋 c の場所を入れかえる：a は「古い景品を全部抜いて c の景品を c の数だけ入れた」、c はその逆、として記録する
+   （回収と補充が同じ数で打ち消し合うので在庫は変わらず、次回の「前回の数」は入れかえ後の数になる）。取られた数は入れかえ前の景品のまま */
+function roomSwapPlaces(a, c){
+  const pa=clean(a.prize), pc=clean(c.prize), xa=roomBefore(a), xc=roomBefore(c);
+  if (!pa || !pc){ toast("空きの部屋とは入れかえられません"); return false; }
+  if (xa==="" || xc===""){ toast("先に「数え直した」で いま入っている数を入れてください"); return false; }
+  if (!(num(xa)>0) || !(num(xc)>0)){ toast("残りが 0 の部屋は入れかえられません（「別の景品に入れかえた」で）"); return false; }
+  a.take=num(xa); a.addPrize=pc; a.add=num(xc); a.swap=true; a.swapWith=c.k;
+  c.take=num(xc); c.addPrize=pa; c.add=num(xa); c.swap=true; c.swapWith=a.k;
+  toast(`部屋${a.k}「${pa}」${xa}こ ⇅ 部屋${c.k}「${pc}」${xc}こ を入れかえました`);
+  return true;
 }
 document.addEventListener("click", onRoomSheetClick);
 /* 補充候補の並び：この店の「当たり景品」（売上/日→払出/日の順）を先頭に、次に「在庫多め（滞留）」の景品。
