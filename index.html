@@ -5048,17 +5048,18 @@ function renderLab(){
     $("#gqLabSub").textContent = rows.length ? (stale?`滞留 ${stale}`:`滞留なし`) : "";
     note = `在庫は景品マスタの「残り在庫」（買った数 − 補充に使った数）。ペースは前回訪問から今回までの払出を日数で割ったもの。<b style="color:#f5c542">在庫が多くて出ない景品</b>は、出がいい店へ移す・獲得率をゆるめる、のどちらか。`;
   } else if (labTab==="fit"){
-    // 景品人気ランキング：店舗ごとに、その店で取られた数（払出）が多い景品の 1〜4 位だけ（2026-11-07 菊地さん「余計な情報は削除」）
+    // 景品人気ランキング：店舗ごとに、その景品の部屋で課金された回数（4人機のカウンター差の累計）が多い景品の 1〜4 位だけ
+    //（2026-11-07 菊地さん「取られた数ではなく課金された数で」。BOX 機は枠ごとのカウンターが無いので入らない）
     const byStore={};
-    list.forEach(P=>Object.entries(P.stores).forEach(([st,S])=>{ if (S.pays>0) (byStore[st]=byStore[st]||[]).push({prize:P.prize, pays:S.pays, perDay:S.paysPerDay}); }));
+    list.forEach(P=>Object.entries(P.stores).forEach(([st,S])=>{ if (S.playsKnown && S.plays>0) (byStore[st]=byStore[st]||[]).push({prize:P.prize, plays:S.plays, pays:S.pays}); }));
     html = STORES.map(s=>{
-      const arr=(byStore[s.n]||[]).slice().sort((a,b)=>b.pays-a.pays || b.perDay-a.perDay).slice(0,4);
-      if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">景品が取られた記録が入ると、ランキングが出ます。</div></div>`;
+      const arr=(byStore[s.n]||[]).slice().sort((a,b)=>b.plays-a.plays || b.pays-a.pays).slice(0,4);
+      if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">4人機のカウンターを 2 回以上入れると、ランキングが出ます。</div></div>`;
       return `<div class="gq-labi good"><div class="hd"><b>${esc(s.n)}</b><span class="tag">人気ランキング</span></div>
-        <div class="rank">${arr.map((x,i)=>`<div class="rkrow"><span class="rk">${i+1}位</span><span class="nm">${esc(x.prize)}</span><span class="ct">${x.pays}こ</span></div>`).join("")}</div></div>`;
+        <div class="rank">${arr.map((x,i)=>`<div class="rkrow"><span class="rk">${i+1}位</span><span class="nm">${esc(x.prize)}</span><span class="ct">課金 ${yen(x.plays)}回</span></div>`).join("")}</div></div>`;
     }).join("");
-    $("#gqLabSub").textContent = "店舗ごと 1〜4位";
-    note = `店舗ごとに、取られた数が多い景品の順（累計の払出）。補充・入れ替えの第一候補。`;
+    $("#gqLabSub").textContent = "4人機・店舗ごと 1〜4位";
+    note = `店舗ごとに、その景品の部屋で<b style="color:#f5c542">課金された回数</b>（4人機のカウンター差の累計）が多い順。BOX 機は入らない。`;
   } else if (labTab==="pos"){
     const ms=posAgg();
     html = ms.map(m=>{
