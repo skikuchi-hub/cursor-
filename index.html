@@ -1673,14 +1673,14 @@ function lockStaff(on){
 async function rememberAccountStaff(name){}      // 旧：アカウント連携（PIN 方式では不要）
 const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];
 /* 新人案内：巡回の記録が ROOKIE_N 件に満たない担当は「新人」として扱う（自動。記録が増えると自然に外れる）。
-   新人のあいだは ①写真はその場で撮影だけ（写真から選べない＝同じ写真・別の機械の写真を付けられない）、②入力の長い説明を最初から開く、
-   ③担当バッジに「新人案内」と残り回数を出す。管理者は対象外。 */
+   新人のあいだは ①入力の長い説明を最初から開く、②担当バッジに「新人案内」と残り回数を出す、③確認カードの見出しを変える。管理者は対象外。
+   写真は石原さんと同じく 撮影／写真から選ぶ の両方可（2026-11-09 菊地さん。同じ写真・別の機械の写真は指紋チェックで止める） */
 const ROOKIE_N = 30;
 function myVisitCount(){ const n=me(); return ((Store.data||{}).weekly||[]).filter(r=>(r.by||r.staff)===n).length; }
 function isRookie(){ return !!(ME && ME.role!=="admin") && myVisitCount() < ROOKIE_N; }
 function rookieBadge(){ return isRookie() ? `（新人案内：あと ${ROOKIE_N - myVisitCount()} 回）` : ""; }
 function applyRookie(){
-  const inp=$("#photoIn"); if (inp){ if (isRookie()) inp.setAttribute("capture","environment"); else inp.removeAttribute("capture"); }
+  const inp=$("#photoIn"); if (inp) inp.removeAttribute("capture");   // 新人も 撮影／写真から選ぶ の両方可（2026-11-09 菊地さん。カメラ限定はやめた）
   const b=$("#meBadge"); if (b && ME && ME.role!=="admin") b.textContent = "担当："+me()+rookieBadge();
 }
 /* 削除できるのは登録した本人（by、無ければ担当）と管理者だけ。API 側でも同じ条件で拒否する */
@@ -3372,7 +3372,7 @@ function renderPhotoRow(){
              sk.textContent = PHOTO_SKIP[k] ? "撮り忘れ として記録します（押すと取り消し）" : "撮り忘れた（写真なしで進む）"; }
     renderGuide();
     const mach = F.machine ? `【${F.machine}】` : "";   // どの機械に付くかを見せる（同じ店で 2 台続けて登録するときの取り違え防止）
-    const how = isRookie() ? "その場で撮影" : "撮影 または 写真から選ぶ";
+    const how = "撮影 または 写真から選ぶ";
     const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${mach}${list.length}枚 添付済み${list.length>1?"（2 枚以上は確認が出ます）":"（もう1枚足せる）"}` : (k==="before" ? `${mach}着いてすぐ、機械の正面を1枚（${how}）` : `${mach}補充・入れ替えが終わったら1枚（${how}）`);
   });
 }
