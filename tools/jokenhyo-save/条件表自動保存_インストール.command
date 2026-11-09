@@ -9,7 +9,7 @@
 #
 # 本体の動き：
 #   Apple Mail の kanri@exploration-holdings.jp の送信済みメールから、
-#   過去8日間の「条件表／通知書」メールの添付（PDF等）を取り出し、
+#   過去8日間の「条件表」メールの添付PDF（受信箱のCC控え・送信済みの両方）を取り出し、
 #   デスクトップ/Exploration Holdings株式会社/単価表/{会社名}/{yyyymm}/{商材フォルダ}/
 #   に原本ファイル名のまま保存する。同名ファイルが既にあればスキップ。
 #
@@ -33,7 +33,7 @@ cat > "$RUN_SCRIPT" <<'MAIN_SCRIPT_EOF'
 set -u
 
 BASE="$HOME/Desktop/Exploration Holdings株式会社/単価表"
-DAYS=8
+DAYS="${1:-8}"   # 何日前まで見るか（引数で変更可。例: bash 条件表自動保存.command 14）
 LOG_DIR="$HOME/Library/Logs/JokenhyoSave"
 mkdir -p "$LOG_DIR"
 LOG="$LOG_DIR/$(date +%Y%m%d_%H%M%S).log"
@@ -64,7 +64,7 @@ company_from() {
   local s="$1"
   case "$s" in *"【"*"】"*) ;; *) return 1 ;; esac
   s="${s#*【}"; s="${s%%】*}"
-  s="${s%御中}"; s="$(trim "$s")"; s="${s%御中}"
+  s="${s%御中}"; s="${s%様}"; s="$(trim "$s")"; s="${s%御中}"; s="${s%様}"
   trim "$s"
 }
 
@@ -74,7 +74,7 @@ shozai_from() {
   s="${s%.*}"                       # 拡張子
   case "$s" in *"】"*) s="${s#*】}" ;; esac
   s="$(trim "$s")"
-  s="$(printf '%s' "$s" | LC_ALL=C sed -E 's/^令和[0-9]+年[0-9]+月度//; s/^[0-9]{6,8}//')"
+  s="$(printf '%s' "$s" | LC_ALL=C sed -E 's/^令和[0-9]*年[0-9]*月度//; s/^[0-9]{6,8}//')"
   s="$(trim "$s")"
   s="${s%条件通知書}"; s="${s%条件表}"; s="${s%通知書}"
   s="$(trim "$s")"; s="${s%の}"
@@ -143,7 +143,7 @@ on run argv
                 if (email addresses of a) contains kanri then
                     repeat with mb in mailboxes of a
                         set mbName to name of mb
-                        if mbName contains "Sent" or mbName contains "送信" then set end of boxes to mb
+                        if mbName contains "Sent" or mbName contains "送信" or mbName is "INBOX" or mbName contains "受信" then set end of boxes to mb
                     end repeat
                 end if
             end try
@@ -168,7 +168,7 @@ on run argv
                         repeat with att in mail attachments of m
                             set attName to name of att
                             set lowerName to do shell script "printf '%s' " & quoted form of attName & " | tr 'A-Z' 'a-z'"
-                            if lowerName ends with ".pdf" or lowerName ends with ".docx" or lowerName ends with ".doc" or lowerName ends with ".xlsx" or lowerName ends with ".xls" then
+                            if lowerName ends with ".pdf" then
                                 set p to msgDir & "/" & attName
                                 try
                                     save att in POSIX file p
