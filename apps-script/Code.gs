@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-07a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-09a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -781,7 +781,7 @@ function folderUnder(parent, name) {
 function photoRoot() { return folderUnder(DriveApp.getRootFolder(), PHOTO_ROOT); }
 function photoCheckDir() { return folderUnder(photoRoot(), PHOTO_CHECK_DIR); }
 
-/* 写真の指紋（SHA-256 の 16 進）。同じ写真を 補充前と補充後 の両方に付ける・別の機械の記録に付ける ミスを止めるために、
+/* 写真の指紋（SHA-256 の 16 進）。同じ写真を 同じ種別に 2 回付ける・別の機械の記録に付ける ミスを止めるために、
    記録の photos[].h に残し、同じ指紋の写真が既にどこかの記録にあれば保存を断る（アプリ側も送る前に同じ検査をする） */
 function photoHash(bytes) {
   var d = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, bytes);
@@ -814,8 +814,9 @@ function addPhoto(me, id, data, mime, kind) {
   var bytes = Utilities.base64Decode(b64);
   if (bytes.length > PHOTO_MAX_BYTES) throw new Error("写真が大きすぎます（" + Math.round(bytes.length / 1024 / 1024) + "MB）");
   var h = photoHash(bytes);
-  var same = (rec.photos || []).filter(function (p) { return p.h === h; })[0];
-  if (same) throw new Error("同じ写真がもう " + PHOTO_KINDS[same.kind || "before"] + " に付いています。補充前と補充後は別々に撮ってください");
+  // 同じ記録の同じ種別に同じ写真は 2 回付けない。補充前と補充後が同じ写真なのは可（何も変えなかった訪問は同じ写真を上げる運用。2026-11-09）
+  var same = (rec.photos || []).filter(function (p) { return p.h === h && (p.kind || "before") === kind; })[0];
+  if (same) throw new Error("同じ写真がもう " + PHOTO_KINDS[kind] + " に付いています");
   var other = findPhotoByHash(h, id);
   if (other) throw new Error("この写真は " + String(other.rec.week || "").slice(5).replace("-", "/") + " " + clean(other.rec.store) + "／" + clean(other.rec.machine) + " の" + PHOTO_KINDS[other.photo.kind || "before"] + "として保存済みです。同じ写真は 2 回付けられません");
   var ext = /png/i.test(mime || "") ? "png" : "jpg";

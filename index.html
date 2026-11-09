@@ -1674,7 +1674,7 @@ async function rememberAccountStaff(name){}      // 旧：アカウント連携�
 const staffOf = r => (r.staff && STAFF.includes(r.staff)) ? r.staff : STAFF[0];
 /* 新人案内：巡回の記録が ROOKIE_N 件に満たない担当は「新人」として扱う（自動。記録が増えると自然に外れる）。
    新人のあいだは ①入力の長い説明を最初から開く、②担当バッジに「新人案内」と残り回数を出す、③確認カードの見出しを変える。管理者は対象外。
-   写真は石原さんと同じく 撮影／写真から選ぶ の両方可（2026-11-09 菊地さん。同じ写真・別の機械の写真は指紋チェックで止める） */
+   写真は石原さんと同じく 撮影／写真から選ぶ の両方可（2026-11-09 菊地さん。別の機械の写真は指紋チェックで止める） */
 const ROOKIE_N = 30;
 function myVisitCount(){ const n=me(); return ((Store.data||{}).weekly||[]).filter(r=>(r.by||r.staff)===n).length; }
 function isRookie(){ return !!(ME && ME.role!=="admin") && myVisitCount() < ROOKIE_N; }
@@ -3346,7 +3346,7 @@ async function shrinkImage(file){
   } finally { URL.revokeObjectURL(url); }
 }
 const blobToB64 = blob => new Promise((ok,ng)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]||""); r.onerror=()=>ng(new Error("読めませんでした")); r.readAsDataURL(blob); });
-/* 写真の指紋（縮小後 JPEG の SHA-256）。同じ写真を 補充前／補充後 の両方に付ける・別の機械に付け直す ミスを、送る前に止めるために使う。
+/* 写真の指紋（縮小後 JPEG の SHA-256）。同じ写真を 同じ種別に 2 回付ける・別の機械に付け直す ミスを、送る前に止めるために使う（補充前と補充後が同じ写真なのは可）。
    サーバー（Code.gs addPhoto）も同じ値を計算して記録の photos[].h に残し、同じ指紋の写真は 2 回保存しない */
 async function photoHash(blob){
   try { if (!(crypto && crypto.subtle)) return ""; const d = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()); return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
@@ -3381,9 +3381,10 @@ async function addPhotoFiles(files, kind){
     if (PHOTOS.filter(p=>p.kind===kind).length>=PHOTO_MAX){ toast(`${PHOTO_KINDS[kind]}の写真は ${PHOTO_MAX} 枚まで`); break; }
     try {
       const blob = await shrinkImage(f); const h = await photoHash(blob);
+      // 同じ写真が 補充前 と 補充後 に付くのはミスではない（何も変えなかった訪問は同じ写真を上げる運用。2026-11-09 石原さん談）。同じ種別に 2 回だけ止める
+      if (h && PHOTOS.some(p=>p.h===h && p.kind===kind)){ toast(`同じ写真はもう ${PHOTO_KINDS[kind]} に付いています`); continue; }
       const dup = photoDupOf(h);
-      if (dup && dup.where==="form"){ toast(dup.kind===kind ? `同じ写真はもう ${PHOTO_KINDS[kind]} に付いています` : `その写真はもう ${PHOTO_KINDS[dup.kind]} に付いています。補充前と補充後は別々に撮ってください`); continue; }
-      if (dup){ toast(`その写真は ${jpDate(dup.rec.week)} ${dup.rec.store}／${dup.rec.machine} の${PHOTO_KINDS[dup.kind]}として保存済みです。別の写真を選んでください`); continue; }
+      if (dup && dup.where==="rec"){ toast(`その写真は ${jpDate(dup.rec.week)} ${dup.rec.store}／${dup.rec.machine} の${PHOTO_KINDS[dup.kind]}として保存済みです。別の写真を選んでください`); continue; }
       PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false, kind, h});
     }
     catch(e){ toast("この写真は読めませんでした"); }
@@ -3411,7 +3412,7 @@ async function uploadPhotos(id){
 /* 写真の自動チェックの結果（サーバーの bootstrap で 写真タブ I〜Q を fid ごとに受け取る）。記録の下に出し、問題があるものは登録者の「⚠ 要確認」にも出す */
 let PHOTO_CHECKS = {};
 const photoCheckOf = p => (p && p.fid && PHOTO_CHECKS[p.fid]) || null;
-const PC_BAD = /同一ファイル|同じ写真|補充後の写真の可能性|記録にない|記録では|記録と合わない|別の機械|違う機械|記録上/;
+const PC_BAD = /補充後の写真の可能性|記録にない|記録では|記録と合わない|別の機械|違う機械|記録上/;   // 「同一ファイル」は問題扱いしない（変化なしの訪問は同じ写真を上げる運用）
 function photoCheckIsIssue(c){ return !!c && (c.match==="不一致" || c.match==="不明" || (c.score!==null && c.score<=2) || (c.empty!==null && c.empty>=3) || PC_BAD.test(c.note||"")); }
 function photoCheckLine(r){
   const ps = (r.photos||[]).filter(p=>photoCheckOf(p)); if (!ps.length) return "";
@@ -3596,10 +3597,10 @@ function visitSummaryHtml(warns){
     <table class="cf-t">${sales}${rowsHtml}</table>
     <div class="cf-tot">今回分 <b>${yen(t.sales)}円</b>＝${t.plays}プレイ　払出 <b>${t.pays}</b>こ　写真 前${nB}／後${nA}${clean($("#memoIn").value)?`<div class="cf-memo">メモ：${esc(clean($("#memoIn").value))}</div>`:""}${photoConfirmHtml()}</div>`;
 }
-/* 確認カードに付ける写真のサムネイル。「この機械の写真か」を保存前に目で確かめてもらう（別の機械の写真・同じ写真の 2 回登録の最後の砦） */
+/* 確認カードに付ける写真のサムネイル。「この機械の写真か」を保存前に目で確かめてもらう（別の機械の写真の最後の砦） */
 function photoConfirmHtml(){
   const ps = PHOTOS.slice().sort((a,b)=>(a.kind==="after")-(b.kind==="after")); if (!ps.length) return "";
-  return `<div class="cf-ph">${ps.map(p=>`<figure><img src="${p.url}" alt=""><figcaption>${PHOTO_KINDS[p.kind]}</figcaption></figure>`).join("")}<div class="cf-ph-note">📷 ${esc(F.machine)} の写真ですか？ 補充前と補充後が同じ写真や、別の機械の写真なら「戻って直す」で外す</div></div>`;
+  return `<div class="cf-ph">${ps.map(p=>`<figure><img src="${p.url}" alt=""><figcaption>${PHOTO_KINDS[p.kind]}</figcaption></figure>`).join("")}<div class="cf-ph-note">📷 ${esc(F.machine)} の写真ですか？ 別の機械の写真なら「戻って直す」で外す</div></div>`;
 }
 const nowHM = () => { const d=new Date(); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); };
 function confirmSheet(html, okLabel, opt){
