@@ -472,6 +472,20 @@ body.gbar-on #p-log{padding-bottom:72px}
 .empty{padding:26px 16px;text-align:center;color:var(--ink-3);font-size:12.5px;line-height:1.7}
 .empty b{display:block;font-size:26px;margin-bottom:6px;opacity:.5}
 .tblwrap{overflow-x:auto}
+/* 月次サマリー：横スクロールなしの店舗カード（2026-11-09 菊地さん「1 枚で見れるように」） */
+.sum-list{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px}
+.sum-card{border:1px solid var(--line);border-radius:var(--r-m);padding:9px 11px;background:var(--surface)}
+.sum-card.total{background:var(--surface-2);border-color:var(--line-2)}
+.sum-card .sh{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.sum-card .sh .nm{font-weight:800;font-size:13px;color:var(--ink);min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sum-card .sh .nm i{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:6px;vertical-align:middle}
+.sum-card .sh .gr{flex:none;font-family:var(--fs-mono);font-variant-numeric:tabular-nums;font-weight:800;font-size:15px;color:var(--ink)}
+.sum-card .sh .gr.neg{color:var(--critical-ink)}
+.sum-card .sh .gr small{font-family:inherit;font-weight:700;font-size:11px;color:var(--ink-3);margin-left:4px}
+.sum-card .sg{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 8px;margin-top:6px}
+.sum-card .sg span{font-size:10px;color:var(--ink-3);font-weight:700;display:block;line-height:1.2}
+.sum-card .sg b{display:block;font-family:var(--fs-mono);font-variant-numeric:tabular-nums;font-weight:700;font-size:12.5px;color:var(--ink)}
+.sum-card .sg b.warn{color:var(--warning-ink)}
 table{border-collapse:collapse;width:100%;font-size:12px}
 th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th{font-size:10px;letter-spacing:.06em;color:var(--ink-3);font-weight:700;text-align:right;background:var(--surface-2)}
@@ -1526,12 +1540,7 @@ body{font-variant-numeric:tabular-nums}
           </div>
           <div class="card flush">
             <div class="xhead"><span class="nm">月次サマリー（店舗別）</span><span class="ct" id="sumMonth">—</span></div>
-            <div class="tblwrap">
-              <table id="sumTbl">
-                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価</th><th>原価率</th><th>場所代</th><th>経費</th><th>人件費</th><th>粗利</th><th>粗利率</th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
+            <div class="sum-list" id="sumList"></div>
           </div>
         </details>
       </div>
@@ -4563,25 +4572,22 @@ function drawCostTrend(){
 /* --- 月次サマリー表 --- */
 function drawSummary(rows){
   $("#sumMonth").textContent = jpMonth(selMonth);
-  const tb = $("#sumTbl tbody");
-  // 経費（経費台帳の日付がその月のもの）。店舗ごと＋「共通」
+  const el = $("#sumList"); if (!el) return;
+  // 経費（経費台帳の日付がその月のもの）。店舗ごと＋「共通」（店舗が無い・その他）
   const exRows = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth);
   const exOf = store => exRows.filter(x=>x.store===store).reduce((a,x)=>a+num(x.net),0);
-  const exCommon = exOf("共通"), exAll = exRows.reduce((a,x)=>a+num(x.net),0);
+  const storeNames = new Set(STORES.map(s=>s.n));
+  const exCommon = exRows.filter(x=>!storeNames.has(x.store)).reduce((a,x)=>a+num(x.net),0), exAll = exRows.reduce((a,x)=>a+num(x.net),0);
   const used = STORES.filter(s=>rows.some(r=>r.store===s.n) || exOf(s.n)>0);
-  if(!used.length && !exCommon){
-    tb.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--ink-3);padding:20px 8px">${jpMonth(selMonth)}のログがありません</td></tr>`;
-    return;
-  }
-  // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費（店舗巡回 × 担当の単価）
-  const line = (label,a,color,ex,lab)=>{ lab=lab||0; const gross=a.gross-ex-lab, gr=a.sales>0?gross/a.sales:null; return `<tr>
-    <td>${color?`<span style="display:inline-block;width:8px;height:8px;border-radius:3px;background:${color};margin-right:6px"></span>`:""}${esc(label)}</td>
-    <td>${yen(a.plays)}</td><td>${yen(a.sales)}</td><td>${yen(a.cost)}</td>
-    <td style="color:${a.ratio>COST_TARGET?"var(--warning-ink)":"var(--ink)"}">${pct(a.ratio,1)}</td>
-    <td>${yen(a.place)}</td><td>${yen(ex)}</td><td>${yen(lab)}</td><td style="color:${gross<0?"var(--critical-ink)":"var(--ink)"}">${yen(gross)}</td><td>${pct(gr,1)}</td></tr>`; };
-  tb.innerHTML = used.map(s=>{ const sr=rows.filter(r=>r.store===s.n); return line(s.n, agg(sr), storeColor(s.n), exOf(s.n), laborOf(sr)); }).join("")
-    + (exCommon ? `<tr><td>共通（店舗なし）</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>${yen(exCommon)}</td><td>—</td><td>${yen(-exCommon)}</td><td>—</td></tr>` : "")
-    + `<tr style="font-weight:700;background:var(--surface-2)">${line("全店 合計", agg(rows), null, exAll, laborOf(rows)).replace(/^<tr>|<\/tr>$/g,"")}</tr>`;
+  if(!used.length && !exCommon){ el.innerHTML = `<div class="empty" style="margin:0">${jpMonth(selMonth)}のログがありません</div>`; return; }
+  // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費（店舗巡回 × 担当の単価）。横スクロールなしの 1 店舗 1 カード
+  const card = (label,a,color,ex,lab,total)=>{ lab=lab||0; const gross=a.gross-ex-lab, gr=a.sales>0?gross/a.sales:null;
+    return `<div class="sum-card ${total?"total":""}"><div class="sh"><span class="nm">${color?`<i style="background:${color}"></i>`:""}${esc(label)}</span><span class="gr ${gross<0?"neg":""}">粗利 ${yen(gross)}<small>${gr===null?"":"（"+pct(gr,0)+"）"}</small></span></div>
+      <div class="sg"><div><span>売上（${yen(a.plays)}プレイ）</span><b>${yen(a.sales)}</b></div><div><span>景品原価 ${a.ratio===null?"":pct(a.ratio,0)}</span><b class="${a.ratio>COST_TARGET?"warn":""}">${yen(a.cost)}</b></div><div><span>場所代</span><b>${yen(a.place)}</b></div>
+      <div><span>経費</span><b>${yen(ex)}</b></div><div><span>人件費</span><b>${yen(lab)}</b></div></div></div>`; };
+  el.innerHTML = used.map(s=>{ const sr=rows.filter(r=>r.store===s.n); return card(s.n, agg(sr), storeColor(s.n), exOf(s.n), laborOf(sr)); }).join("")
+    + (exCommon ? `<div class="sum-card"><div class="sh"><span class="nm">共通・その他（店舗なし）</span><span class="gr neg">粗利 ${yen(-exCommon)}</span></div><div class="sg"><div><span>経費</span><b>${yen(exCommon)}</b></div></div></div>` : "")
+    + card("全店 合計", agg(rows), null, exAll, laborOf(rows), true);
 }
 
 /* --- tooltip --- */
