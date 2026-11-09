@@ -44,6 +44,13 @@ trap 'rm -rf "$WORK"' EXIT
 
 log() { echo "$*" | tee -a "$LOG"; }
 
+# Mac のファイル名は濁点などが分解された形(NFD)で入っていることがあるため、比較前に NFC へそろえる
+if iconv -f UTF-8-MAC -t UTF-8 </dev/null >/dev/null 2>&1; then
+  nfc() { iconv -f UTF-8-MAC -t UTF-8 2>/dev/null; }
+else
+  nfc() { cat; }
+fi
+
 # 全角・半角スペースを前後から取り除く
 trim() {
   local s="$1"
@@ -86,12 +93,13 @@ shozai_from() {
 resolve_shozai_folder() {
   local company_dir="$1" shozai="$2"
   local own all
-  own="$(find "$company_dir" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | awk -F/ '{print $NF}' | sort -u)"
-  all="$(find "$BASE" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | awk -F/ '{print $NF}' | sort -u)"
+  shozai="$(printf '%s' "$shozai" | nfc)"
+  own="$(find "$company_dir" -mindepth 2 -maxdepth 2 -type d 2>/dev/null | awk -F/ '{print $NF}' | nfc | sort -u)"
+  all="$(find "$BASE" -mindepth 3 -maxdepth 3 -type d 2>/dev/null | awk -F/ '{print $NF}' | nfc | sort -u)"
 
   local own_plain own_ryu
   own_plain="$(printf '%s\n' "$own" | grep -Fx -- "$shozai" || true)"
-  own_ryu="$(printf '%s\n' "$own" | grep -F -e "$shozai(" -e "$shozai（" | grep -E '商流(\)|）)$' || true)"
+  own_ryu="$(printf '%s\n' "$own" | grep -F -e "${shozai}(" -e "${shozai}（" | grep -E '商流(\)|）)$' || true)"
 
   if [ -n "$own_plain" ] && [ -z "$own_ryu" ]; then printf '%s' "$shozai"; return 0; fi
   if [ -z "$own_plain" ] && [ -n "$own_ryu" ] && [ "$(printf '%s\n' "$own_ryu" | wc -l | tr -d ' ')" = "1" ]; then
@@ -99,7 +107,7 @@ resolve_shozai_folder() {
   fi
   if [ -z "$own_plain" ] && [ -z "$own_ryu" ]; then
     # この会社では初めての商材：他社で「(○○商流)」に分かれているなら判断できない
-    if printf '%s\n' "$all" | grep -F -e "$shozai(" -e "$shozai（" | grep -Eq '商流(\)|）)$'; then return 1; fi
+    if printf '%s\n' "$all" | grep -F -e "${shozai}(" -e "${shozai}（" | grep -Eq '商流(\)|）)$'; then return 1; fi
     printf '%s' "$shozai"; return 0
   fi
   return 1
@@ -217,13 +225,14 @@ while IFS=$'\t' read -r kind f2 f3 f4; do
   fi
   if [ -z "$company" ] || [ -z "$shozai" ]; then
     review=$((review+1)); REVIEW_LIST="$REVIEW_LIST
-  ・$fname … 会社名/商材名を読み取れません（件名: $subj）"
+  ・${fname} … 会社名/商材名を読み取れません（件名: ${subj}）"
     continue
   fi
 
   company_dir="$BASE/$company"
   # 同じ会社フォルダ内に同名ファイルがあればスキップ（どの月・商材でも）
-  if [ -d "$company_dir" ] && find "$company_dir" -type f 2>/dev/null | awk -F/ '{print $NF}' | grep -Fxq -- "$fname"; then
+  fname_nfc="$(printf '%s' "$fname" | nfc)"
+  if [ -d "$company_dir" ] && find "$company_dir" -type f 2>/dev/null | awk -F/ '{print $NF}' | nfc | grep -Fxq -- "$fname_nfc"; then
     skipped=$((skipped+1)); SKIP_LIST="$SKIP_LIST
   ・$company / $fname"
     continue
@@ -232,7 +241,7 @@ while IFS=$'\t' read -r kind f2 f3 f4; do
   folder="$(resolve_shozai_folder "$company_dir" "$shozai" || true)"
   if [ -z "$folder" ]; then
     review=$((review+1)); REVIEW_LIST="$REVIEW_LIST
-  ・$fname … 「$shozai」は上位店が複数あり商流フォルダを決められません（会社: $company）"
+  ・${fname} … 「${shozai}」は上位店が複数あり商流フォルダを決められません（会社: ${company}）"
     continue
   fi
 
