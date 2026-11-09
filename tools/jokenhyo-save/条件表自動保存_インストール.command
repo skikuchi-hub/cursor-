@@ -117,7 +117,9 @@ fi
 #   出力行: ATT<TAB>yyyymm<TAB>件名<TAB>保存した一時パス
 #           SKIP<TAB>件名<TAB>理由
 # ---------------------------------------------------------------------
-MAIL_OUT="$(osascript - "$WORK" "$DAYS" <<'APPLESCRIPT_EOF'
+# （Mac 標準の bash 3.2 は $( ) の中のヒアドキュメントを正しく読めないため、先にファイルへ書き出す）
+AS_FILE="$WORK/fetch.applescript"
+cat > "$AS_FILE" <<'APPLESCRIPT_EOF'
 on pad2(n)
     if n < 10 then return "0" & (n as text)
     return n as text
@@ -185,7 +187,7 @@ on run argv
     return resultLines as text
 end run
 APPLESCRIPT_EOF
-)"
+MAIL_OUT="$(osascript "$AS_FILE" "$WORK" "$DAYS")"
 rc=$?
 if [ $rc -ne 0 ]; then
   log "Apple Mail からの取得に失敗しました（Mail の操作許可・Mail が起動できるか確認してください）"
