@@ -4151,7 +4151,7 @@ async function savePrize(){
     if (cost > 0 && cost < 10) ask.push(`仕入単価 ${yen(cost)}円 は安すぎませんか？`);
     if (qty > 500) ask.push(`数量 ${yen(qty)} は多すぎませんか？（入数×ケース数）`);
     const same = allPrizes().find(p=>normName(p.name)===normName(name));
-    if (same) ask.push(`「${same.name}」はすでに登録があります。追加の仕入れなら OK`);
+    if (same) ask.push(`「${same.name}」はすでに登録があります（買った ${boughtQty(same.name)}）。追加の仕入れなら OK（数量は足し算されます）`);
     if (ask.length && !confirm("確認してください：\n・"+ask.join("\n・")+"\n\nこのまま登録しますか？")) return;
   }
   const rec = {
@@ -4182,9 +4182,20 @@ function stockBreakdown(name){
   b.left = b.qty - b.pays + b.adj;
   return b;
 }
+/* 買った数量 ＝ アプリで登録した分（同じ品名は全部足す）＋ スプシの景品マスタに手で入れた行（アプリID の無い行）の合計。
+   アプリで登録した景品は景品マスタにも同じ行（アプリID 付き）が書かれるので、そちらは数えない（二重計上しない）。サーバー側 prizeBase_（景品マスタの同名行を合算）と同じ数になる。
+   2026-11-12 菊地さん「アンパンマンを 72 個追加」：以前は アプリ登録があればその 1 件の数量だけ、無ければシート行の合計 だったので、
+   スプシ由来の景品（アンパンマン 35）をアプリで追加登録すると 35 が消えて 72 だけになっていた */
+function boughtQty(name){
+  const app = Store.rows("prizes").filter(p=>p.name===name);
+  const rows = sheetRows().filter(r=>r.name===name);
+  const idAware = rows.some(r=>"appId" in r);                         // 古いサーバーの応答（appId 無し）のときは以前どおり（アプリ登録があればその数量）
+  if (!idAware) return app.length ? num(app[0].qty) : rows.reduce((a,r)=>a+num(r.qty),0);
+  return app.reduce((a,p)=>a+num(p.qty),0) + rows.filter(r=>!clean(r.appId||"")).reduce((a,r)=>a+num(r.qty),0);
+}
 function stockBreakdownRaw(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
-  const qty = p ? num(p.qty) : sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
+  const qty = boughtQty(name);
   const b = {qty, pays:0, add4p:0, boxUsed:0, ret:0, adj:stockAdj(name), pays4p:0, paysBox:0, ret4p:0, retBox:0};
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ const pr=clean(x.prize), ap=clean(x.addPrize)||pr;

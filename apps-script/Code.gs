@@ -437,7 +437,7 @@ function readPrizeMaster() {
   if (v.length < 2) return res;
   var hdr = v[0].map(function (h) { return String(h || "").replace(/\s/g, ""); });
   function ci(name) { for (var i = 0; i < hdr.length; i++) if (hdr[i].indexOf(name) === 0) return i; return -1; }
-  var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), rate: ci("設定獲得率"), qty: ci("買った数量"), stock: ci("残り在庫"), memo: ci("メモ"), boxSet: ci("BOX1枠") };
+  var C = { name: ci("品名"), vendor: ci("仕入先"), kind: ci("機械タイプ"), cost: ci("仕入単価"), rate: ci("設定獲得率"), qty: ci("買った数量"), stock: ci("残り在庫"), memo: ci("メモ"), boxSet: ci("BOX1枠"), appId: ci("アプリID") };
   function g(r, k) { return C[k] >= 0 ? r[C[k]] : ""; }
   function n(x, d) { if (x === "" || x === null || x === undefined) return d; var f = parseFloat(x); return isFinite(f) ? f : d; }
   for (var i = 1; i < v.length; i++) {
@@ -445,7 +445,8 @@ function readPrizeMaster() {
     res.rows.push({
       name: name, vendor: clean(g(r, "vendor")), kind: clean(g(r, "kind")),
       cost: n(g(r, "cost"), 0), rate: n(g(r, "rate"), null), qty: n(g(r, "qty"), 0), stock: n(g(r, "stock"), null), memo: clean(g(r, "memo")),
-      boxSet: Math.max(1, n(g(r, "boxSet"), 1))   // BOX 1 枠に入れる個数（3 個セットなど）。空なら 1
+      boxSet: Math.max(1, n(g(r, "boxSet"), 1)),   // BOX 1 枠に入れる個数（3 個セットなど）。空なら 1
+      appId: clean(g(r, "appId"))                     // アプリで登録した景品の行（アプリ側は買った数量を二重に数えないための目印。2026-11-12）
     });
   }
   return res;
@@ -850,6 +851,9 @@ function maintenanceOnce_() {
   if (!pr.getProperty("stockRebaseAt")) {           // 2026-10-15：在庫の定義を「倉庫＋機械の中」に変更 → 保存済みの棚卸の差を取り直す
     try { var m3 = rebaseStockCounts_(); pr.setProperty("stockRebaseAt", nowIso() + " " + String(m3).slice(0, 200)); } catch (e) { Logger.log("rebaseStockCounts: " + e); }
   }
+  if (!pr.getProperty("masterStockFormulaAt")) {   // 2026-11-12：景品マスタ「残り在庫」の数式を在庫の定義（買った − 累計払出 ± 棚卸の調整）に合わせる
+    try { var m4 = upgradeStockFormulas(); pr.setProperty("masterStockFormulaAt", nowIso() + " " + String(m4).slice(0, 200)); } catch (e) { Logger.log("upgradeStockFormulas: " + e); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
@@ -1166,17 +1170,28 @@ function renameDateHeaders() {
   });
   upgradeStockFormulas();
 }
-/* 部屋別ログ M列「回収数」と、景品マスタ J列（残り在庫）に回収分を足し戻す数式。再実行しても安全 */
+/* 部屋別ログ M列「回収数」の見出しと、景品マスタ「残り在庫」列の数式。再実行しても安全。
+   2026-11-12 菊地さん「アンパンマンがアプリ 17・スプシ 35」：残り在庫の数式が 10/7 の古い定義（買った − 補充 ＋ 回収）のままで、
+   10/15 に決めた在庫の定義（買った − 累計払出 ± 棚卸の調整。アプリ・在庫整理タブと同じ）になっていなかった。
+   棚卸の調整は「在庫整理」タブの「棚卸の調整（累計）」列（rebuildStock が 10 分ごとに書く）を品名で引く。
+   列は見出しで探す（「BOXから引いた数」列が後から挿入されて K 列になっているため、列番号は決め打ちしない） */
+var MASTER_STOCK_FORMULA_MARK = "在庫整理";   // 新しい数式の目印（これを含まない数式なら古いので書き換える）
 function upgradeStockFormulas() {
   var rs = ss().getSheetByName("部屋別ログ");
   if (rs && String(rs.getRange(1, 13).getValue()).trim() === "") rs.getRange(1, 13).setValue("回収数");
-  var pm = ss().getSheetByName("景品マスタ");
-  if (pm) {
-    var f = String(pm.getRange(2, 10).getFormula() || "");
-    if (f && f.indexOf("$M$") < 0) {
-      pm.getRange(2, 10).setFormula("=ARRAYFORMULA(IF((A2:A500=\"\")+(F2:F500=\"\"),\"\",F2:F500-I2:I500+IF(A2:A500=\"\",0,SUMIF('部屋別ログ'!$H$2:$H$8000,A2:A500,'部屋別ログ'!$M$2:$M$8000))))");
-    }
-  }
+  var pm = ss().getSheetByName("景品マスタ"); if (!pm) return "景品マスタがありません";
+  var m = headerMap_(pm), cK = hcol_(m, "残り在庫"), cF = hcol_(m, "買った数量"), cH = hcol_(m, "累計払出数");
+  if (!cK || !cF || !cH) return "景品マスタの見出し（残り在庫・買った数量・累計払出数）が見つかりません";
+  var cur = String(pm.getRange(2, cK).getFormula() || "");
+  if (cur.indexOf(MASTER_STOCK_FORMULA_MARK) >= 0) return "残り在庫の数式は新しい定義のままです（変更なし）";
+  var n = Math.max(500, pm.getMaxRows()), A = "A2:A" + n, F = colLetter_(cF) + "2:" + colLetter_(cF) + n, H = colLetter_(cH) + "2:" + colLetter_(cH) + n;
+  var adjCol = colLetter_(STOCK_HEADERS.indexOf("棚卸の調整（累計）") + 1);
+  // 残り在庫 ＝ 買った数量 − 累計払出数 ＋ 棚卸の調整（累計）。補充・BOX・回収は倉庫→機械の移動なので在庫を動かさない
+  var f = "=ARRAYFORMULA(IF((" + A + "=\"\")+(" + F + "=\"\"),\"\"," + F + "-" + H + "+IF(" + A + "=\"\",0,SUMIF('" + STOCK_SHEET + "'!$A$2:$A$1000," + A + ",'" + STOCK_SHEET + "'!$" + adjCol + "$2:$" + adjCol + "$1000))))";
+  pm.getRange(2, cK, Math.max(1, pm.getMaxRows() - 1), 1).clearContent();   // 古い配列数式の下に値が残っていると #REF! になるので先に空にする
+  pm.getRange(2, cK).setFormula(f);
+  var msg = "景品マスタ「残り在庫」（" + colLetter_(cK) + " 列）の数式を 買った数量 − 累計払出数 ＋ 棚卸の調整 に更新しました";
+  Logger.log(msg); return msg;
 }
 /* アプリIDの付いた行の A列（週／日付）を _app_db の記録から書き直す。
    タイムゾーン差で日付が1日ずれて入った行の修復用。何度実行してもよい */
@@ -1539,7 +1554,7 @@ function updateMetricsIfDue() {
    10 分ごとのトリガーで H 列の手入力を取り込み（stock 文書を作る）、全部を作り直す */
 var STOCK_SHEET = "在庫整理";
 /* 在庫 ＝ 買った数量 − 累計払出数 ± 調整（倉庫＋機械の中の合計）。2026-10-15 菊地さん：数えるときは機械の中の分も数える */
-var STOCK_HEADERS = ["品名", "機械タイプ", "買った数量", "累計払出数", "計算上の在庫（倉庫＋機械の中）", "数えた在庫（ここだけ入力）", "差（数えた−計算）", "数えた日", "担当", "メモ", "うち機械の中（記録からの目安）", "BOX1枠の個数"];
+var STOCK_HEADERS = ["品名", "機械タイプ", "買った数量", "累計払出数", "計算上の在庫（倉庫＋機械の中）", "数えた在庫（ここだけ入力）", "差（数えた−計算）", "数えた日", "担当", "メモ", "うち機械の中（記録からの目安）", "BOX1枠の個数", "棚卸の調整（累計）"];   // 調整（累計）は景品マスタ「残り在庫」の数式が参照する（2026-11-12）
 var STOCK_OLD_WIDTH = 16;   // 以前の列構成（14 列＋説明）を消すため
 function stockSheet_() {
   var sh = ss().getSheetByName(STOCK_SHEET);
@@ -1653,7 +1668,7 @@ function rebuildStock() {
   var rows = table.map(function (t) {
     var lc = t.lastCount;
     return [t.name, t.kind, t.qty, t.pays, t.left,
-      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(lc.date || lc.createdAt) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.inMach, t.boxSet];
+      lc ? num(lc.counted) : "", lc ? num(lc.delta) : "", lc ? dateOf(lc.date || lc.createdAt) : "", lc ? (lc.by || "") : "", lc ? (lc.memo || "") : "", t.inMach, t.boxSet, t.adj];
   });
   if (sh.getMaxRows() < rows.length + 1) sh.insertRowsAfter(sh.getMaxRows(), rows.length + 1 - sh.getMaxRows());
   sh.getRange(2, 1, Math.max(1, sh.getMaxRows() - 1), Math.max(STOCK_OLD_WIDTH, STOCK_HEADERS.length)).clearContent().setBackground(null).setFontWeight("normal");
