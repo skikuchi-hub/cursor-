@@ -274,7 +274,7 @@ HANDOVER.md                  この文書
 - レベルアップに必要な EXP（2026-10-08 変更、`expStep`）：Lv1→2 300／2→3 400／3→4 500／4→5 800／5→6 1000。Lv6 以降は従来どおり 1000（Lv10 ごとに +1000）。累計では Lv5＝2,000・Lv10＝7,000。
 - 候補（未着手）：同じ日に同じ機械を2回記録したときの扱い（現状は2件とも別訪問として記録）。成績タブの「日ごとの売上」グラフは訪問日単位。
 
-## 7. EXAmuse 景品仕入れ自動化（変更なし。前回の引き継ぎそのまま）
+## 7. EXAmuse 景品仕入れ自動化（2026-11-12 追記：手で送った下書きの自動「発注済み」化）
 - 関係者：菊地（amuse@exploration-holdings.jp、Apple Mail アカウント「EXAmuse」、Mac）／石原さん（巡回担当、Thunderbird。スプシのメニューから発注要求）／仕入先 株式会社インフィニティ inf_main@8infinity.jp
 - 仕入れ想定商品スプシ：https://docs.google.com/spreadsheets/d/1c2dDei3-fMUtsAFXl4cnqvTMTuhjKrLEVSi0NSwEtAw
   タブ：商品一覧（A受信日…N発注ケース数 O発注個数 P発注金額 Q発注備考 R発注状況 …V商品キー W メール原文 X チェック結果 Y 機械タイプ）／発注要求／画像一覧／発注履歴／設定
@@ -286,6 +286,28 @@ HANDOVER.md                  この文書
 - 流れ：Apple Mail のインフィニティからのメール → 解析 → 商品一覧へ追加（画像は Drive「EXAmuse景品画像」経由）→ 数量入力 → ①→②or③ → 発注要求タブ → Mac が発注書 xlsx 作成＋Mail 下書き/送信（BCC amuse@…必須）→ 発注状況・発注履歴更新 → 送信時のみ景品マスタ追加。発注No EH-YYYYMMDD-連番。発注書 ~/EXAmuse景品仕入れ/発注書/発注書_YYYYMMDD_n.xlsx
 - 状態：EH-20261006-1（10商品 ¥455,560 税抜）は④で登録済み。景品マスタ27行。EH-20261005-1 は未送信テスト、登録しない。待機中の発注要求なし。
 - よくある依頼：「発注要求が処理中で止まってる」→ Mac 起動確認と examuse-sync.log。3分以上「処理中(Mac)」で発注Noが無ければ自動再取得。発注・送信・発注書作成は Mac 上でしか動かない。
+
+### 手で送った下書きを自動で「発注済み」にする（送信済み検知・2026-11-12 Mac に配置・稼働開始）
+- **何をするか**：Mac が作った下書きを菊地さんが Apple Mail から手で送ると、次の 2 分ループで、スプシのメニュー「③ 下書きを手動で送った → 発注済みにして景品マスタへ登録」（旧称 ④）と同じ登録を自動で行う。
+  ①商品一覧の発注状況を `発注済 YYYY-MM-DD (発注No)` に ②景品マスタ（クレーンゲーム日報）へ追加（メモの区分「送信済（下書きから手動送信・自動検知）」）③発注履歴に送信区分「送信（下書きから手動）」で追加 ④発注要求の行を状態「完了（送信済）」にして結果欄に追記（状態を「完了」以外にすることで、メニュー③の候補から外れて二重登録を防ぐ）。
+  **メールは送らない・下書きも作らない・スプシの行を消さない。** Apple Mail は読むだけ。
+- **コード**：`tools/examuse/examuse_sync.py` の `check_sent` / `_check_one`、`tools/examuse/examuse_common.py` の `list_sent_mails`（AppleScript で アカウント EXAmuse の「Sent Messages」直近 14 日を読む）、`fetch_source(mid, box)`。Apps Script（doPost）は変えていない（既存の `read` / `mark` / `history` / `master_append` / `request_done` だけを使う）ので、新しいデプロイも gsheet.json の更新も不要。
+- **対象にする条件**：宛先に `inf_main@8infinity.jp`、件名か本文に発注No `EH-YYYYMMDD-n` が **ちょうど 1 つ**（件名は既定「【発注書】{自社名} {日付}」で番号が無いので、実際は本文「■発注内容（発注No：…）」から取る）。
+- **何もしない（ログだけ）ケース**：発注No が 0 個／2 個以上、Mac の発注記録（db.json の orders）にその番号が無いか 2 件以上、**メール本文の商品が発注要求と一致しない**（要求の商品名が本文に無い・本文の「＠単価 ＝ ¥金額」行の数が違う＝下書きに手で商品を足した／消した）、スプシの商品一覧に該当行が無い、発注状況がその番号の「下書き作成」になっていない。→ 必要ならメニュー③で手動登録する。
+  スプシで既に「発注済」なら登録せず記録だけ。
+- **一度だけ**：`db.json` の `sent_done: {発注No: {mail_id, message_id, sent, at, result}}` に記録し、同じ番号は二度と処理しない。`sent_seen: {メールID: 判定}` は同じメールを 2 分ごとに読み直さないための控え（14 日より古いものは自動で消える）。あいまいで何もしなかったメールも `sent_seen` に入るので、ログは 1 回だけ出る。
+- **初回の扱い**：`db.json` の `sent_init_at`（初回実行時刻 2026-11-12 11:03:57）より前に送信したメールは「記録のみ」で登録しない。初回に EH-20261102-1（11/02 送信）は記録のみになった。
+- **発注要求の行の特定**：2026-11-12 以降の発注は db.json の orders に `req_id` / `req_result` を控える。それ以前の発注は `~/Library/Logs/examuse-sync.log` の「発注要求 Rxxx 完了: 発注No…」行から拾う。どちらでも分からなければ発注要求の行は更新せず、ログに「スプシのメニューで③を押さないこと」と出す。
+- **ログの見方**：`~/Library/Logs/examuse-sync.log`（指示書にあった `~/EXAmuse景品仕入れ/examuse-sync.log` は存在せず、実際のログはこちら）で `[送信済み検知]` を検索。例：
+  `[送信済み検知] EH-20261102-1（id=89262 2026-11-02 19:23 送信）: 検知開始より前の送信→記録のみ`
+  登録すると Mac に通知「EXAmuse 手動送信を検知」、一部失敗すると「EXAmuse 送信済み検知：一部失敗」（その場合は失敗した部分だけ手で直す。同じ番号は再処理しない）。
+- **試し実行（何も書かない）**：`cd ~/Library/Application\ Support/examuse-order && /usr/bin/python3 -B examuse_sync.py --no-requests --sent-dry-run` → 判定だけログに出す（db.json もスプシも変えない。処理済みの番号も判定し直す）。
+- **止め方**：plist の ProgramArguments に `--no-sent` を足して `launchctl unload` → `load` すると検知だけ止まる（取り込み・発注要求処理はそのまま）。急ぎなら `~/Library/Application Support/examuse-order/控え_20261112_送信済み検知前/` の examuse_sync.py と examuse_common.py を戻す。ループ全体を止めるのは `launchctl unload ~/Library/LaunchAgents/com.exploration.examuse-sync.plist`。
+- **Mac への配置手順**（2026-11-12 実施）：
+  1. 控え：`~/Library/Application Support/examuse-order/控え_20261112_送信済み検知前/` に旧 examuse_sync.py・examuse_common.py・db.json をコピー
+  2. リポジトリの `tools/examuse/examuse_sync.py`・`examuse_common.py` を `~/Library/Application Support/examuse-order/` へ上書きコピー（examuse_gsheet.py・examuse_order.py は変更なし）
+  3. launchd（com.exploration.examuse-sync）は 2 分ごとに毎回 python を起動し直すので再起動は不要（ファイル差し替えで次回から新コード）。手で 1 回 `/usr/bin/python3 -B examuse_sync.py --quiet` を実行してログを確認
+- 失敗しても 2 分ループ全体は止まらない（`check_sent` 全体と 1 通ごとを try/except で囲みログ）。
 
 ### 在庫整理：アプリの棚卸（複数景品まとめ保存）をサーバーでも読む（2026-10-15）
 - アプリの「在庫整理」で保存した棚卸は 1 件に複数景品（`items[]`）が入る。Code.gs の `stockTable_` / `syncStockSheet_` は `stockEntries_()` で 1 景品 1 行にほどいてから集計する（以前は 1 件 1 景品のシート入力形式しか読めず、アプリで数えた在庫がスプシの「在庫整理」タブに出なかった）。

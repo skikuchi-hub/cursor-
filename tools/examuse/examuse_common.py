@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """EXAmuse 景品仕入れ: 共通モジュール（メール解析・スプレッドシート生成）"""
-import os, re, json, glob, email, unicodedata, datetime, tempfile, shutil, subprocess
+import os, re, json, glob, email, unicodedata, datetime, tempfile, shutil, subprocess, time
 from email import policy
 from email.header import decode_header, make_header
 from email.utils import parsedate_to_datetime
@@ -21,6 +21,8 @@ MAIL_ROOT = os.path.join(HOME, "Library", "Mail", "V10",
 SENDER_FILTER = "8infinity.jp"
 MAIL_ACCOUNT = "EXAmuse"
 MAIL_BOX = "INBOX"
+SENT_BOX = "Sent Messages"            # EXAmuse アカウントの送信済み（手動送信の検知に使う。読むだけ）
+ORDER_TO = "inf_main@8infinity.jp"    # 発注メールの宛先（設定シート「発注先メール」が無いときの既定）
 
 SHEET_MAIN = "商品一覧"
 SHEET_IMG = "画像一覧"
@@ -189,12 +191,35 @@ end tell''' % (MAIL_BOX, MAIL_ACCOUNT, SENDER_FILTER)
             mid, d = line.split("|", 1); out.append((mid.strip(), d.strip()))
     return out
 
-def fetch_source(mid):
+def list_sent_mails(days=14):
+    """送信済みメールボックスの直近 days 日分 [(id, 送信時刻epoch, 宛先(小文字・カンマ区切り), 件名)]（読むだけ。送信はしない）"""
+    scr = '''tell application "Mail"
+set out to ""
+set nowD to current date
+repeat with m in (messages of mailbox "%s" of account "%s" whose date sent > (nowD - %d * days))
+set rc to ""
+repeat with r in (to recipients of m)
+set rc to rc & (address of r) & ","
+end repeat
+set out to out & (id of m) & tab & ((nowD - (date sent of m)) as integer) & tab & rc & tab & (subject of m) & linefeed
+end repeat
+return out
+end tell''' % (SENT_BOX, MAIL_ACCOUNT, int(days))
+    r = subprocess.run(["osascript", "-e", scr], capture_output=True, text=True, timeout=120)
+    if r.returncode != 0: raise RuntimeError("送信済み一覧取得失敗: " + r.stderr.strip())
+    now = time.time(); out = []
+    for line in r.stdout.splitlines():
+        parts = line.split("\t", 3)
+        if len(parts) == 4 and parts[1].strip().lstrip("-").isdigit():
+            out.append((parts[0].strip(), now - int(parts[1]), parts[2].strip().lower(), parts[3].strip()))
+    return out
+
+def fetch_source(mid, box=MAIL_BOX):
     """Apple Mail からメッセージのソース(RFC822)を取得して bytes で返す"""
     scr = '''tell application "Mail"
 set m to first message of mailbox "%s" of account "%s" whose id is %s
 return source of m
-end tell''' % (MAIL_BOX, MAIL_ACCOUNT, mid)
+end tell''' % (box, MAIL_ACCOUNT, mid)
     r = subprocess.run(["osascript", "-e", scr], capture_output=True, timeout=300)
     if r.returncode != 0: raise RuntimeError("Mailソース取得失敗 id=%s: %s" % (mid, r.stderr.decode("utf-8", "replace").strip()))
     return r.stdout
