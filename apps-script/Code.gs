@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-12c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-12d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -851,8 +851,8 @@ function maintenanceOnce_() {
   if (!pr.getProperty("stockRebaseAt")) {           // 2026-10-15：在庫の定義を「倉庫＋機械の中」に変更 → 保存済みの棚卸の差を取り直す
     try { var m3 = rebaseStockCounts_(); pr.setProperty("stockRebaseAt", nowIso() + " " + String(m3).slice(0, 200)); } catch (e) { Logger.log("rebaseStockCounts: " + e); }
   }
-  if (!pr.getProperty("masterStockFormulaAt")) {   // 2026-11-12：景品マスタ「残り在庫」の数式を在庫の定義（買った − 累計払出 ± 棚卸の調整）に合わせる
-    try { var m4 = upgradeStockFormulas(); pr.setProperty("masterStockFormulaAt", nowIso() + " " + String(m4).slice(0, 200)); } catch (e) { Logger.log("upgradeStockFormulas: " + e); }
+  if (!pr.getProperty("masterStockFormula2At")) {   // 2026-11-12：景品マスタ「残り在庫」の数式を在庫の定義（買った − 累計払出 ± 棚卸の調整）に合わせる
+    try { var m4 = upgradeStockFormulas(); pr.setProperty("masterStockFormula2At", nowIso() + " " + String(m4).slice(0, 200)); } catch (e) { Logger.log("upgradeStockFormulas: " + e); }
   }
   if (!pr.getProperty("anpanman72At")) {          // 2026-11-12：菊地さん「アンパンマンをアプリ外で 72 個発注した。在庫に足して（単価 545 変更なし）。全部そっちでやって」
     try { var m5 = addOffAppOrder_(); pr.setProperty("anpanman72At", nowIso() + " " + String(m5).slice(0, 200)); } catch (e) { Logger.log("addOffAppOrder: " + e); }
@@ -1198,22 +1198,26 @@ function renameDateHeaders() {
    10/15 に決めた在庫の定義（買った − 累計払出 ± 棚卸の調整。アプリ・在庫整理タブと同じ）になっていなかった。
    棚卸の調整は「在庫整理」タブの「棚卸の調整（累計）」列（rebuildStock が 10 分ごとに書く）を品名で引く。
    列は見出しで探す（「BOXから引いた数」列が後から挿入されて K 列になっているため、列番号は決め打ちしない） */
-var MASTER_STOCK_FORMULA_MARK = "在庫整理";   // 新しい数式の目印（これを含まない数式なら古いので書き換える）
+var MASTER_STOCK_FORMULA_MARK = "'" + "在庫整理" + "'!$D$";   // 新しい数式の目印（在庫整理タブの累計払出数 D を参照するのは 2026-11-12 第 2 版だけ）
 function upgradeStockFormulas() {
   var rs = ss().getSheetByName("部屋別ログ");
   if (rs && String(rs.getRange(1, 13).getValue()).trim() === "") rs.getRange(1, 13).setValue("回収数");
   var pm = ss().getSheetByName("景品マスタ"); if (!pm) return "景品マスタがありません";
-  var m = headerMap_(pm), cK = hcol_(m, "残り在庫"), cF = hcol_(m, "買った数量"), cH = hcol_(m, "累計払出数");
-  if (!cK || !cF || !cH) return "景品マスタの見出し（残り在庫・買った数量・累計払出数）が見つかりません";
+  var m = headerMap_(pm), cK = hcol_(m, "残り在庫"), cF = hcol_(m, "買った数量");
+  if (!cK || !cF) return "景品マスタの見出し（残り在庫・買った数量）が見つかりません";
   var cur = String(pm.getRange(2, cK).getFormula() || "");
   if (cur.indexOf(MASTER_STOCK_FORMULA_MARK) >= 0) return "残り在庫の数式は新しい定義のままです（変更なし）";
-  var n = Math.max(500, pm.getMaxRows()), A = "A2:A" + n, F = colLetter_(cF) + "2:" + colLetter_(cF) + n, H = colLetter_(cH) + "2:" + colLetter_(cH) + n;
-  var adjCol = colLetter_(STOCK_HEADERS.indexOf("棚卸の調整（累計）") + 1);
-  // 残り在庫 ＝ 買った数量 − 累計払出数 ＋ 棚卸の調整（累計）。補充・BOX・回収は倉庫→機械の移動なので在庫を動かさない
-  var f = "=ARRAYFORMULA(IF((" + A + "=\"\")+(" + F + "=\"\"),\"\"," + F + "-" + H + "+IF(" + A + "=\"\",0,SUMIF('" + STOCK_SHEET + "'!$A$2:$A$1000," + A + ",'" + STOCK_SHEET + "'!$" + adjCol + "$2:$" + adjCol + "$1000))))";
+  var n = Math.max(500, pm.getMaxRows()), A = "A2:A" + n, F = colLetter_(cF) + "2:" + colLetter_(cF) + n;
+  var S = "'" + STOCK_SHEET + "'!$A$2:$A$1000";
+  var payCol = colLetter_(STOCK_HEADERS.indexOf("累計払出数") + 1), adjCol = colLetter_(STOCK_HEADERS.indexOf("棚卸の調整（累計）") + 1);
+  var sum = function (c) { return "SUMIF(" + S + "," + A + ",'" + STOCK_SHEET + "'!$" + c + "$2:$" + c + "$1000)"; };
+  // 残り在庫 ＝ 買った数量 − 累計払出数 ＋ 棚卸の調整（累計）。払出・調整は「在庫整理」タブ（アプリと同じ集計：BOX の 3 個セット・まとめた景品も込み）を品名で引く。
+  // 同じ品名が複数行あるとき（追加仕入れ）は、最初の行だけが払出・調整を引き、2 行目以降はその行の買った数量のまま → 行の合計 ＝ アプリの在庫
+  var first = "MATCH(" + A + "," + A + ",0)=ROW(" + A + ")-1";
+  var f = "=ARRAYFORMULA(IF((" + A + "=\"\")+(" + F + "=\"\"),\"\"," + F + "-IF(" + first + "," + sum(payCol) + "-" + sum(adjCol) + ",0)))";
   pm.getRange(2, cK, Math.max(1, pm.getMaxRows() - 1), 1).clearContent();   // 古い配列数式の下に値が残っていると #REF! になるので先に空にする
   pm.getRange(2, cK).setFormula(f);
-  var msg = "景品マスタ「残り在庫」（" + colLetter_(cK) + " 列）の数式を 買った数量 − 累計払出数 ＋ 棚卸の調整 に更新しました";
+  var msg = "景品マスタ「残り在庫」（" + colLetter_(cK) + " 列）の数式を 買った数量 − 累計払出数 ＋ 棚卸の調整（在庫整理タブ参照・同名は最初の行で引く）に更新しました";
   Logger.log(msg); return msg;
 }
 /* アプリIDの付いた行の A列（週／日付）を _app_db の記録から書き直す。
