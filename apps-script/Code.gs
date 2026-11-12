@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-12b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-12c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -854,9 +854,32 @@ function maintenanceOnce_() {
   if (!pr.getProperty("masterStockFormulaAt")) {   // 2026-11-12：景品マスタ「残り在庫」の数式を在庫の定義（買った − 累計払出 ± 棚卸の調整）に合わせる
     try { var m4 = upgradeStockFormulas(); pr.setProperty("masterStockFormulaAt", nowIso() + " " + String(m4).slice(0, 200)); } catch (e) { Logger.log("upgradeStockFormulas: " + e); }
   }
+  if (!pr.getProperty("anpanman72At")) {          // 2026-11-12：菊地さん「アンパンマンをアプリ外で 72 個発注した。在庫に足して（単価 545 変更なし）。全部そっちでやって」
+    try { var m5 = addOffAppOrder_(); pr.setProperty("anpanman72At", nowIso() + " " + String(m5).slice(0, 200)); } catch (e) { Logger.log("addOffAppOrder: " + e); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
+}
+/* アプリ外で発注した追加仕入れを、アプリの景品登録と同じ形で入れる（2026-11-12 菊地さん：アンパンマン 72 個・単価 545）。
+   クラウド側からスプシに直接書けず、PIN を使った API 呼び出しもしないので、push だけで一度だけ走るここに入れる。
+   addDoc と同じ道（_app_db ＋ 景品マスタに同名の新しい行（アプリID 付き）＋ 在庫作り直し）を通るので、既存の行（買った 35）はそのまま、合計 107 になる。
+   同じメモの登録がすでにあれば何もしない（二重計上しない） */
+var OFF_APP_ORDERS = [
+  { name: "アンパンマン", vendor: "株式会社インフィニティ", use: "4人機用", cost: 545, qty: 72, buyDate: "2026-11-12", by: "菊地翔平",
+    memo: "アプリ外発注 2026-11-12：追加分 72 個 @545（菊地さんの依頼で自動登録。発注日が違えば仕入日を直す）" }
+];
+function addOffAppOrder_() {
+  var docs = readAllDocs(), done = [];
+  OFF_APP_ORDERS.forEach(function (o) {
+    var dup = (docs.prizes || []).some(function (p) { return clean(p.name) === o.name && String(p.memo || "").indexOf(o.memo.slice(0, 20)) === 0; });
+    if (dup) { done.push(o.name + "：登録済み"); return; }
+    var rec = { name: o.name, vendor: o.vendor, cost: o.cost, qty: o.qty, use: o.use, costRate: 0, rateN: 0, retail: 0, proof: "", memo: o.memo, staff: o.by,
+                buyDate: o.buyDate, deliveryDate: "", store: "共通", buyer: o.by, boxSet: 1 };
+    var r = addDoc({ name: o.by, role: "admin" }, "prizes", rec);
+    done.push(o.name + " " + o.qty + " 個を登録（" + r.rec.id + "）");
+  });
+  var msg = done.join("、") || "対象なし"; Logger.log(msg); return msg;
 }
 /* 保存済みの棚卸（stock）の computed／delta を、「買った数量 − その時点までの払出 ± それまでの調整」（倉庫＋機械の中）で取り直す。
    10/14〜15 の棚卸は倉庫だけの式（補充・BOX を引いた数）と比べて差を出していたが、実際には機械の中の分も数えていた（2026-10-15 菊地さん）。
