@@ -1634,11 +1634,17 @@ const storeColor = n => `var(${SERIES[Math.max(0, STORES.findIndex(s=>s.n===n)) 
 const storeOf = n => STORES.find(s=>s.n===n);
 const benchAvg = s => s.bench ? Math.round(s.bench.reduce((a,b)=>a+b,0)/s.bench.length) : null;
 /* ボスの体力＝直近 5 か月の月平均売上（毎月更新）。引継ぎ前の月（2026/4〜8）のあとに、自分たちの終わった月（mon より前・記録のある月）を
-   つないで、新しいほうから 5 か月の平均。月が進むたびに古い月が外れ、自分たちの月が入る（2026-11-07 菊地さん「月平均額は毎月更新して」） */
+   つないで、新しいほうから 5 か月の平均。月が進むたびに古い月が外れ、自分たちの月が入る（2026-11-07 菊地さん「月平均額は毎月更新して」）
+   自分たちの月は「まる 1 か月運営した月」だけ数える（2026-11-12 菊地さん：引継ぎ直後の数日分が 1 か月として入り、平均を下げていた）。
+   判定＝その店の最初の記録日が、その月より前か、その月の FULL_MONTH_GRACE 日以内（巡回は週 1 回なので、月初の数日に最初の記録があれば月初から運営とみなす）。
+   10/29 開始の引継ぎ 3 店は 10 月を数えず、引継ぎ前 5 か月の平均がそのままボス。数える月が無く引継ぎ前データも無い店はボス無し（❔） */
 const BOSS_MONTHS = 5;
+const FULL_MONTH_GRACE = 7;
+function firstRecordDay(s){ let f=""; (Store.data.weekly||[]).forEach(r=>{ if (r.store===s.n && r.week && (!f || r.week<f)) f=r.week; }); return f; }
+function isFullMonth(s, m){ const f=firstRecordDay(s); if (!f) return false; const fm=monthOf(f); return fm<m || (fm===m && +f.slice(8,10)<=FULL_MONTH_GRACE); }
 function bossHp(s, mon){
   const byM={}; (Store.data.weekly||[]).forEach(r=>{ if (r.store!==s.n) return; const m=monthOf(r.week); if (!m || m>=mon) return; byM[m]=(byM[m]||0)+salesOfRec(r); });
-  const ours = Object.keys(byM).sort().map(m=>byM[m]).filter(v=>v>0);
+  const ours = Object.keys(byM).sort().filter(m=>byM[m]>0 && isFullMonth(s, m)).map(m=>byM[m]);
   const all = (s.bench||[]).concat(ours); if (!all.length) return {hp:null, n:0, own:0};
   const win = all.slice(-BOSS_MONTHS);
   return {hp:Math.round(win.reduce((a,b)=>a+b,0)/win.length), n:win.length, own:Math.min(ours.length, win.length)};
@@ -4927,7 +4933,8 @@ function renderBosses(mon){
   const ICONS=["🐲","👹","🦖","👾","🤖"];
   el.innerHTML = STORES.map((s,i)=>{
     const bh=bossHp(s, mon), hpMax=bh.hp, dmg=byS[s.n]||0;
-    if (!hpMax) return `<div class="gq-boss"><span class="ic">❔</span><div class="nm"><b>${esc(s.n)}</b><span>前の月のデータなし（来月から出る）</span></div></div>`;
+    if (!hpMax){ const when = !firstRecordDay(s) ? "記録を入れて、まる 1 か月運営した翌月から出る" : isFullMonth(s, mon) ? "来月から出る" : "月の途中から始めたので、再来月から出る";
+      return `<div class="gq-boss"><span class="ic">❔</span><div class="nm"><b>${esc(s.n)}</b><span>まる 1 か月の実績がまだない（${when}）</span></div></div>`; }
     withBench++;
     const left=Math.max(0,hpMax-dmg), pct=Math.max(0,Math.min(100,left/hpMax*100)); const isDown = dmg>=hpMax; if (isDown) down++;
     return `<div class="gq-boss ${isDown?"down":""}"><span class="ic">${isDown?"🏆":ICONS[i%ICONS.length]}</span>
@@ -4937,7 +4944,7 @@ function renderBosses(mon){
   $("#gqBossSub").textContent = `${+mon.slice(5)}月・げきは ${down}／${withBench}`;
   $("#gqBossNote").innerHTML = down>=withBench && withBench>0
     ? `<span class="gq-clear">★ 全店 げきは！</span>　前の運営者を こえた。ここが スタートライン！`
-    : `ボスの体力＝直近 ${BOSS_MONTHS}か月の月平均売上（引継ぎ前 2026/4〜8 のあとに自分たちの月をつないで、毎月更新）。今月の売上で削って、月内に倒そう。倒すほど来月のボスは強くなる。`;
+    : `ボスの体力＝直近 ${BOSS_MONTHS}か月の月平均売上（引継ぎ前 2026/4〜8 のあとに、自分たちが<b>まる 1 か月運営した月</b>だけをつないで毎月更新。月の途中から始めた月は数えない）。今月の売上で削って、月内に倒そう。倒すほど来月のボスは強くなる。`;
 }
 
 /* 原価率チェック：店舗×機械の直近の記録。目安 25〜30%。低すぎ（取れない）は苦情のもと */
