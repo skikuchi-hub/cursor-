@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-12d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-12e";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -857,6 +857,9 @@ function maintenanceOnce_() {
   if (!pr.getProperty("anpanman72At")) {          // 2026-11-12：菊地さん「アンパンマンをアプリ外で 72 個発注した。在庫に足して（単価 545 変更なし）。全部そっちでやって」
     try { var m5 = addOffAppOrder_(); pr.setProperty("anpanman72At", nowIso() + " " + String(m5).slice(0, 200)); } catch (e) { Logger.log("addOffAppOrder: " + e); }
   }
+  if (!pr.getProperty("anpanman72FixAt")) {       // 2026-11-12：菊地さん「発注日は 11/10 だったから直しといて」
+    try { var m6 = fixOffAppOrders_(); pr.setProperty("anpanman72FixAt", nowIso() + " " + String(m6).slice(0, 200)); } catch (e) { Logger.log("fixOffAppOrders: " + e); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
@@ -866,9 +869,36 @@ function maintenanceOnce_() {
    addDoc と同じ道（_app_db ＋ 景品マスタに同名の新しい行（アプリID 付き）＋ 在庫作り直し）を通るので、既存の行（買った 35）はそのまま、合計 107 になる。
    同じメモの登録がすでにあれば何もしない（二重計上しない） */
 var OFF_APP_ORDERS = [
-  { name: "アンパンマン", vendor: "株式会社インフィニティ", use: "4人機用", cost: 545, qty: 72, buyDate: "2026-11-12", by: "菊地翔平",
-    memo: "アプリ外発注 2026-11-12：追加分 72 個 @545（菊地さんの依頼で自動登録。発注日が違えば仕入日を直す）" }
+  { name: "アンパンマン", vendor: "株式会社インフィニティ", use: "4人機用", cost: 545, qty: 72, buyDate: "2026-11-10", by: "菊地翔平",
+    memo: "アプリ外発注 2026-11-12：追加分 72 個 @545（菊地さんの依頼で自動登録。発注日が違えば仕入日を直す）",
+    fix: { buyDate: "2026-11-10", memo: "アプリ外発注（発注日 2026-11-10）：追加分 72 個 @545（菊地さんの依頼で 11/12 に自動登録）" } }   // 2026-11-12 菊地さん「発注日は 11/10」
 ];
+/* 登録済みの OFF_APP_ORDERS の仕入日・メモを直す（fix があるものだけ。_app_db の記録と景品マスタの同じ行（アプリID）の 仕入日・メモ）。再実行しても同じ結果 */
+function fixOffAppOrders_() {
+  var docs = readAllDocs(), done = [];
+  var ps = ss().getSheetByName("景品マスタ"), idc = ps ? idColumn(ps, false) : 0, pm = ps ? headerMap_(ps) : {};
+  OFF_APP_ORDERS.forEach(function (o) {
+    if (!o.fix) return;
+    (docs.prizes || []).forEach(function (d) {
+      if (clean(d.name) !== o.name || String(d.memo || "").indexOf("アプリ外発注") !== 0) return;
+      if (d.buyDate === o.fix.buyDate && d.memo === o.fix.memo) { done.push(d.id + "：直し済み"); return; }
+      var row = findDbRow("prizes", d.id); if (!row) return;
+      var rec = Object.assign({}, d, o.fix); rec.editedAt = nowIso(); rec.editedBy = o.by;
+      dbSheet().getRange(row, 4, 1, 3).setValues([[nowIso(), o.by, JSON.stringify(stripId(rec))]]);
+      if (ps && idc && ps.getLastRow() >= 2) {
+        var ids = ps.getRange(2, idc, ps.getLastRow() - 1, 1).getValues();
+        for (var i = 0; i < ids.length; i++) if (String(ids[i][0]) === String(d.id)) {
+          writePrizeExtras_(ps, i + 2, rec);
+          var mc = hcol_(pm, "メモ"); if (mc) ps.getRange(i + 2, mc).setValue(o.fix.memo);
+          break;
+        }
+      }
+      done.push(d.id + "：仕入日 " + (d.buyDate || "") + "→" + o.fix.buyDate);
+    });
+  });
+  dropCache("sheet_master"); markMetricsDirty_();
+  var msg = done.join("、") || "対象なし"; Logger.log(msg); return msg;
+}
 function addOffAppOrder_() {
   var docs = readAllDocs(), done = [];
   OFF_APP_ORDERS.forEach(function (o) {
