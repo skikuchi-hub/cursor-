@@ -674,7 +674,7 @@ td:first-child{font-family:var(--fs-body)}
 .slots{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .slot{
   position:relative;min-height:62px;border-radius:10px;border:1.5px solid var(--line);
-  background:var(--surface-2);padding:14px 4px 6px;display:flex;align-items:center;justify-content:center;
+  background:var(--surface-2);padding:14px 4px 6px;display:flex;flex-direction:column;align-items:center;justify-content:center;
 }
 .slot .no{position:absolute;top:3px;left:6px;font-size:9px;font-family:var(--fs-mono);color:var(--ink-3)}
 .slot .mk{position:absolute;top:2px;right:5px;font-size:11px}
@@ -683,6 +683,8 @@ td:first-child{font-family:var(--fs-body)}
   display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
 }
 .slot .st{font-size:9px;line-height:1.2;color:var(--ink-2);margin-top:3px;font-weight:700;text-align:center;white-space:nowrap}
+.slot .setb{display:inline-block;margin-top:4px;font-size:10px;font-weight:900;font-family:var(--fs-mono);padding:1px 7px;border-radius:999px;background:var(--navy);color:var(--gold);line-height:1.5}
+.slot .setb.one{background:var(--surface);color:var(--ink-3);border:1px solid var(--line-2)}
 .slot.empty,.slot.gone{background:var(--surface-sunk);border-style:dashed}
 .slot.empty .nm,.slot.gone .nm{color:var(--ink-3);font-weight:500}
 .slot.out{background:var(--rose-wash);border-color:var(--rose)}
@@ -2051,6 +2053,13 @@ function prevSlotNames(){
   const m = {}; (src.slots||[]).forEach(sl=>{ m[sl.i] = clean(sl.filled) || ((sl.out||sl.ret) ? "" : clean(sl.prize)); });
   return m;
 }
+/* 前回訪問のあと各枠に入っている個数（枠ごと）。入れた枠は fset、そのままの枠は pset。無ければ 0（＝景品ごとの個数を使う） */
+function prevSlotSets(){
+  const lv = lastVisit(); if (!lv || !(lv.slots||[]).length) return null;
+  const src = (lv.slots||[]).some(sl=>clean(sl.filled)||clean(sl.prize)) ? lv : (lastVisitWithSlots() || lv);
+  const m = {}; (src.slots||[]).forEach(sl=>{ m[sl.i] = clean(sl.filled) ? num(sl.fset) : ((sl.out||sl.ret) ? 0 : num(sl.pset)); });
+  return m;
+}
 function prevRoom(k){ const lv=lastVisit(); return lv ? (lv.rooms||[]).find(x=>x.k===k)||null : null; }
 function prevStock(k){ const pr=prevRoom(k); return pr ? Math.max(0, num(pr.before)+num(pr.add)-num(pr.take)) : null; }   // 前回訪問のあとに機械に入っていた数
 const roomNameOf = pr => (pr.addPrize && num(pr.add)>0) ? clean(pr.addPrize) : clean(pr.prize);
@@ -2077,9 +2086,9 @@ function mergeRoomNames(){
   if (R.type==="4p"){
     R.rooms.forEach(rm=>{ if (!clean(rm.prize)){ const pp=prevPrize(rm.k); if (pp){ rm.prize=pp; rm.prizeWas=pp; if (!clean(rm.addPrize) || rm.addPrize===rm.prize) rm.addPrize=pp; n++; } } });
   } else {
-    const pm = prevSlotNames();
+    const pm = prevSlotNames(), ps = prevSlotSets() || {};
     if (pm && R.slots.every(sl=>!clean(sl.prize))){
-      R.slots.forEach(sl=>{ const nm = pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !sl.ret && !clean(sl.filled)) sl.filled=nm; n++; } });
+      R.slots.forEach(sl=>{ const nm = pm[sl.i]||""; if (nm){ sl.prize=nm; sl.pset = ps[sl.i]||0; if (!sl.out && !sl.ret && !clean(sl.filled)){ sl.filled=nm; sl.fset = sl.pset; } n++; } });
     }
   }
   return n;
@@ -2143,9 +2152,9 @@ function resetRooms(keep){
       if (!rm.addPrize) rm.addPrize = rm.prize;
     });
   } else if (!R.slots.length){
-    const lv = lastVisit(), pm = prevSlotNames();
+    const lv = lastVisit(), pm = prevSlotNames(), ps = prevSlotSets() || {};
     if (lv && lv.slots && lv.slots.length){
-      R.slots = lv.slots.map(sl=>{ const nm = (pm && pm[sl.i]) || ""; return {i:sl.i, prize:nm, out:false, ret:false, filled:nm}; });
+      R.slots = lv.slots.map(sl=>{ const nm = (pm && pm[sl.i]) || ""; const st = nm ? (ps[sl.i]||0) : 0; return {i:sl.i, prize:nm, out:false, ret:false, filled:nm, pset:st, fset:st}; });
     } else {
       const n = defaultSlotCount();
       R.slots = Array.from({length:n},(_,ix)=>({i:ix+1, prize:"", out:false, ret:false, filled:""}));
@@ -2179,7 +2188,7 @@ function refillUsed(){
   const r = {};
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ if(x.addPrize && num(x.add)>0) r[x.addPrize]=(r[x.addPrize]||0)+num(x.add); if(x.prize && num(x.take)>0) r[x.prize]=(r[x.prize]||0)-num(x.take); });
-    if ((w.slots||[]).length){ const rf=boxRefill(w.slots); Object.keys(rf).forEach(k=>r[k]=(r[k]||0)+rf[k]*setOf(k)); const bk=boxReturn(w.slots); Object.keys(bk).forEach(k=>r[k]=(r[k]||0)-bk[k]*setOf(k)); }
+    if ((w.slots||[]).length){ const rf=boxRefillQty(w.slots); Object.keys(rf).forEach(k=>r[k]=(r[k]||0)+rf[k]); w.slots.forEach(x=>{ if (x.ret && x.prize) r[x.prize]=(r[x.prize]||0)-slotSet(x); }); }
   });
   return r;
 }
@@ -2200,6 +2209,29 @@ function setOf(name){
   const o = prizeOpt(name); if (num(o.boxSet)>1) return Math.round(num(o.boxSet));
   const sh = sheetPrize(name); if (sh && num(sh.boxSet)>1) return Math.round(num(sh.boxSet));
   return 1;
+}
+/* 枠ごとの「1 枠に入れた個数」（2026-11-12 菊地さん：同じ景品でも 2 個入れる日と 3 個入れる日がある）。
+   fset＝この訪問でその枠に入れたときの個数、pset＝着いたときに入っていた景品の個数（前回の fset を引き継ぐ）。
+   無い（古い記録）ときは景品ごとの setOf。出た・回収は pset（入れたときの個数）で、入れたぶんは fset で在庫・原価を数える */
+const slotSet = sl => (num(sl.pset)>0 ? Math.round(num(sl.pset)) : setOf(sl.prize));
+const fillSet = sl => (num(sl.fset)>0 ? Math.round(num(sl.fset)) : setOf(sl.filled));
+/* 入れた個数の既定：同じ店・機械でその景品を前回入れたときの個数 → 景品ごとの個数 */
+function defaultFillSet(name){
+  name = clean(name); if (!name) return 1;
+  const vs = Store.data.weekly.filter(r => r.store===F.store && r.machine===F.machine && (r.slots||[]).length)
+    .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+  for (const r of vs){ const sl=(r.slots||[]).find(x=>clean(x.filled)===name && num(x.fset)>0); if (sl) return Math.round(num(sl.fset)); }
+  return setOf(name);
+}
+/* 新しく入れた個数（景品ごと）＝帰るときの個数の合計 − 着いたとき残っていた個数の合計（枠ごとの個数で数える） */
+function boxRefillQty(slots){
+  const start={}, end={}, r={};
+  (slots||[]).forEach(x=>{
+    if (x.prize && !x.out && !x.ret) start[x.prize]=(start[x.prize]||0)+slotSet(x);
+    if (x.filled)                    end[x.filled]=(end[x.filled]||0)+fillSet(x);
+  });
+  Object.keys(end).forEach(n=>{ const d = end[n]-(start[n]||0); if (d>0) r[n]=d; });
+  return r;
 }
 /* 棚卸（在庫整理）の調整の合計＝「数えた数 − その時点の計算上の数」の積み上げ */
 function stockDocs(){ const out=[]; Store.rows("stock").forEach(d=>{ (d.items ? d.items : [d]).forEach(it=>out.push({name:clean(it.name), counted:num(it.counted), computed:num(it.computed), delta:num(it.delta), createdAt:d.createdAt||"", by:d.by||d.staff||"", memo:d.memo||it.memo||""})); }); return out; }
@@ -2288,11 +2320,14 @@ function slotLabel(sl){
   return `<span class="nm">${esc(name||"空き")}</span>${s.st?`<span class="st">${s.st}</span>`:""}`;
 }
 function slotMark(sl){ return slotState(sl).mk; }
+/* この訪問で入れた枠だけ「×n」（1 枠に入れた個数）。タップで 1→2→3→4→5→6→1 と変わる。何もしなければ既定のまま */
+function slotNewlyFilled(sl){ return !!sl.filled && (!!sl.out || !!sl.ret || !sl.prize || sl.filled!==sl.prize); }
+function slotSetBadge(sl){ if (!slotNewlyFilled(sl)) return ""; const n=fillSet(sl); return `<span class="setb ${n>1?"":"one"}" data-act="slot-set" data-i="${sl.i}" title="1 枠に入れた個数">×${n}</span>`; }
 function drawSlots(){
   const g = $("#slotGrid"); if(!g) return;
   g.innerHTML = R.slots.map(sl=>`
     <button class="${slotClass(sl)}" data-act="slot" data-i="${sl.i}" aria-label="枠${sl.i}">
-      <span class="no">${sl.i}</span><span class="mk">${slotMark(sl)}</span>${slotLabel(sl)}
+      <span class="no">${sl.i}</span><span class="mk">${slotMark(sl)}</span>${slotLabel(sl)}${slotSetBadge(sl)}
     </button>`).join("");
   $("#slotCount").textContent = R.slots.length;
   const mv = $("#moveBar");
@@ -2675,9 +2710,9 @@ function openSlotPicker(sl){                                        // カリー
     noneHint: "候補がありません。「景品」タブで登録するか、スプレッドシートの景品マスタに追加すると出ます。上の欄に名前を打てばそのまま使えます",
     cancelLabel: "閉じる",
     onPick: v => {
-      if (v==="__none"){ sl.filled=""; }
-      else if (v==="__reset"){ sl.out=false; sl.ret=false; sl.filled=sl.prize||""; toast(`枠${sl.i} を元にもどしました`); }
-      else { sl.filled = clean(v); toast(`枠${sl.i} に「${sl.filled}」`); }
+      if (v==="__none"){ sl.filled=""; sl.fset=0; }
+      else if (v==="__reset"){ sl.out=false; sl.ret=false; sl.filled=sl.prize||""; sl.fset=sl.pset||0; toast(`枠${sl.i} を元にもどしました`); }
+      else { sl.filled = clean(v); sl.fset = (sl.filled===clean(sl.prize) && !sl.out && !sl.ret) ? (sl.pset||0) : defaultFillSet(sl.filled); toast(`枠${sl.i} に「${sl.filled}」${sl.fset>1?`×${sl.fset}`:""}`); }
       drawSlots(); updateDerived(); saveDraft();
     } });
 }
@@ -2709,13 +2744,18 @@ function onRoomClick(e){
     applyNoSales(); saveDraft(); updateDerived();
     toast(R.noSales ? "売上なし（補充だけ）で保存できます" : "売上を入れてください"); return;
   }
+  if (a==="slot-set"){                                            // ×n をタップ：1 枠に入れた個数を 1→2→…→6→1 と変える
+    const sl = R.slots.find(x=>x.i===+b.dataset.i); if(!sl || !sl.filled) return;
+    const n = fillSet(sl); sl.fset = n>=6 ? 1 : n+1;
+    drawSlots(); updateDerived(); saveDraft(); toast(`枠${sl.i}「${sl.filled}」を 1 枠 ${sl.fset} こ`); return;
+  }
   if (a==="slot"){
     const sl = R.slots.find(x=>x.i===+b.dataset.i); if(!sl) return;
     if (R.moveFrom!==null){                                     // 「動かした」の 2 タップ目＝動かした先
       const from = R.slots.find(x=>x.i===R.moveFrom);
       if (!from || from.i===sl.i){ R.moveFrom=null; drawSlots(); return; }
-      const moving = from.filled, there = sl.filled;
-      from.filled = there; sl.filled = moving;                  // 先に景品があれば入れ替え、空きなら移動
+      const moving = from.filled, there = sl.filled, ms = from.fset, ts = sl.fset;
+      from.filled = there; sl.filled = moving; from.fset = ts||0; sl.fset = ms||0;   // 先に景品があれば入れ替え、空きなら移動（個数も一緒に動かす）
       R.moveFrom = null;
       toast(there ? `枠${from.i} と 枠${sl.i} の中身を入れ替えました` : `枠${from.i} の「${moving}」を 枠${sl.i} へ動かしました`);
       drawSlots(); return updateDerived();
@@ -2774,7 +2814,7 @@ function totals(){
   if (!R) return {sales:0,plays:0,pays:0,cost:0,known:false,refill:0};
   if (R.type==="box"){
     const sales = salesDelta("sBox").delta, out = R.slots.filter(sl=>sl.out);
-    const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0)*setOf(sl.prize), 0);   // 3 個セットは 3 個分の原価
+    const cost = out.reduce((a,sl)=>a + (prizeCostUnit(sl.prize)||0)*slotSet(sl), 0);   // 入れたときの個数ぶんの原価（3 個入れた枠は 3 個分）
     const rf = boxRefill(R.slots), bk = boxReturn(R.slots);
     const refill = Object.keys(rf).reduce((a,k)=>a+rf[k],0), ret = Object.keys(bk).reduce((a,k)=>a+bk[k],0);
     return {sales, plays:Math.round(sales/PLAY_PRICE), pays:out.length, cost, known:true, refill, ret};
@@ -3594,9 +3634,10 @@ function visitSummaryHtml(warns){
   const rowsHtml = R.type==="4p"
     ? R.rooms.map(rm=>{ const p=roomPays(rm); const parts=[]; if (p!==null) parts.push(`取られた <b>${p}</b>`); const sw = addPrizeOf(rm)&&addPrizeOf(rm)!==clean(rm.prize)&&num(rm.add)>0; if (sw) parts.push(`<span class="warn">入れ替え</span> ${esc(rm.prize||"")} 抜き <b>${num(rm.take)}</b> → <b>${esc(addPrizeOf(rm))}</b> を <b>+${num(rm.add)}</b>`); else { if (num(rm.add)>0) parts.push(`補充 <b>+${num(rm.add)}</b>`); if (num(rm.take)>0) parts.push(`回収 <b>${num(rm.take)}</b>`); } if (rm.fixBefore) parts.push(`数え直し <b>${num(rm.before)}</b> こ`); if (rm.counter!=="") parts.push(`カウンター ${esc(rm.counter)}`);
         return `<tr><td class="k">${rm.k}</td><td>${esc(rm.prize||"—")}</td><td>${parts.join("　")||"<span class=\"dim\">変化なし</span>"}</td></tr>`; }).join("")
-    : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots); const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("、");
+    : (()=>{ const out=R.slots.filter(sl=>sl.out); const rf=boxRefill(R.slots), rq=boxRefillQty(R.slots);
+        const f=Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}${(rq[n]||0)!==rf[n]?`<b>（計 ${rq[n]||0}こ）</b>`:""}`).join("、");
         const rt=R.slots.filter(sl=>sl.ret&&sl.prize); const mv=R.slots.filter(sl=>slotMoved(sl)||slotGone(sl)).length;
-        return `<tr><td class="k">取られた</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">入れた</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>${rt.length?`<tr><td class="k">回収</td><td colspan="2">${rt.map(sl=>`${sl.i}番 ${esc(sl.prize)}`).join("、")}（在庫に戻す）</td></tr>`:""}${mv?`<tr><td class="k">動かした</td><td colspan="2">${mv} 枠</td></tr>`:""}`; })();
+        return `<tr><td class="k">取られた</td><td colspan="2">${out.length?out.map(sl=>`${sl.i}番 ${esc(sl.prize||"")}${slotSet(sl)>1?`<b>（${slotSet(sl)}こ入り）</b>`:""}`).join("、"):"<span class=\"dim\">なし</span>"}</td></tr><tr><td class="k">入れた</td><td colspan="2">${f||"<span class=\"dim\">なし</span>"}</td></tr>${rt.length?`<tr><td class="k">回収</td><td colspan="2">${rt.map(sl=>`${sl.i}番 ${esc(sl.prize)}`).join("、")}（在庫に戻す）</td></tr>`:""}${mv?`<tr><td class="k">動かした</td><td colspan="2">${mv} 枠</td></tr>`:""}`; })();
   const sales = R.noSales ? `<tr><td class="k">売上</td><td colspan="2">見ていない（補充だけ）。累計は前回のまま</td></tr>` : ["sAB","sCD","sBox"].filter(f=> R.type==="4p" ? f!=="sBox" : f==="sBox").map(f=>{ const d=salesDelta(f); return `<tr><td class="k">${FN[f]}</td><td>累計 ${yen(d.cur)}円${d.has?`（前回 ${yen(d.prev)}円）`:""}</td><td>今回分 <b>${yen(d.delta)}円</b>${d.reset?' <span class="warn">リセット扱い</span>':""}</td></tr>`; }).join("");
   const nB=PHOTOS.filter(p=>p.kind==="before").length, nA=PHOTOS.filter(p=>p.kind==="after").length;
   const when = `${jpDate(F.week)} ${$("#timeIn").value || nowHM()}`;
@@ -3711,9 +3752,10 @@ async function saveLog(){
     before:roomBefore(rm), addPrize:addPrizeOf(rm), add:num(rm.add), take:num(rm.take),
     pays: roomPays(rm), ...(rm.fixBefore ? {recount:true} : {})
   })) : [];
-  const slots = R.type==="box" ? R.slots.map(sl=>({
-    i:sl.i, prize:clean(sl.prize), out:!!sl.out, ret:!!sl.ret, filled:clean(sl.filled)
-  })) : [];
+  const slots = R.type==="box" ? R.slots.map(sl=>{ const o={i:sl.i, prize:clean(sl.prize), out:!!sl.out, ret:!!sl.ret, filled:clean(sl.filled)};
+    if (o.prize && num(sl.pset)>0) o.pset = Math.round(num(sl.pset));                      // 着いたとき入っていた個数（前回入れたときの個数）
+    if (o.filled) o.fset = Math.round(num(sl.fset)>0 ? num(sl.fset) : fillSet(sl));       // 帰るときの個数（枠ごと）
+    return o; }) : [];
   const rec = {
     week:F.week, store:F.store, machine:F.machine, mtype:R.type,
     rooms, slots,
@@ -3796,11 +3838,12 @@ function startEdit(id){
         rm.before = x.before===undefined||x.before===null ? "" : x.before; rm.fixBefore = !!x.recount;
         rm.addPrize = x.addPrize||rm.prize; rm.add = num(x.add)>0 ? num(x.add) : ""; rm.take = num(x.take)>0 ? num(x.take) : ""; });
     } else if ((r.slots||[]).length){
-      R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, ret:!!sl.ret, filled:sl.filled||""}));
+      R.slots = r.slots.map(sl=>({i:sl.i, prize:sl.prize||"", out:!!sl.out, ret:!!sl.ret, filled:sl.filled||"", pset:num(sl.pset)||0, fset:num(sl.fset)||0}));
       // 前回の中身が読めないまま保存された記録（枠の景品名が全部空）は、それより前の訪問の中身を入れ直してから直す
       if (R.slots.every(sl=>!clean(sl.prize))){
         const pm = prevSlotNames(); let n=0;
-        if (pm) R.slots.forEach(sl=>{ const nm=pm[sl.i]||""; if (nm){ sl.prize=nm; if (!sl.out && !sl.ret && !clean(sl.filled)) sl.filled=nm; n++; } });
+        const ps2 = prevSlotSets() || {};
+        if (pm) R.slots.forEach(sl=>{ const nm=pm[sl.i]||""; if (nm){ sl.prize=nm; sl.pset = ps2[sl.i]||0; if (!sl.out && !sl.ret && !clean(sl.filled)){ sl.filled=nm; sl.fset = sl.pset; } n++; } });
         if (n>0) toast("前回入っていた景品名を読み込みました。変わった枠をタップして直してください");
       }
       R.moveFrom=null; R.pick=null;
@@ -4031,9 +4074,9 @@ function renderLogList(){
     let roomLine;
     if (r.mtype==="box" || (r.slots||[]).length){
       const out={}; (r.slots||[]).forEach(x=>{ if(x.out&&x.prize) out[x.prize]=(out[x.prize]||0)+1; });
-      const names = Object.keys(out), rf = boxRefill(r.slots), bk = boxReturn(r.slots);
+      const names = Object.keys(out), rf = boxRefill(r.slots), rq = boxRefillQty(r.slots), bk = boxReturn(r.slots);
       roomLine = [names.length ? "出た："+names.map(n=>`${esc(n)}×${out[n]}`).join("　") : "",
-                  Object.keys(rf).length ? "入れた："+Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}`).join("　") : "",
+                  Object.keys(rf).length ? "入れた："+Object.keys(rf).map(n=>`${esc(n)}×${rf[n]}${(rq[n]||0)!==rf[n]?`（${rq[n]||0}こ）`:""}`).join("　") : "",
                   Object.keys(bk).length ? "回収："+Object.keys(bk).map(n=>`${esc(n)}×${bk[n]}`).join("　") : ""].filter(Boolean).join("　／　");
     } else {
       roomLine = (r.rooms||[]).filter(x=>x.prize||x.counter!=="").map(x=>
@@ -4143,15 +4186,14 @@ function stockBreakdownRaw(name){
   const p = Store.rows("prizes").find(p=>p.name===name);
   const qty = p ? num(p.qty) : sheetRows().filter(r=>r.name===name).reduce((a,r)=>a+num(r.qty),0);
   const b = {qty, pays:0, add4p:0, boxUsed:0, ret:0, adj:stockAdj(name), pays4p:0, paysBox:0, ret4p:0, retBox:0};
-  const set = setOf(name);
   Store.data.weekly.forEach(w=>{
     (w.rooms||[]).forEach(x=>{ const pr=clean(x.prize), ap=clean(x.addPrize)||pr;
       if (pr===name && x.pays!==null && x.pays!==undefined && x.pays!=="") b.pays4p+=num(x.pays);
       if (ap===name && num(x.add)>0) b.add4p+=num(x.add);
       if (pr===name && num(x.take)>0) b.ret4p+=num(x.take); });
     if ((w.slots||[]).length){
-      w.slots.forEach(sl=>{ if (clean(sl.prize)===name){ if (sl.out) b.paysBox+=set; if (sl.ret) b.retBox+=set; } });
-      const rf=boxRefill(w.slots); if (rf[name]) b.boxUsed += rf[name]*set;
+      w.slots.forEach(sl=>{ if (clean(sl.prize)===name){ if (sl.out) b.paysBox+=slotSet(sl); if (sl.ret) b.retBox+=slotSet(sl); } });   // 入れたときの個数で引く
+      const rf=boxRefillQty(w.slots); if (rf[name]) b.boxUsed += rf[name];
     }
   });
   b.pays = b.pays4p + b.paysBox; b.ret = b.ret4p + b.retBox;

@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-09a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-12a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -867,7 +867,7 @@ function rebaseStockCounts_() {
     (docs.weekly || []).forEach(function (w) {
       if (String(w.createdAt || "") >= t) return;
       (w.rooms || []).forEach(function (x) { if (normKey_(x.prize) === key && x.pays !== null && x.pays !== undefined && x.pays !== "") n += num(x.pays); });
-      (w.slots || []).forEach(function (s) { if (s.out && normKey_(s.prize) === key) n += setOf(s.prize); });
+      (w.slots || []).forEach(function (s) { if (s.out && normKey_(s.prize) === key) n += (num(s.pset) > 0 ? num(s.pset) : setOf(s.prize)); });   // 枠ごとの個数（pset）があればそれ
     });
     return n;
   };
@@ -1615,14 +1615,16 @@ function stockTable_(docs) {
     });
     if ((w.slots || []).length) {
       var start = {}, end = {};
+      // 枠ごとの個数（2026-11-12）：pset＝着いたとき入っていた個数、fset＝入れた個数。無い古い記録は景品ごとの boxSet（アプリの slotSet／fillSet と同じ式）
       w.slots.forEach(function (s) {
         var p = clean(s.prize), f = clean(s.filled);
-        if (p && s.out) { row(p).pays += setOf(p); row(p).paysBox += setOf(p); }
-        if (p && s.ret) { row(p).ret += setOf(p); row(p).retBox += setOf(p); }
-        if (p && !s.out && !s.ret) start[p] = (start[p] || 0) + 1;
-        if (f) end[f] = (end[f] || 0) + 1;
+        var ps = num(s.pset) > 0 ? num(s.pset) : setOf(p), fs = num(s.fset) > 0 ? num(s.fset) : setOf(f);
+        if (p && s.out) { row(p).pays += ps; row(p).paysBox += ps; }
+        if (p && s.ret) { row(p).ret += ps; row(p).retBox += ps; }
+        if (p && !s.out && !s.ret) start[p] = (start[p] || 0) + ps;
+        if (f) end[f] = (end[f] || 0) + fs;
       });
-      Object.keys(end).forEach(function (n) { var d = end[n] - (start[n] || 0); if (d > 0) row(n).boxUsed += d * setOf(n); });
+      Object.keys(end).forEach(function (n) { var d = end[n] - (start[n] || 0); if (d > 0) row(n).boxUsed += d; });
     }
   });
   stockEntries_(docs).forEach(function (d) {
