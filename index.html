@@ -403,6 +403,7 @@ body.gbar-on #p-log{padding-bottom:72px}
 .cf-acts{display:grid;grid-template-columns:1fr 1.6fr;gap:8px;margin-top:14px}
 .cf-back{padding:14px;border-radius:12px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink);font-weight:800;font-size:14px}
 .cf-ok{padding:14px;border-radius:12px;border:0;background:var(--navy);color:var(--gold);font-weight:900;font-size:16px}
+.cf-choice{display:grid;gap:8px;margin-top:14px}.cf-choice .cf-ok,.cf-choice .cf-back{width:100%;text-align:left;line-height:1.35}.cf-choice .cf-ok{font-size:15px}
 .colbox{margin-top:12px;padding:10px 12px;border-radius:var(--r-m);background:var(--gold-wash);border:1.5px solid var(--gold);display:flex;align-items:center;gap:10px;font-size:12px;line-height:1.5;color:var(--ink-2)}
 .colbox b{font-size:16px;color:var(--ink);font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .colbox .btn{flex:none;margin-left:auto;white-space:nowrap;padding:9px 12px;font-size:13px;font-weight:800;border-radius:10px}
@@ -3679,6 +3680,18 @@ function confirmSheet(html, okLabel, opt){
     ov.addEventListener("click", e=>{ if (e.target===ov) done(false); });
   });
 }
+/* 選択肢つきの確認（同じ日の記録があるとき など）。buttons＝[{key,label,primary}]。選んだ key、やめたら null */
+function chooseSheet(html, buttons, opt){
+  opt = opt || {};
+  return new Promise(res=>{
+    const ov=document.createElement("div"); ov.className="cf-ov";
+    ov.innerHTML=`<div class="cf-card" role="dialog" aria-modal="true"><div class="cf-ttl">${esc(opt.title||"どうしますか？")}</div>${html}<div class="cf-choice">${buttons.map(b=>`<button type="button" class="${b.primary?"cf-ok":"cf-back"}" data-key="${esc(b.key)}">${b.label}</button>`).join("")}<button type="button" class="cf-back" data-key="">${esc(opt.cancel||"やめる")}</button></div></div>`;
+    document.body.appendChild(ov);
+    const done = v => { ov.remove(); res(v); };
+    ov.querySelectorAll("[data-key]").forEach(b=>{ b.onclick = ()=>done(b.dataset.key||null); });
+    ov.addEventListener("click", e=>{ if (e.target===ov) done(null); });
+  });
+}
 
 /* 保存前の入力チェック。block＝保存できない、ask＝確認してから保存 */
 const FN = {sAB:"A＋B", sCD:"C＋D", sBox:"BOX"};
@@ -3699,9 +3712,18 @@ function validateVisit(){
   ["sAB","sCD","sBox"].forEach(f=>{ const d=salesDelta(f); if (d.reset) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回 ${yen(d.prev)}円 より少ない。機械がリセットされていなければ、累計ではなく今回分を入れていませんか？`);
     else if (d.has && !d.blank && d.cur>0 && d.cur===d.prev && !(R && R.noSales)) ask.push(`${FN[f]} の累計 ${yen(d.cur)}円 が前回と同じです。売上が動いていなければ 今回分 0円 で OK`);
     else if (d.blank && !(R && R.noSales) && (R && (R.type==="box" ? f==="sBox" : f!=="sBox"))) ask.push(`${FN[f]} の累計が空です。前回の ${yen(d.prev)}円 のまま（今回分 0円）として記録します。機械の累計を見たなら入れてください`); });
-  // 同じ日に同じ機械の記録
+  // 同じ日に同じ機械の記録（新規保存のときは saveLog で「前の記録を直す／2 回目／やめる」を先に選ぶ）
   const dup = (Store.data.weekly||[]).find(r=>r.store===F.store && r.machine===F.machine && r.week===F.week && !(EDIT && r.id===EDIT.id));
   if (dup) ask.push(`${jpDate(F.week)} の ${F.machine} はすでに記録があります（${staffOf(dup)}）。同じ日の 2 回目の訪問ですか？`);
+  // ✎ 編集で機械や訪問日を変えると、元の記録が無くなる（2026-11-13 依頼⑩：11/12 4人機① の記録を 11/13 に ✎ で開き、機械を② に変えて 11/13 の内容で保存 → ①の記録が消え、②は二重）
+  if (EDIT){
+    const o=(Store.data.weekly||[]).find(r=>r.id===EDIT.id);
+    if (o && o.machine && o.machine!==F.machine){
+      const msg = `修正中の記録は ${jpDate(o.week)} の ${o.machine} の記録です。機械を ${F.machine} に変えて保存すると、${o.machine} の ${jpDate(o.week)} の記録は無くなります。きょうの巡回を登録するなら「やめる」で修正をやめて、新しく報告してください`;
+      if (o.week!==today && !(ME && ME.role==="admin")) block.push(msg + "（過去の記録の機械を変えられるのは管理者だけです）"); else ask.push(msg);
+    }
+    if (o && o.week && o.week!==F.week) ask.push(`修正中の記録の訪問日は ${jpDate(o.week)} です。${jpDate(F.week)} に変えて保存すると ${jpDate(o.week)} の記録は無くなります。別の日の巡回なら「やめる」で修正をやめて、新しく報告してください`);
+  }
   const lv0 = lastVisit();
   if (R && R.type==="4p"){
     // 前回の景品名があるのに今回が全部空＝前回の中身が読み込めていない（キャッシュ切れ）。このまま保存すると以後の訪問も空になる
@@ -3754,6 +3776,27 @@ async function saveLog(){
   const t = totals();
   if (!F.store || !F.machine || $("#saveLog").disabled) return;   // 押せる条件は updateReadouts と同じ（前回と同じ累計＝今回分 0 円も可）
   const v = validateVisit(); if (v.block.length){ alert("保存できません：\n・" + v.block.join("\n・")); return; }
+  // 同じ日・同じ機械の記録がもうある → 置き換える（✎ と同じ）か、2 回目の訪問として保存するか、やめるかを先に選ぶ
+  // （2026-11-13 依頼⑩：11/12 東平尾 4人機② が 09:45 と 10:00 に 2 回保存され、2 回目が「累計が前回より小さい＝リセット」扱いになって売上が 35,600 円になった）
+  if (!EDIT){
+    const dups = (Store.data.weekly||[]).filter(r=>r.store===F.store && r.machine===F.machine && r.week===F.week).sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    if (dups.length){
+      const d = dups[0], mine = canDelete(d) && !d.source;
+      const html = `<div class="cf-h">${esc(F.store)}　<span>${esc(F.machine)}</span></div><div class="cf-sub">${jpDate(F.week)} の ${esc(F.machine)} はもう記録があります</div>
+        <table class="cf-t"><tr><td class="k">前の記録</td><td>${jpDate(d.week)} ${esc(d.time||"")}　${esc(staffOf(d))}${d.noSales?"　補充だけ（売上なし）":`　${yen(num(d.sales))}円`}　払出${yen(num(d.pays))}こ</td></tr></table>
+        <div class="cf-warn"><div>⚠ 同じ日に同じ機械を 2 回保存すると、累計の差分が二重に数えられます。入力の直しなら「前の記録を直す」を選んでください（いま入れた内容で前の記録を置き換えます。写真は前の記録のものも残ります）</div>${mine?"":`<div>前の記録は ${esc(staffOf(d))} さんのものなので、ここからは直せません（直せるのは本人か管理者）</div>`}</div>`;
+      const btns = [];
+      if (mine) btns.push({key:"replace", label:`✎ 前の記録を直す（${esc(d.time||jpDate(d.week))} の記録を いまの内容で置き換える）`, primary:true});
+      btns.push({key:"second", label:"別の訪問として保存する（同じ日の 2 回目の巡回）"});
+      const pick = await chooseSheet(html, btns, {title:"同じ日の記録があります", cancel:"やめる（保存しない）"});
+      if (!pick) return;
+      if (pick==="replace"){
+        EDIT = {id:d.id, createdAt:d.createdAt||""};     // ✎ 編集と同じ状態にして、もう一度保存の流れへ（前回＝置き換える記録より前の訪問になるので、差分も部屋の残りも合う）
+        renderEditBar(); updateDerived();
+        return saveLog();
+      }
+    }
+  }
   const warns = v.ask.slice();
   if (t.sales > SALES_SANITY){
     const big = ["sAB","sCD","sBox"].map(f=>({f, d:salesDelta(f)})).filter(x=>x.d.delta>SALES_SANITY);
@@ -3830,7 +3873,7 @@ function renderEditBar(){
   bar.hidden = !EDIT;
   const btn=$("#saveLog"); if (btn) btn.textContent = EDIT ? "修正を保存" : "巡回を報告";
   const c2=$("#editCancel2"); if (c2) c2.hidden = !EDIT;
-  if (EDIT){ const r=(Store.data.weekly||[]).find(x=>x.id===EDIT.id)||{}; $("#editBarTxt").textContent = `✎ ${jpDate(r.week)} ${r.store||""}／${r.machine||""} の記録を修正中`; }
+  if (EDIT){ const r=(Store.data.weekly||[]).find(x=>x.id===EDIT.id)||{}; $("#editBarTxt").textContent = `✎ ${jpDate(r.week)}${r.time?" "+r.time:""} ${r.store||""}／${r.machine||""} の記録を修正中` + (r.week && r.week!==todayStr() ? "（きょうの巡回を登録するなら「やめる」）" : ""); }
   if (typeof renderIssues==="function") renderIssues();   // 修正中は要確認の帯を隠す
 }
 function startEdit(id){

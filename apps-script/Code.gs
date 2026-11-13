@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-13a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-13b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -215,6 +215,13 @@ function applySalesDelta(rec, allWeekly) {
     return o.id !== rec.id && o.store === rec.store && o.machine === rec.machine && String(o.createdAt || "") < String(rec.createdAt || "");
   }).sort(function (a, b) { return String(b.createdAt || "").localeCompare(String(a.createdAt || "")); })[0];
   var pc = prev ? cumOf(prev) : { sAB: 0, sCD: 0, sBox: 0 };
+  // 「売上は見ていない（補充だけ）」の記録：今回分 0、累計は前回のまま（アプリの salesDelta と同じ）。
+  // 2026-11-13：以前はここで通常の差分計算をしていたので、修正・削除で前回が変わって再計算されると、持ち越した累計から売上が生まれてしまった（依頼⑩）
+  if (rec.noSales) {
+    rec.sAB = 0; rec.sCD = 0; rec.sBox = 0; rec.sales = 0; rec.plays = 0;
+    rec.cum = { sAB: pc.sAB, sCD: pc.sCD, sBox: pc.sBox }; rec.prevId = prev ? prev.id : "";
+    return rec;
+  }
   // 累計が空（0）のときは「見ていない」扱い：今回分 0、累計は前回のまま（マイナスの今回分を作らない）。累計が前回より小さいときは機械のリセット扱い
   function d(f) { var c = cum[f], p = pc[f]; if (!prev) return c; if (!(c > 0)) { cum[f] = p; return 0; } return c < p ? c : c - p; }
   rec.sAB = d("sAB"); rec.sCD = d("sCD"); rec.sBox = d("sBox");
@@ -232,8 +239,9 @@ function rewriteAutoMoney(rec) {
   var money = rec.mtype === "box"
     ? "売上" + yen(rec.sBox) + "円" + (rec.prevId ? "（累計" + yen(cumOf(rec).sBox) + "円）" : "")
     : "AB" + yen(rec.sAB) + "/CD" + yen(rec.sCD) + "円" + (rec.prevId ? "（累計 AB" + yen(cumOf(rec).sAB) + "/CD" + yen(cumOf(rec).sCD) + "）" : "");
-  var parts = auto.split(" ｜ ");
-  if (parts.length && /^(売上[\d,]+円|AB[\d,]+\/CD[\d,]+円)/.test(parts[0])) parts[0] = money; else parts.unshift(money);
+  var parts = auto.split(" ｜ ").filter(Boolean), re = /^(売上[\d,]+円|AB[\d,]+\/CD[\d,]+円)/, at = -1;
+  for (var i = 0; i < parts.length; i++) if (re.test(parts[i])) { at = i; break; }   // 「補充だけ（売上なし）」が先頭の記録でも、金額の部分だけ置き換える（2026-11-13）
+  if (at >= 0) parts[at] = money; else parts.unshift(money);
   rec.auto = parts.join(" ｜ ");
   return rec;
 }
@@ -869,6 +877,9 @@ function maintenanceOnce_() {
   if (pr.getProperty("taxBasisAt") && !pr.getProperty("weeklyCostTaxAt")) {   // 2026-11-13：保存済みの巡回記録の景品原価を税込で計算し直す（上の換算のあと）
     try { var m8 = recomputeWeeklyCostsTax_(); pr.setProperty("weeklyCostTaxAt", nowIso() + " " + String(m8).slice(0, 300)); } catch (e) { Logger.log("recomputeWeeklyCostsTax: " + e); }
   }
+  if (!pr.getProperty("higashi1112FixAt")) {       // 2026-11-13（依頼⑩）：東平尾 11/12 09:45 の記録（4人機①）が 11/13 に 4人機② の内容で上書きされていたのを直す
+    try { var m9 = fixHigashihirao1112_(); pr.setProperty("higashi1112FixAt", nowIso() + " " + String(m9).slice(0, 400)); } catch (e) { Logger.log("fixHigashihirao1112: " + e); pr.setProperty("higashi1112FixErr", nowIso() + " " + String(e).slice(0, 300)); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
@@ -919,6 +930,161 @@ function addOffAppOrder_() {
     done.push(o.name + " " + o.qty + " 個を登録（" + r.rec.id + "）");
   });
   var msg = done.join("、") || "対象なし"; Logger.log(msg); return msg;
+}
+/* ===================== 2026-11-13（依頼⑩）：博多東平尾1丁目店 11/12〜13 の記録の取り違えを直す =====================
+   起きたこと（_app_db・写真タブ・石原さんの記録の prevId から確定）：
+   - 11/12 09:45 柳瀬さんが 4人機① を記録（累計 AB14,200／CD22,800。写真 3 枚：①の前後＋②の 1 枚）。10:00 に 4人機② を記録（累計 21,000／14,600）。
+   - 11/12 17:29 石原さんの 4人機①（補充だけ）は 09:45 の記録を前回にした（prevId＝mwctttb56fc36、累計 14,200／22,800 を持ち越し）。
+   - 11/13 12:17 柳瀬さんが 09:45 の記録を ✎ で開き、機械を 4人機② に変えて 11/13 の②の内容（累計 21,800／15,600、A まっくろモンスター→FUGGLER、写真 2 枚）で保存。
+     → サーバーは「11/12 09:45 の②の記録」として差分を計算（4,200 円）、10:00 の記録は前回が 21,800 になって累計が小さいのでリセット扱い（35,600 円）。
+       4人機① の 11/12 朝の記録は消え、石原さんの記録は②の記録を前回に持ったまま残った。
+   直し方（一度だけ。ScriptProperties higashi1112FixAt）：
+   1. mwctttb56fc36 を 11/12 09:45 の 4人機① の記録に戻す。部屋は 11/11 の記録（到着時の景品・残り）と 石原さんの記録の「補充前数」（＝この記録のあとの残り）から復元。
+      カウンターは 石原さんの行の「カウンター差」から逆算（C は 3941 で入力ミスのため空欄）。累計 A＋B 14,200 はそのまま、C＋D は入力 22,800 が前日 23,000 より小さいので前回のまま（今回分 0）。
+      写真は①の 2 枚を残し、②の 1 枚（09:46:19）は 10:00 の②の記録の「補充前」へ。
+   2. 11/13 12:17 の②の内容は新しい記録（11/13 12:17、柳瀬さん、写真 2 枚）に移す。部屋の景品名・残りは 10:00 の記録の帰るときの状態に合わせる
+      （B しろたん／D ミニミニ に入れ替わっているため）。A は回収 46 が記録上の残り 41 を超えるので「数え直し 46」として扱う（補充 FUGGLER 18 → 残り 18）。
+      柳瀬さんがすでに 11/13 の②を登録し直していれば、新しい記録は作らず、写真 2 枚だけその記録に付ける。
+   3. ①（石原さん 11/12・柳瀬さん 11/13）と ②（10:00・11/13）の差分と各タブの行を作り直す。写真タブの行のアプリID・機械・訪問日を付け替える。在庫も作り直す */
+var HIGASHI_FIX = {
+  store: "博多東平尾1丁目店", staff: "柳瀬百香",
+  x: "mwctttb56fc36",          // 11/12 09:45：もともと 4人機①。11/13 に②の内容で上書きされた
+  r1000: "mwcucjl529xqt",      // 11/12 10:00 4人機②（正）
+  prev1: "mwbecba6u9fr2",      // 11/11 09:44 4人機①（x の前回）
+  ishihara: "mwdajhe561h3l",   // 11/12 17:29 4人機① 石原さん（補充だけ）。この記録の「補充前数」＝x のあとの残り
+  photoTo1000: "16pUrJ2Q4nXqoyijuMFQhwwBTUVf6sIDC",   // 09:46:19 の写真は②（写真チェック「この写真は 4人機①ではなく 4人機②」）
+  counters1: { A: 2329, B: 2564, C: "", D: 2840 },  // 石原さんの部屋別ログの行（カウンター 2332/2564/2941/2841、差 3/0/−1000/1）から逆算。C は 3941 の入力ミス
+  cumAB1: 14200,                                      // 入力どおり。C＋D の 22,800 は前日 23,000 より小さいので前回のまま
+  z: { week: "2026-11-13", time: "12:17", createdAt: "2026-11-13T03:17:47.000Z" }   // 写真の登録（12:18:32）の直前
+};
+function roomAfter_(x) {   // 部屋の帰るときの状態 {prize, n}（アプリの roomAfter と同じ：残り ＋ 補充 − 回収）
+  var prize = (x.addPrize && num(x.add) > 0) ? x.addPrize : (x.prize || "");
+  var b = (x.before === "" || x.before === undefined || x.before === null) ? null : num(x.before);
+  return { prize: prize, n: b === null ? null : Math.max(0, b + num(x.add) - num(x.take)) };
+}
+function autoRooms4p_(rec) {   // アプリの autoMemo（4人機）と同じ並びの部屋・カウンターの部分（金額は rewriteAutoMoney が付ける）
+  var parts = (rec.rooms || []).map(function (rm) {
+    var ap = rm.addPrize || rm.prize, b = (rm.before === "" || rm.before === undefined || rm.before === null) ? "" : num(rm.before);
+    var add = num(rm.add) > 0 ? (ap && ap !== rm.prize ? "＋" + ap + num(rm.add) : "＋" + num(rm.add)) : "";
+    var take = num(rm.take) > 0 ? "−回収" + num(rm.take) : "";
+    return rm.k + " " + (rm.prize || "?") + b + add + take;
+  });
+  var cnt = (rec.rooms || []).filter(function (rm) { return rm.counter !== "" && rm.counter !== undefined && rm.counter !== null; }).map(function (rm) { return rm.k + num(rm.counter); }).join(" ");
+  return [parts.join(" / "), cnt ? "カウンター " + cnt : ""].filter(Boolean).join(" ｜ ");
+}
+function fixHigashihirao1112_() {
+  var F = HIGASHI_FIX, docs = readAllDocs(), sh = dbSheet(), now = nowIso(), who = "自動修正";
+  var byId = {}; docs.weekly.forEach(function (r) { byId[r.id] = r; });
+  var X = byId[F.x], R10 = byId[F.r1000], P1 = byId[F.prev1], I = byId[F.ishihara];
+  if (!X) return "対象の記録 " + F.x + " が無いので何もしない";
+  if (X.machine === "4人機①") return "直し済み（" + F.x + " は 4人機①）";
+  if (X.machine !== "4人機②" || X.week !== "2026-11-12" || !R10 || !P1 || !I) return "想定と違う状態（" + X.machine + " " + X.week + "）なので何もしない";
+  var novTotal = function () { return docs.weekly.filter(function (r) { return r.store === F.store && String(r.week || "").indexOf("2026-11") === 0; }).reduce(function (a, r) { return a + num(r.sales); }, 0); };
+  var before = { s1112_2: num(R10.sales) + num(X.sales), nov: novTotal() };
+  var units = unitCostMap();
+  var costOf = function (rooms) { var t = 0; rooms.forEach(function (rm) { if (rm.pays === null || rm.pays === undefined || rm.pays === "") return; var u = units[rm.prize]; if (u) t += num(rm.pays) * u; }); return Math.round(t); };
+  var mainOf = function (rooms) { var best = "", bp = -1; rooms.forEach(function (rm) { var p = num(rm.pays); if (rm.prize && p > bp) { bp = p; best = rm.prize; } }); return best || ((rooms.filter(function (rm) { return rm.prize; })[0] || {}).prize || ""); };
+  var roomOf = function (rec, k) { return (rec.rooms || []).filter(function (y) { return y.k === k; })[0] || {}; };
+
+  // 1) 写真の振り分け：①の 2 枚は残す／②の 1 枚は 10:00 の記録へ／11/13 の 2 枚は 11/13 の②の記録へ
+  var keep = [], to10 = [], to13 = [];
+  (X.photos || []).forEach(function (p) {
+    if (p.fid === F.photoTo1000) to10.push(Object.assign({}, p, { kind: "before" }));
+    else if (String(p.at || "") >= "2026-11-13") to13.push(p);
+    else keep.push(p);
+  });
+
+  // 2) 11/13 12:17 の②の内容 → 新しい記録 Z（柳瀬さんが登録し直していれば Y に写真だけ）
+  var Y = docs.weekly.filter(function (r) { return r.id !== X.id && r.store === F.store && r.machine === "4人機②" && r.week === F.z.week; })
+    .sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); })[0];
+  var Z = null, zNote = "";
+  if (!Y) {
+    var rooms13 = ["A", "B", "C", "D"].map(function (k) {
+      var a = roomAfter_(roomOf(R10, k)), xr = roomOf(X, k);              // 到着時＝10:00 の記録の帰るときの状態
+      var pays = (xr.pays === null || xr.pays === undefined) ? null : num(xr.pays);
+      var swapped = num(xr.add) > 0 && xr.addPrize && xr.addPrize !== xr.prize;
+      var rm = { k: k, counter: (xr.counter === "" || xr.counter === undefined || xr.counter === null) ? "" : num(xr.counter), prize: a.prize,
+                 before: "", addPrize: swapped ? xr.addPrize : a.prize, add: num(xr.add), take: num(xr.take), pays: pays };
+      if (a.n === null) rm.before = "";
+      else if (num(xr.take) > a.n) { rm.before = num(xr.take); rm.recount = true; }   // 回収が記録上の残りを超えている＝数え直して全部抜いた（A：41 → 46）
+      else rm.before = Math.max(0, a.n - (pays || 0));
+      return rm;
+    });
+    Z = { week: F.z.week, time: F.z.time, store: F.store, machine: "4人機②", mtype: "4p", rooms: rooms13, slots: [],
+          cum: { sAB: cumOf(X).sAB, sCD: cumOf(X).sCD, sBox: 0 }, noSales: false, counter: "", photoMiss: [],
+          pays: rooms13.reduce(function (a, rm) { return a + num(rm.pays); }, 0), cost: costOf(rooms13), prize: mainOf(rooms13),
+          staff: F.staff, by: F.staff, photos: to13, createdAt: F.z.createdAt, sentAt: now,
+          memo: "11/13 12:17 に 11/12 4人機① の記録を ✎ で開いて保存された 4人機② の内容を、この日の記録として移した（自動修正 11/13）。部屋の景品名・残りは 11/12 10:00 の記録に合わせ、A は回収 46 に合わせて数え直し 46 とした",
+          movedFrom: X.id, editedAt: now, editedBy: who };
+    Z.auto = autoRooms4p_(Z);
+    zNote = "11/13 の②は新しい記録 ";
+  } else {
+    var hs = {}; (Y.photos || []).forEach(function (p) { hs[p.h] = 1; });
+    var added = to13.filter(function (p) { return !hs[p.h]; });
+    if (added.length) { Y.photos = (Y.photos || []).concat(added); var ry = findDbRow("weekly", Y.id); if (ry) sh.getRange(ry, 4, 1, 3).setValues([[now, who, JSON.stringify(stripId(Y))]]); }
+    zNote = "11/13 の②は柳瀬さんが登録し直した記録 " + Y.id + " があるので写真 " + added.length + " 枚だけ付けた。";
+  }
+
+  // 3) X を 11/12 09:45 の 4人機① に戻す
+  var rooms12 = ["A", "B", "C", "D"].map(function (k) {
+    var a = roomAfter_(roomOf(P1, k)), ir = roomOf(I, k);
+    var left = (ir.before === "" || ir.before === undefined || ir.before === null) ? null : num(ir.before);   // 石原さん到着時の残り（石原さんの取られた数は 0）
+    var pays = (a.n === null || left === null) ? 0 : Math.max(0, a.n - left);
+    return { k: k, counter: F.counters1[k], prize: a.prize, before: a.n === null ? "" : Math.max(0, a.n - pays), addPrize: a.prize, add: 0, take: 0, pays: pays };
+  });
+  var Xn = { week: "2026-11-12", time: "09:45", store: F.store, machine: "4人機①", mtype: "4p", rooms: rooms12, slots: [],
+             cum: { sAB: F.cumAB1, sCD: cumOf(P1).sCD, sBox: 0 }, noSales: false, counter: "", photoMiss: [],
+             pays: rooms12.reduce(function (a, rm) { return a + num(rm.pays); }, 0), cost: costOf(rooms12), prize: mainOf(rooms12),
+             staff: X.staff || F.staff, by: X.by || F.staff, photos: keep, createdAt: X.createdAt, sentAt: X.sentAt || now,
+             memo: "11/13 12:17 に 4人機② の 11/13 の内容で上書き保存されていたため、11/11 の記録と 石原さん 17:29 の記録から 4人機① の記録として復元（自動修正 11/13）。C＋D の累計は入力 22,800 が前日 23,000 より小さいので前回のまま（今回分 0）、C のカウンター 3941 は入力ミスとみて空欄",
+             editedAt: now, editedBy: who, restoredAt: now, id: X.id };
+  Xn.auto = autoRooms4p_(Xn);
+  docs.weekly = docs.weekly.map(function (r) { return r.id === X.id ? Xn : r; });
+  applySalesDelta(Xn, docs.weekly); rewriteAutoMoney(Xn);
+  var rx = findDbRow("weekly", X.id); if (!rx) throw new Error("_app_db に " + X.id + " の行が無い");
+  sh.getRange(rx, 4, 1, 3).setValues([[now, who, JSON.stringify(stripId(Xn))]]);
+
+  if (Z) {
+    Z.id = newId();
+    applySalesDelta(Z, docs.weekly); rewriteAutoMoney(Z);                                      // 前回＝10:00 の記録（X は①になったので外れる）
+    sh.appendRow(["weekly", Z.id, Z.createdAt, now, who, JSON.stringify(stripId(Z))]);
+    docs.weekly.push(Z);
+    zNote += Z.id + "（売上 " + yen(Z.sales) + " 円）。";
+  }
+  if (to10.length) {
+    var hs10 = {}; (R10.photos || []).forEach(function (p) { hs10[p.h] = 1; });
+    R10.photos = (R10.photos || []).concat(to10.filter(function (p) { return !hs10[p.h]; }));
+    var r10 = findDbRow("weekly", R10.id); if (r10) sh.getRange(r10, 4, 1, 3).setValues([[now, who, JSON.stringify(stripId(R10))]]);
+  }
+
+  // 4) 各タブの行を作り直す（X 自身 ＋ ①②それぞれの、あとの訪問）
+  rematerialize(Xn, docs);
+  var l1 = recomputeLater_(F.store, "4人機①", Xn.createdAt, Xn.id, docs);
+  var l2 = recomputeLater_(F.store, "4人機②", Xn.createdAt, Xn.id, docs);
+
+  // 5) 写真タブ：ファイルID で行を探し、アプリID・訪問日・機械・種別を付け替える
+  var ps = ss().getSheetByName(PHOTO_SHEET), moved = 0;
+  if (ps && ps.getLastRow() > 1) {
+    var idc = idColumn(ps, false), v = ps.getRange(2, 1, ps.getLastRow() - 1, Math.max(idc, 8)).getValues();
+    var dest = {};
+    to10.forEach(function (p) { dest[p.fid] = { id: R10.id, week: R10.week, machine: "4人機②", kind: "補充前" }; });
+    to13.forEach(function (p) { dest[p.fid] = { id: Z ? Z.id : Y.id, week: F.z.week, machine: "4人機②", kind: PHOTO_KINDS[p.kind || "before"] }; });
+    keep.forEach(function (p) { dest[p.fid] = { id: Xn.id, week: Xn.week, machine: "4人機①", kind: PHOTO_KINDS[p.kind || "before"] }; });
+    v.forEach(function (row, i) {
+      var d = dest[String(row[6])]; if (!d) return;
+      ps.getRange(i + 2, 1).setValue(dateOf(d.week)).setNumberFormat("yyyy/mm/dd");
+      ps.getRange(i + 2, 3).setValue(d.machine); ps.getRange(i + 2, 5).setValue(d.kind);
+      if (idc) ps.getRange(i + 2, idc).setValue(d.id);
+      moved++;
+    });
+  }
+  try { rebuildStock(); } catch (e) { Logger.log("rebuildStock: " + e); }
+  markMetricsDirty_();
+  var after = { s1112_2: num(R10.sales), nov: novTotal() };
+  var msg = "東平尾 11/12 4人機②：" + yen(before.s1112_2) + " → " + yen(after.s1112_2) + " 円。11 月の東平尾 売上合計：" + yen(before.nov) + " → " + yen(after.nov) + " 円。"
+    + F.x + " を 11/12 4人機①（売上 " + yen(Xn.sales) + " 円）に復元。" + zNote
+    + " ①の後続 " + l1.length + " 件（" + l1.map(function (r) { return (r.week || "") + " " + yen(r.sales); }).join("、") + "）、②の後続 " + l2.length + " 件（" + l2.map(function (r) { return (r.week || "") + " " + yen(r.sales); }).join("、") + "）を再計算。写真タブ " + moved + " 行を付け替え";
+  Logger.log(msg); return msg;
 }
 /* 保存済みの棚卸（stock）の computed／delta を、「買った数量 − その時点までの払出 ± それまでの調整」（倉庫＋機械の中）で取り直す。
    10/14〜15 の棚卸は倉庫だけの式（補充・BOX を引いた数）と比べて差を出していたが、実際には機械の中の分も数えていた（2026-10-15 菊地さん）。
