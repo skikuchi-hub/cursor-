@@ -1986,6 +1986,7 @@ const Store = {
   },
   async update(c,id,obj){                    // 記録の修正（本人・管理者）。サーバーが差分・シートの行を作り直す
     if (API_URL){
+      if (updateQueued(c,id,obj)){ render(); pump(true); return true; }   // まだ送っていない記録は端末の送信待ちを書き換えるだけ（送るときにその内容で届く）
       if (!this.online()){ toast("いまは保存できません（オフライン）"); return false; }
       try {
         const r = await api("update", {col:c, id, obj});
@@ -3522,6 +3523,13 @@ function queueRecord(col, obj){
   renderSendBar();
   return view;
 }
+/* 送信待ちの記録を端末で書き換える（まだサーバーに無いので通信はいらない。✎ 編集・同じ日の「前の記録を直す」から） */
+function updateQueued(col, id, obj){
+  const o = OUTBOX.find(x=>x.col===col && qid(x.cid)===id); if (!o) return false;
+  o.rec = Object.assign({}, o.rec, obj, {cid:o.cid, createdAt:o.rec.createdAt}); saveOutbox();
+  Store.data[col] = (Store.data[col]||[]).map(x=> x.id===id ? queuedView(o) : x);
+  return true;
+}
 /* 送信待ちの記録を端末から消す（まだサーバーに無いので通信はいらない）。その記録に付く写真も消す */
 function dropQueued(col, id){
   const o = OUTBOX.find(x=>x.col===col && qid(x.cid)===id); if (!o) return false;
@@ -3983,7 +3991,7 @@ async function saveLog(){
   if (EDIT){
     const id = EDIT.id;
     if (!(await Store.update("weekly", id, rec))){ btn.disabled=false; return; }
-    EDIT=null; toast(`修正を保存しました（スプレッドシートも書き直しました）`);
+    EDIT=null; toast(OUTBOX.some(o=>qid(o.cid)===id) ? `修正を保存しました（この記録はまだ送信待ち。届くときはこの内容で）` : `修正を保存しました（スプレッドシートも書き直しました）`);
     $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
     F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
     renderEditBar(); renderMachineRow(); buildRooms(true); render();
@@ -4038,7 +4046,6 @@ function renderEditBar(){
 }
 function startEdit(id){
   const r=(Store.data.weekly||[]).find(x=>x.id===id); if(!r || !canDelete(r)) return;
-  if (r._queued){ toast("この記録はまだ送信待ちです。送信が終わってから直せます（上の「いま送る」か、電波のある所で）", 5000); return; }
   EDIT = {id:r.id, createdAt:r.createdAt||""};
   F.store=r.store||""; F.machine=r.machine||""; builtFor="";
   setWeek(r.week);                                   // 店舗・機械・日付でフォームを作り直す
