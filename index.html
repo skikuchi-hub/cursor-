@@ -4424,10 +4424,10 @@ function buildDemo(){
 const demoOn = () => demoWanted && Store.data.weekly.length===0 && Store.data.expenses.length===0;
 /* うりあげのきろく：この欄だけは、誰が見ても全員の記録を集計し「全員／スタッフごと」を選べる
    （2026-11-13 菊地さん「石原さんの表示をおれと同じように」。成果一覧・報酬など他の欄は従来どおり本人分だけ）。
-   粗利（人件費・経費込み）だけは dashProfitOn で別管理 */
+   粗利（人件費・経費込み）も同じく全員に出す（dashProfitOn。2026-11-13 菊地さん「粗利まで完全に同じ表示に」。false に戻すと管理者だけ） */
 let dashScope = "all";
 const dashWide = () => true;                                           // false に戻すと、管理者以外は従来どおり自分の記録だけ
-const dashProfitOn = () => (typeof adminView==="function" && adminView());   // 粗利タイル・サマリーの人件費/粗利列を出す条件（ここ 1 か所で切替）
+const dashProfitOn = () => true;                                       // 粗利タイル・サマリーの人件費/粗利列を出す条件（ここ 1 か所で切替。管理者だけに戻すなら adminView()）
 const dashRows = rows => (dashWide() || (typeof adminView==="function" && adminView()))
   ? (dashScope==="all" ? (rows||[]) : (rows||[]).filter(r=>staffOf(r)===dashScope))
   : mine(rows);
@@ -4483,7 +4483,7 @@ function renderDash(){
   const exMonthAll = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
   const laborM = laborOf(rows);                                          // 人件費＝店舗巡回 × 担当ごとの単価
   const grossM = a.gross - exMonthAll - laborM;                          // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費
-  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !dashProfitOn(); }   // 粗利（人件費・経費込み）は dashProfitOn のときだけ（石原さんにも出すかは菊地さん確認中 2026-11-13）
+  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !dashProfitOn(); }   // 粗利（人件費・経費込み）は dashProfitOn のときだけ（2026-11-13 菊地さん：スタッフにも出す）
   $("#tProfit").textContent = yen(grossM);
   const gp=$("#tProfitPill");
   gp.className="pill "+(a.sales===0?"flat":grossM>0?"ok":"bad");
