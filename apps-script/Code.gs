@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-13b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-13c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -759,11 +759,21 @@ function appendPrizeStats(rec, allWeekly) {
 }
 /* 景品実績タブを全記録から作り直す（エディタから実行。再実行しても同じ結果） */
 function rebuildPrizeStats() {
+  // 2026-11-13：以前は 1 行ずつ appendValues していたため 600 行超で 6 分の制限に掛かり、10 分トリガー（recomputeWeeklyCostsTax_ 経由）が毎回タイムアウト → 景品実績が 41 行で止まり、
+  // maintenanceOnce_ のあとの処理も動かなかった。全行をメモリで作って一度に書く
   var sh = prizeStatsSheet();
-  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, sh.getMaxColumns()).clearContent();
-  var docs = readAllDocs(), units = unitCostMap(), n = 0;
+  var docs = readAllDocs(), units = unitCostMap();
   var all = docs.weekly.slice().sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
-  all.forEach(function (rec, i) { n += appendPrizeStatsWith(rec, all.slice(0, i), units, sh); });
+  var rows = [], ids = [];
+  all.forEach(function (rec, i) { prizeStatRows(rec, all.slice(0, i), units).forEach(function (row) { rows.push(row.map(function (v) { return v === undefined ? "" : v; })); ids.push([rec.id]); }); });
+  var idc = idColumn(sh, true), n = rows.length;
+  if (sh.getLastRow() > 1) sh.getRange(2, 1, sh.getLastRow() - 1, Math.max(sh.getMaxColumns(), idc)).clearContent();
+  if (n) {
+    if (sh.getMaxRows() < n + 1) sh.insertRowsAfter(sh.getMaxRows(), n + 1 - sh.getMaxRows());
+    sh.getRange(2, 1, n, 14).setValues(rows);
+    sh.getRange(2, idc, n, 1).setValues(ids);
+    sh.getRange(2, 1, n, 1).setNumberFormat("yyyy/mm/dd"); sh.getRange(2, 12, n, 1).setNumberFormat("0.0%"); sh.getRange(2, 13, n, 1).setNumberFormat("0.0");
+  }
   var msg = "景品実績を作り直しました：" + n + " 行";
   Logger.log(msg); SpreadsheetApp.getActive().toast(msg); return msg;
 }
@@ -885,14 +895,17 @@ function maintenanceOnce_() {
   if (!pr.getProperty("anpanman72FixAt")) {       // 2026-11-12：菊地さん「発注日は 11/10 だったから直しといて」
     try { var m6 = fixOffAppOrders_(); pr.setProperty("anpanman72FixAt", nowIso() + " " + String(m6).slice(0, 200)); } catch (e) { Logger.log("fixOffAppOrders: " + e); }
   }
+  if (!pr.getProperty("higashi1112FixAt")) {       // 2026-11-13（依頼⑩）：東平尾 11/12 09:45 の記録（4人機①）が 11/13 に 4人機② の内容で上書きされていたのを直す
+    try { var m9 = fixHigashihirao1112_(); pr.setProperty("higashi1112FixAt", nowIso() + " " + String(m9).slice(0, 400)); } catch (e) { Logger.log("fixHigashihirao1112: " + e); pr.setProperty("higashi1112FixErr", nowIso() + " " + String(e).slice(0, 300)); }
+  }
   if (!pr.getProperty("taxBasisAt")) {            // 2026-11-13：菊地さん「景品の表示を全て税込に。個店は税込で入力、インフィニティは税抜で混ざっている」→ 個店の単価を税抜に換算して 1 つの基準（D 列＝税抜）にそろえる
     try { var m7 = normalizeMasterTax_(true); pr.setProperty("taxBasisAt", nowIso() + " " + String(m7).slice(0, 300)); } catch (e) { Logger.log("normalizeMasterTax: " + e); }
   }
   if (pr.getProperty("taxBasisAt") && !pr.getProperty("weeklyCostTaxAt")) {   // 2026-11-13：保存済みの巡回記録の景品原価を税込で計算し直す（上の換算のあと）
     try { var m8 = recomputeWeeklyCostsTax_(); pr.setProperty("weeklyCostTaxAt", nowIso() + " " + String(m8).slice(0, 300)); } catch (e) { Logger.log("recomputeWeeklyCostsTax: " + e); }
   }
-  if (!pr.getProperty("higashi1112FixAt")) {       // 2026-11-13（依頼⑩）：東平尾 11/12 09:45 の記録（4人機①）が 11/13 に 4人機② の内容で上書きされていたのを直す
-    try { var m9 = fixHigashihirao1112_(); pr.setProperty("higashi1112FixAt", nowIso() + " " + String(m9).slice(0, 400)); } catch (e) { Logger.log("fixHigashihirao1112: " + e); pr.setProperty("higashi1112FixErr", nowIso() + " " + String(e).slice(0, 300)); }
+  if (pr.getProperty("weeklyCostTaxAt") && pr.getProperty("higashi1112FixAt") && !pr.getProperty("prizeStatsRebuild2At")) {   // 2026-11-13：タイムアウトで 41 行で止まっていた景品実績を一括書き込みで作り直す（上の 2 つのあと）
+    try { var m10 = rebuildPrizeStats(); pr.setProperty("prizeStatsRebuild2At", nowIso() + " " + String(m10).slice(0, 200)); } catch (e) { Logger.log("rebuildPrizeStats: " + e); }
   }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
