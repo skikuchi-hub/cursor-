@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-12e";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-13a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -190,6 +190,7 @@ function addDoc(me, col, rec) {
     if (me.role !== "admin" || !rec.staff) rec.staff = me.name;   // 担当は PIN の本人（管理者だけ別の担当で記録できる）
     rec.sentAt = now;                                              // スプレッドシートへ即時に書くので「転記済み」
   }
+  if (col === "prizes") normalizePrizeTax_(rec);            // 単価は税抜で持つ（税込で入力された分は換算。2026-11-13）
   var docs = readAllDocs();
   if (col === "weekly") applySalesDelta(rec, docs.weekly);   // 売上は月の累計入力 → 前回との差分を記録
   materialize(col, rec, docs);
@@ -296,6 +297,7 @@ function updatePrize_(me, id, obj) {
   if (me.role !== "admin" && owner && owner !== me.name) throw new Error("この記録は " + owner + " さんが登録したものなので修正できません");
   var rec = Object.assign({}, old);
   Object.keys(obj || {}).forEach(function (k) { if (k !== "id" && k !== "createdAt" && k !== "by") rec[k] = obj[k]; });
+  if ("cost" in (obj || {}) || "costIn" in (obj || {}) || "tax" in (obj || {})) { if (!("costIn" in (obj || {}))) delete rec.costIn; normalizePrizeTax_(rec); obj = Object.assign({}, obj, { cost: rec.cost }); }   // 単価を変えたときも税抜で持つ
   rec.id = id; rec.editedAt = nowIso(); rec.editedBy = me.name;
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
   var ps = ss().getSheetByName("景品マスタ");
@@ -499,6 +501,7 @@ function materialize(col, rec, docs) {
       var rate = num(rec.rateN) > 0 ? 1 / num(rec.rateN) : "";
       var row = appendValues(ps, [rec.name || "", rec.vendor || "", rec.use || "", num(rec.cost), rate, rec.qty ? num(rec.qty) : ""], rec.id);
       if (rate !== "") ps.getRange(row, 5).setNumberFormat("0.00%");
+      ps.getRange(row, 4).setNumberFormat("#,##0.##");   // 税込入力を税抜に換算した単価は小数 2 桁まで持つ（×1.1 で元の税込に戻る）
       if (rec.memo) { var mc = hcol_(headerMap_(ps), "メモ"); if (mc) ps.getRange(row, mc).setValue(clean(rec.memo)); }   // メモ列は見出しで探す（列が増えても壊れない）
       try { writePrizeExtras_(ps, row, rec); } catch (e) { Logger.log("景品マスタの追加項目: " + e); }   // 仕入日・納品日・店舗・購入者（右端の列）
     }
@@ -680,14 +683,14 @@ function prizeStatsSheet() {
   var sh = ss().getSheetByName(PRIZE_STATS_SHEET);
   if (!sh) {
     sh = ss().insertSheet(PRIZE_STATS_SHEET);
-    sh.getRange(1, 1, 1, 15).setValues([["訪問日", "店舗", "機械", "部屋", "景品", "日数", "プレイ数", "払出数", "仕入単価", "景品原価", "売上", "原価率", "獲得率(1/N)", "担当", ID_HEADER]]).setFontWeight("bold");
+    sh.getRange(1, 1, 1, 15).setValues([["訪問日", "店舗", "機械", "部屋", "景品", "日数", "プレイ数", "払出数", "仕入単価（税込）", "景品原価（税込）", "売上", "原価率", "獲得率(1/N)", "担当", ID_HEADER]]).setFontWeight("bold");
     sh.getRange(1, 17).setValue("アプリが自動で書く。1行＝前回訪問から今回までの区間 × 景品。4人機はカウンター差がプレイ数、BOX機は払出数のみ。");
     sh.setFrozenRows(1);
   }
   return sh;
 }
-function unitCostMap() {
-  var m = {}; readPrizeMaster().rows.forEach(function (r) { if (r.name && !(r.name in m)) m[r.name] = num(r.cost); });
+function unitCostMap() {                 // 景品実績の「仕入単価」「景品原価」は税込（売上が税込の現金なので原価も税込で揃える。2026-11-13）
+  var m = {}; readPrizeMaster().rows.forEach(function (r) { if (r.name && !(r.name in m)) m[r.name] = taxIn_(r.cost); });
   return m;
 }
 function daysBetween(a, b) {               // "YYYY-MM-DD" 同士
@@ -860,6 +863,12 @@ function maintenanceOnce_() {
   if (!pr.getProperty("anpanman72FixAt")) {       // 2026-11-12：菊地さん「発注日は 11/10 だったから直しといて」
     try { var m6 = fixOffAppOrders_(); pr.setProperty("anpanman72FixAt", nowIso() + " " + String(m6).slice(0, 200)); } catch (e) { Logger.log("fixOffAppOrders: " + e); }
   }
+  if (!pr.getProperty("taxBasisAt")) {            // 2026-11-13：菊地さん「景品の表示を全て税込に。個店は税込で入力、インフィニティは税抜で混ざっている」→ 個店の単価を税抜に換算して 1 つの基準（D 列＝税抜）にそろえる
+    try { var m7 = normalizeMasterTax_(true); pr.setProperty("taxBasisAt", nowIso() + " " + String(m7).slice(0, 300)); } catch (e) { Logger.log("normalizeMasterTax: " + e); }
+  }
+  if (pr.getProperty("taxBasisAt") && !pr.getProperty("weeklyCostTaxAt")) {   // 2026-11-13：保存済みの巡回記録の景品原価を税込で計算し直す（上の換算のあと）
+    try { var m8 = recomputeWeeklyCostsTax_(); pr.setProperty("weeklyCostTaxAt", nowIso() + " " + String(m8).slice(0, 300)); } catch (e) { Logger.log("recomputeWeeklyCostsTax: " + e); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
@@ -981,6 +990,7 @@ function mergePikachu_() {
 }
 function importPhotoChecks() {
   try { maintenanceOnce_(); } catch (e) {}
+  try { if (PropertiesService.getScriptProperties().getProperty("weeklyCostTaxAt")) normalizeMasterTax_(false); } catch (e) { Logger.log("normalizeMasterTax(sweep): " + e); }   // 景品マスタに手で入れた個店の税込単価を税抜に換算（10 分ごと）
   var dir = photoCheckDir();
   var files = dir.getFiles(), n = 0, m = 0;
   var ps = photoSheet();
@@ -1443,6 +1453,109 @@ function repairChain() {
 var PRIZE_EXTRA_HEADERS = ["仕入日", "納品日", "店舗", "購入者", "仕入単価（税込）", "仕入額（税抜）", "仕入額（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "販売確認", "確認日"];
 var TAX_RATE = 0.1;
 var METRICS_SHEET = "必要指標";
+/* ===================== 単価の税区分（2026-11-13 菊地さん「景品の表示を全て税込に。個店は税込で入力、インフィニティは税抜で混ざっている」） =====================
+   持ち方は 1 つ：景品マスタ D 列「仕入単価（税抜）」と _app_db の prizes.cost は 税抜。表示（アプリ・景品実績）は すべて 税込 ＝ ROUND(税抜 × 1.1)。
+   理由：景品マスタの税込列・仕入額・棚卸残高・必要指標の数式と、EXAmuse 発注の自動登録（Mac が税抜で D 列に書く）が全部 D＝税抜 を前提にしているので、
+   そこを動かさず「税込で入力された分だけ税抜に換算して入れる」のがいちばん影響が少ない。
+   卸（インフィニティ・エスプラン）＝税抜で入力・発注。それ以外（ドン・キホーテ・ブックオフなどの個店）＝税込で入力 → 税抜に換算（小数 2 桁。×1.1 を四捨五入すると元の税込に戻る）。
+   アプリの景品登録は 税込／税抜 の切替を送る（rec.tax＝"in"／"ex"、rec.costIn＝税込）。切替が無い古いアプリからの登録は仕入先で判定する。
+   景品マスタに手で入れた行は 10 分ごとの normalizeMasterTax_ が同じ規則で換算し、メモに「税込 ¥X で入力 → 税抜 ¥Y に換算」と残す（メモに「税抜」と書いてある行は触らない） */
+var TAX_EX_VENDOR_RE = /インフィニティ|エスプラン/;
+var TAX_MARK = "税抜に換算";
+function isTaxExVendor_(v) { return TAX_EX_VENDOR_RE.test(String(v || "")); }
+function taxIn_(c) { return Math.round(num(c) * (1 + TAX_RATE)); }                       // 税抜 → 税込（四捨五入）
+function exOfIn_(c) { return Math.round(num(c) / (1 + TAX_RATE) * 100) / 100; }        // 税込 → 税抜（小数 2 桁）
+function normalizePrizeTax_(rec) {
+  var mode = (rec.tax === "in" || rec.tax === "ex") ? rec.tax : (isTaxExVendor_(rec.vendor) ? "ex" : "in");
+  if (mode === "in") { var inv = num(rec.costIn) > 0 ? num(rec.costIn) : num(rec.cost); rec.costIn = inv; rec.cost = exOfIn_(inv); }
+  else { rec.cost = num(rec.cost); rec.costIn = taxIn_(rec.cost); }
+  rec.tax = mode;
+  return rec;
+}
+/* 景品マスタと _app_db の prizes を「税抜」にそろえる。first＝true は一度だけの一括処理（アプリ登録の記録に tax を付ける）。
+   以後は 10 分ごとに呼ばれ、手で足した個店の行（仕入先が卸でない・アプリID なし・メモに「税抜」が無い・単価あり）だけ換算する。何度呼んでも同じ結果 */
+function normalizeMasterTax_(first) {
+  var ps = ss().getSheetByName("景品マスタ"); if (!ps) return "景品マスタなし";
+  var m = headerMap_(ps), cN = hcol_(m, "品名"), cV = hcol_(m, "仕入先"), cD = hcol_(m, "仕入単価（税抜）"), cM = hcol_(m, "メモ"), cI = idColumn(ps, false);
+  if (!cN || !cV || !cD) return "列が見つかりません";
+  var today = Utilities.formatDate(new Date(), TZ, "yyyy-MM-dd"), done = [], tagged = 0;
+  var docs = readAllDocs(), byId = {}; (docs.prizes || []).forEach(function (d) { byId[d.id] = d; });
+  var dbRows = {};
+  if (first) {   // アプリ登録の記録：tax が無いものに付ける（個店＝税込で入力されていたので税抜に換算、卸＝そのまま税抜）
+    var v = dbSheet().getDataRange().getValues();
+    v.forEach(function (r, i) { if (String(r[0]) === "prizes") dbRows[String(r[1])] = i + 1; });
+    (docs.prizes || []).forEach(function (d) {
+      if (d.tax === "in" || d.tax === "ex") return;
+      var rec = Object.assign({}, d); delete rec.costIn; normalizePrizeTax_(rec);
+      rec.taxFixedAt = today;
+      var row = dbRows[d.id]; if (!row) return;
+      dbSheet().getRange(row, 4).setValue(nowIso()); dbSheet().getRange(row, 6).setValue(JSON.stringify(stripId(rec)));   // D 更新時刻・F JSON（E 担当はそのまま）
+      byId[d.id] = rec; tagged++;
+    });
+  }
+  var last = ps.getLastRow(); if (last < 2) return "行なし";
+  var vals = ps.getRange(2, 1, last - 1, ps.getLastColumn()).getValues();
+  vals.forEach(function (r, i) {
+    var name = clean(r[cN - 1]); if (!name) return;
+    var vendor = clean(r[cV - 1]), cost = num(r[cD - 1]), memo = cM ? String(r[cM - 1] || "") : "", id = cI ? clean(r[cI - 1]) : "";
+    if (!(cost > 0) || !vendor || isTaxExVendor_(vendor)) return;          // 卸・仕入先空欄・単価なし は触らない（税抜のまま）
+    if (/税抜/.test(memo)) return;                                          // 「税抜」と書いてあれば税抜入力（換算済みの印もここに含む）
+    if (id) {                                                               // アプリ登録の行：記録の税区分に合わせる（記録が税込入力なら D も換算）
+      var d = byId[id]; if (!d) return;
+      if (d.tax === "in" && num(d.costIn) > 0) {
+        if (Math.abs(cost - num(d.cost)) < 0.005) return;                   // すでに税抜
+        if (Math.round(cost) !== Math.round(num(d.costIn))) return;         // 手で別の値に変えてある → 触らない
+      } else return;
+    }
+    var ex = exOfIn_(cost);
+    ps.getRange(i + 2, cD).setValue(ex).setNumberFormat("#,##0.##");
+    if (cM) ps.getRange(i + 2, cM).setValue((memo ? memo + " ／ " : "") + "税込 ¥" + yen(cost) + " で入力 → " + today + " " + TAX_MARK + "（¥" + ex + "）");
+    done.push(name + " ¥" + yen(cost) + "→" + ex);
+  });
+  if (done.length || tagged) { dropCache("sheet_master"); markMetricsDirty_(); }
+  var msg = (tagged ? "アプリ登録 " + tagged + " 件に税区分を付けた。" : "") + (done.length ? "景品マスタ " + done.length + " 行を税抜に換算：" + done.join("、") : "景品マスタの換算対象なし");
+  Logger.log(msg); return msg;
+}
+/* 保存済みの巡回記録（weekly）の景品原価 cost を税込で計算し直す。アプリが保存時に「払出 × 単価」で自動計算した値（＝旧単価で計算した額と一致）だけ置き換え、
+   手で直した値（一致しない）はそのまま残す。0 円で保存されていた記録（単価未登録のまま保存）は計算し直す。巡回ログ G 列も直し、景品実績を作り直す */
+function recomputeWeeklyCostsTax_() {
+  var docs = readAllDocs(), master = readPrizeMaster().rows;
+  var app = {}; (docs.prizes || []).forEach(function (d) { if (d.name && !(d.name in app)) app[d.name] = d; });
+  var sheet = {}; master.forEach(function (r) { if (r.name && !(r.name in sheet)) sheet[r.name] = r; });
+  var find = function (n) { return app[n] || sheet[n] || null; };
+  var oldUnit = function (n) { var p = find(n); return p ? (isTaxExVendor_(p.vendor) ? num(p.cost) : taxIn_(p.cost)) : 0; };   // 直す前：個店は税込のまま・卸は税抜
+  var newUnit = function (n) { var p = find(n); return p ? taxIn_(p.cost) : 0; };                                                 // 直した後：全部 税込
+  var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) opt = d.opts; });
+  var setOf = function (n) { var p = app[n]; if (p && num(p.boxSet) > 1) return Math.round(num(p.boxSet)); var o = opt[n] || {}; if (num(o.boxSet) > 1) return Math.round(num(o.boxSet)); var s = sheet[n]; if (s && num(s.boxSet) > 1) return Math.round(num(s.boxSet)); return 1; };
+  var auto = function (rec, unit, setAware) {
+    var t = 0;
+    if (rec.mtype === "box" || (rec.slots || []).length) (rec.slots || []).forEach(function (sl) { if (!sl.out) return; var n = setAware ? (num(sl.pset) > 0 ? Math.round(num(sl.pset)) : setOf(sl.prize)) : 1; t += (unit(sl.prize) || 0) * n; });
+    else (rec.rooms || []).forEach(function (rm) { if (rm.pays === null || rm.pays === undefined || rm.pays === "") return; var u = unit(rm.prize); if (u) t += num(rm.pays) * u; });
+    return Math.round(t);
+  };
+  var sh = dbSheet(), v = sh.getDataRange().getValues(), rows = {};
+  v.forEach(function (r, i) { if (String(r[0]) === "weekly") rows[String(r[1])] = i + 1; });
+  var log = ss().getSheetByName("巡回ログ"), logId = log ? idColumn(log, false) : 0;
+  var logIds = (log && logId && log.getLastRow() > 1) ? log.getRange(2, logId, log.getLastRow() - 1, 1).getValues().map(function (x) { return String(x[0]); }) : [];
+  var n = 0, kept = [], same = 0;
+  (docs.weekly || []).forEach(function (rec) {
+    var stored = Math.round(num(rec.cost)), o1 = auto(rec, oldUnit, true), o2 = auto(rec, oldUnit, false), nv;
+    if (stored === o1) nv = auto(rec, newUnit, true);
+    else if (stored === o2) nv = auto(rec, newUnit, false);
+    else if (stored === 0) nv = auto(rec, newUnit, true);
+    else { kept.push((rec.week || "") + " " + (rec.store || "") + " " + (rec.machine || "") + " ¥" + yen(stored)); return; }
+    if (nv === stored) { same++; return; }
+    var row = rows[rec.id]; if (!row) return;
+    var out = Object.assign({}, rec, { cost: nv, costTaxFixedAt: nowIso() });
+    sh.getRange(row, 4, 1, 1).setValue(nowIso()); sh.getRange(row, 6).setValue(JSON.stringify(stripId(out)));
+    logIds.forEach(function (id, i) { if (id === rec.id) log.getRange(i + 2, 7).setValue(nv); });
+    n++;
+  });
+  try { var st = prizeStatsSheet(); st.getRange(1, 9, 1, 2).setValues([["仕入単価（税込）", "景品原価（税込）"]]); rebuildPrizeStats(); } catch (e) { Logger.log("rebuildPrizeStats: " + e); }
+  markMetricsDirty_();
+  var msg = "巡回記録 " + n + " 件の景品原価を税込に（変わらず " + same + " 件）" + (kept.length ? "。手入力とみて残した " + kept.length + " 件：" + kept.join("、") : "");
+  Logger.log(msg); return msg;
+}
 function colLetter_(c) { var s = ""; while (c > 0) { var m = (c - 1) % 26; s = String.fromCharCode(65 + m) + s; c = Math.floor((c - 1) / 26); } return s; }
 function hdrKey_(x) { return String(x == null ? "" : x).replace(/\s/g, ""); }
 function headerMap_(sh) { var lc = Math.max(1, sh.getLastColumn()); var h = sh.getRange(1, 1, 1, lc).getValues()[0]; var m = {}; h.forEach(function (x, i) { var k = hdrKey_(x); if (k && !(k in m)) m[k] = i + 1; }); return m; }

@@ -953,6 +953,7 @@ body{font-variant-numeric:tabular-nums}
 .gq-boss.down .nm b{color:#f5c542}
 /* 原価率チェック */
 .gq-costs{display:flex;flex-direction:column;gap:5px}
+.ex{display:inline-block;font-size:10.5px;font-weight:400;color:var(--ink-3);margin-left:6px;white-space:nowrap}   /* 税抜の添え書き（税込を大きく、税抜を小さく。2026-11-13） */
 .gq-cost{display:flex;align-items:center;gap:8px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:6px 10px;font-size:12px;color:#eef3fb}
 .gq-cost .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .gq-cost .nm span{color:#a8b8d4;font-size:10.5px}
@@ -1129,7 +1130,7 @@ body{font-variant-numeric:tabular-nums}
             <input class="num" id="paysIn" type="number" inputmode="numeric" min="0" value="0" style="font-size:20px">
           </div>
           <div class="field" style="margin:0">
-            <span class="lbl">景品原価（円）</span>
+            <span class="lbl">景品原価（円・税込）</span>
             <input class="num" id="costIn" type="number" inputmode="numeric" min="0" value="0" style="font-size:20px">
           </div>
         </div>
@@ -1223,8 +1224,9 @@ body{font-variant-numeric:tabular-nums}
         </div>
         <div class="grid2">
           <div class="field">
-            <span class="lbl">仕入単価（円・税抜）<span class="req">*</span></span>
-            <input class="txt" id="pzCost" type="number" inputmode="numeric" min="0" placeholder="300">
+            <span class="lbl">仕入単価（円）<span class="req">*</span></span>
+            <input class="txt" id="pzCost" type="number" inputmode="numeric" min="0" placeholder="330">
+            <div class="chips" id="pzTaxRow" style="margin-top:6px"></div>
           </div>
           <div class="field">
             <span class="lbl">買った数量</span>
@@ -1251,6 +1253,7 @@ body{font-variant-numeric:tabular-nums}
             <input class="txt" id="pzBuyer" placeholder="名前">
           </div>
         </div>
+        <p class="hint" id="pzTaxHint" style="margin-top:-2px"></p>
         <p class="hint" style="margin-top:-2px">仕入日の月で「必要指標」（期首・仕入高・期末・売上原価）に入ります。店を決めずに買ったときは「共通」。</p>
         <div class="field">
           <span class="lbl">原価率（この景品で狙う％）<span class="req">*</span></span>
@@ -1262,7 +1265,7 @@ body{font-variant-numeric:tabular-nums}
           <div class="autoline" style="margin-top:9px">
             <span class="pill flat" id="pzPill">単価を入れると獲得率が出ます</span>
           </div>
-          <p class="hint" id="pzNote">原価率 ＝ 仕入単価 × 獲得率 ÷ プレイ単価100円。目標30％。</p>
+          <p class="hint" id="pzNote">原価率 ＝ 仕入単価（税込） × 獲得率 ÷ プレイ単価100円。目標30％。</p>
         </div>
         <div class="field">
           <span class="lbl">メモ</span>
@@ -1531,7 +1534,7 @@ body{font-variant-numeric:tabular-nums}
             <div class="xhead"><span class="nm">月次サマリー（店舗別）</span><span class="ct" id="sumMonth">—</span></div>
             <div class="tblwrap">
               <table id="sumTbl">
-                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価</th><th>原価率</th><th>場所代</th><th>経費</th><th>人件費</th><th>粗利</th><th>粗利率</th></tr></thead>
+                <thead><tr><th>店舗</th><th>プレイ</th><th>売上</th><th>景品原価<br><small>税込</small></th><th>原価率</th><th>場所代</th><th>経費</th><th>人件費</th><th>粗利</th><th>粗利率</th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -1606,6 +1609,18 @@ body{font-variant-numeric:tabular-nums}
 
 /* ===================== 前提（スプレッドシート「ルール・前提」と同じ） ===================== */
 const PLAY_PRICE = 100;      // プレイ単価（円）
+/* 単価の税区分（2026-11-13 菊地さん「景品の表示を全て税込に」）：データは税抜（景品マスタ D 列・prizes.cost）、表示と原価の計算は全部 税込 ＝ 四捨五入(税抜 × 1.1)。
+   登録は 税込／税抜 を選んで入れる（個店＝税込、インフィニティ・エスプラン＝税抜 が初期値）。税込で入れた単価は 税抜（小数 2 桁）にして保存し、costIn に税込を残す */
+const TAX_RATE = 0.1;
+const TAX_EX_VENDOR_RE = /インフィニティ|エスプラン/;                  // 税抜で入力・発注する仕入先（卸）
+const taxIn = c => Math.round(num(c)*(1+TAX_RATE));                  // 税抜 → 税込
+const taxEx = c => Math.round(num(c)/(1+TAX_RATE)*100)/100;          // 税込 → 税抜（小数 2 桁。×1.1 を四捨五入すると元の税込に戻る）
+const CHEAP_UNIT = 330;                                              // 「安い景品」の境目（税込 330 円＝税抜 300 円）
+function unitIn(p){                                                  // 景品 1 個の税込単価。古い記録（tax 無し）の個店分は税込で入っているのでそのまま
+  if (!p) return 0; const c=num(p.cost); if (!(c>0)) return 0;
+  if (p.tax==="in" || p.tax==="ex" || p._sheet) return taxIn(c);
+  return TAX_EX_VENDOR_RE.test(p.vendor||"") ? taxIn(c) : Math.round(c);
+}
 const PLACE_RATE = 0.30;     // 場所代率（標準）
 const COST_TARGET = 0.30;    // 景品原価率 管理目標（上限は設けない）
 const PRIZE_PRICE_CAP = 1000;// 景品の小売価格上限
@@ -2806,7 +2821,7 @@ function onRoomInput(e){
 /* ========== 集計 ========== */
 function prizeCostUnit(name){
   const p = allPrizes().find(p=>p.name && name && p.name===name);
-  return p ? num(p.cost) : null;
+  return p ? unitIn(p) : null;                                        // 税込
 }
 function totals(){
   if (!R) return {sales:0,plays:0,pays:0,cost:0,known:false,refill:0};
@@ -2915,7 +2930,7 @@ function updateDerived(){
   $("#sumLine").innerHTML = `
     <span>${R.type==="box"?"出た":"払出"} <b>${num($("#paysIn").value)}</b> 個</span>
     ${R.type==="box"?`<span>補充 <b>${t.refill}</b> 個</span>${t.ret?`<span>回収 <b>${t.ret}</b> 個</span>`:""}`:""}
-    <span>景品原価 <b>${yen(num($("#costIn").value))}</b> 円</span>
+    <span>景品原価（税込） <b>${yen(num($("#costIn").value))}</b> 円</span>
     ${t.known?"":`<span class="hint" style="margin:0;flex-basis:100%">初回は「いま入っている数」を入れると、次回から残りが自動で追いかけられます。</span>`}
     ${noMaster?`<span class="hint" style="margin:0;flex-basis:100%">景品マスタに無い景品があるので、原価は0で計算しています。</span>`:""}
     ${low.length?`<span class="hint" style="margin:0;flex-basis:100%;color:var(--warning-ink)">在庫が少ない景品：${low.map(x=>esc(x.n)+" 残"+x.s).join("・")}</span>`:""}`;
@@ -3120,7 +3135,7 @@ function srcRank(it){
     const bestStore = Object.entries(best.stores||{}).sort((a,b)=>b[1].paysPerDay-a[1].paysPerDay)[0];
     if (bestStore && bestStore[1].pays>0) detail.push(`よく出た店：${String(bestStore[0]).replace(/店$/,"")}`);
   } else if (it.price>0){
-    const band = priceBand(it.price), same = list.filter(P=>P.unit>0 && priceBand(P.unit)===band);
+    const band = priceBand(taxIn(it.price)), same = list.filter(P=>P.unit>0 && priceBand(P.unit)===band);   // 価格帯は税込で比べる
     if (same.length){ score = paceOf(same)*0.8; basis=`価格帯 ${band} の平均`; detail.push(`同じ価格帯 ${same.length}件が 週 ${paceOf(same).toFixed(1)}こ（系統の実績はまだ無し）`); }
   }
   const ordered = /発注済|下書き作成/.test(it.status||"");          // この商品自身が発注済みなら「再発注」とは言わない
@@ -3130,7 +3145,7 @@ function srcRank(it){
   else if (hist.length) detail.push(`同系統を ${jpDate(hist[0].date)} に発注済み（${hist[0].name.slice(0,14)}…）`);
   // 原価率の目安（4人機 100円/プレイ想定）
   let guide="";
-  if (it.price>0){ const [lo,hi]=targetBand(it.price); guide=`原価率 ${pct(lo,0)}〜${pct(hi,0)} なら 1/${Math.round(it.price/(hi*PLAY_PRICE))}〜1/${Math.round(it.price/(lo*PLAY_PRICE))}`; }
+  if (it.price>0){ const u=taxIn(it.price); const [lo,hi]=targetBand(u); guide=`原価率 ${pct(lo,0)}〜${pct(hi,0)} なら 1/${Math.round(u/(hi*PLAY_PRICE))}〜1/${Math.round(u/(lo*PLAY_PRICE))}（税込 ${yen(u)}円で計算）`; }
   // 同系統の在庫（景品マスタ）。実績が無くても「すでに持っている」は分かる
   const stockHits = toks.size ? allPrizes().filter(p=>{ const pt=nameTokens(p.name); return [...toks].some(t=>pt.has(t)); }).map(p=>({name:p.name, stock:stockOf(p.name)})).filter(x=>x.stock>0) : [];
   if (stockHits.length){ const tot=stockHits.reduce((a,x)=>a+x.stock,0); detail.push(`同系統の在庫あり：${stockHits[0].name.slice(0,16)}${stockHits.length>1?` ほか${stockHits.length-1}件`:""}（計 ${yen(tot)}こ）`); }
@@ -3187,7 +3202,7 @@ function srcCard(it){
   else if (st==="received") state=`<div class="state done"><b>受取済 ${jpDate(d.receivedAt)}</b>${d.receivedBy?`　${esc(d.receivedBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
   else if (st==="drafted") state=`<div class="state done"><b>Mail の下書き作成済み</b>　${esc(it.status)}<br>Mac で送信したら、スプシのメニュー「手動で送った→発注済みにして景品マスタへ登録」を実行。</div>`;
   else if (st==="requested") state=`<div class="state ${req&&req.state==="失敗"?"bad":""}"><b>発注要求 ${esc(d.requestId)}</b>　${req ? esc(req.state) : "確認中"}${req&&req.result?`<br>${esc(req.result)}`:""}${!req||req.state==="待機中"||req.state==="処理中(Mac)" ? "<br>Mac が 2 分以内に発注書と Mail の下書きを作ります。" : ""}</div>`;
-  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(o.amount)}円</b>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}</div>`;
+  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(taxIn(o.amount))}円</b><span class="ex">税抜 ${yen(o.amount)}円</span>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}</div>`;
   else if (st==="check") state=`<div class="state bad"><b>メールから読み取れていません</b>　${[!it.name&&"商品名", !(it.qty>0)&&"入数", !(it.price>0)&&"単価"].filter(Boolean).join("・")} が空です。${ME&&ME.role==="admin" ? "「直す」でメールを見て入力するか、見送りにしてください。" : "菊地さんに確認してください（単価・入数は管理者だけが直せます）。"}${it.raw?`<br><span style="font-size:11px">メールの原文：${esc(it.raw)}</span>`:""}${it.subject?`<br><span style="font-size:11px;color:var(--ink-3)">件名：${esc(it.subject)}</span>`:""}</div>`;
   const openOrder = SRC.open[it.key]==="order", openFix = SRC.open[it.key]==="fix";
   const canAct = st==="todo"||st==="order"||st==="hold"||st==="skip"||st==="check";
@@ -3198,13 +3213,13 @@ function srcCard(it){
   const selPcs = Math.round(num(it.qty)*selCases), selAmt = Math.round(num(it.price)*selPcs);
   const orderPanel = openOrder ? `<div class="panel2" data-key="${esc(it.key)}">
       <div class="row"><span class="k">数量（入数）を選ぶ</span>
-        <button type="button" class="opt ${sel.mode==="case"?"on":""}" data-smode="case"><b>1ケース</b><small>${yen(it.qty)}こ ＝ ${yen(caseAmt)}円</small></button>
-        <button type="button" class="opt ${sel.mode==="half"?"on":""}" data-smode="half" ${halfNG?"disabled":""}><b>ハーフ</b><small>${halfNG?"ハーフ不可":`${yen(Math.round(it.qty/2))}こ ＝ ${yen(Math.round(caseAmt/2))}円`}</small></button>
+        <button type="button" class="opt ${sel.mode==="case"?"on":""}" data-smode="case"><b>1ケース</b><small>${yen(it.qty)}こ ＝ ${yen(taxIn(caseAmt))}円<span class="ex">税抜 ${yen(caseAmt)}円</span></small></button>
+        <button type="button" class="opt ${sel.mode==="half"?"on":""}" data-smode="half" ${halfNG?"disabled":""}><b>ハーフ</b><small>${halfNG?"ハーフ不可":`${yen(Math.round(it.qty/2))}こ ＝ ${yen(taxIn(Math.round(caseAmt/2)))}円<span class="ex">税抜 ${yen(Math.round(caseAmt/2))}円</span>`}</small></button>
       </div>
-      ${sel.mode==="case" ? `<div class="row"><span class="k">ケース数</span><button type="button" class="chip mini" data-sn="-1">−</button><b style="font-size:18px;min-width:28px;text-align:center">${sel.n}</b><button type="button" class="chip mini" data-sn="1">＋</button><span style="font-size:12px;color:var(--ink-2)">＝ ${yen(selPcs)}こ ${yen(selAmt)}円</span></div>` : ""}
+      ${sel.mode==="case" ? `<div class="row"><span class="k">ケース数</span><button type="button" class="chip mini" data-sn="-1">−</button><b style="font-size:18px;min-width:28px;text-align:center">${sel.n}</b><button type="button" class="chip mini" data-sn="1">＋</button><span style="font-size:12px;color:var(--ink-2)">＝ ${yen(selPcs)}こ ${yen(taxIn(selAmt))}円<span class="ex">税抜 ${yen(selAmt)}円</span></span></div>` : ""}
       <div class="row"><span class="k">機械タイプ</span>${MACHINES.map(m=>`<button type="button" class="chip mini" data-sm="${esc(m)}" aria-pressed="${o.machine===m}">${m}</button>`).join("")}</div>
       <div class="row"><span class="k">備考（発注書には出ません）</span><input class="txt" data-snote="1" value="${esc(o.note)}" placeholder="例：下山門用"></div>
-      <div class="row"><button type="button" class="ok" data-sok="1" ${selCases>0?"":"disabled"}>${selCases>0?`${selCases===0.5?"ハーフ":selCases+"ケース"}（${yen(selPcs)}こ ${yen(selAmt)}円）で発注予定に入れる`:"数量を選んでください"}</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
+      <div class="row"><button type="button" class="ok" data-sok="1" ${selCases>0?"":"disabled"}>${selCases>0?`${selCases===0.5?"ハーフ":selCases+"ケース"}（${yen(selPcs)}こ 税込 ${yen(taxIn(selAmt))}円）で発注予定に入れる`:"数量を選んでください"}</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
     </div>` : "";
   const isAdmin = !!(ME && ME.role==="admin");
   const f = SRC.fix[it.key] || {name:it.name, code:it.code, qty:it.qty??"", price:it.price??""};
@@ -3222,7 +3237,7 @@ function srcCard(it){
     <div class="bd">
       <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
       <div class="sub">${SRC.q.trim() ? `<span class="stb">${esc(SRC_LABEL[st]||st)}</span>` : ""}${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
-      <div class="price">${it.price>0?`<b>${yen(it.price)}</b><span class="per">円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
+      <div class="price">${it.price>0?`<b>${yen(taxIn(it.price))}</b><span class="per">円（税込）<span class="ex">税抜 ${yen(it.price)}円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span></span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
       ${big ? `<div class="sizeng">📏 一辺 ${big}cm（${SIZE_LIMIT_CM}cm 超）→ <b>見送り候補</b></div>` : ""}
       ${it.name ? rankBlock(it) : ""}
@@ -3271,14 +3286,14 @@ function renderSourcing(){
   const sum=$("#srcSum"); sum.hidden = !orders.length;
   if (orders.length){
     const noM = orders.filter(it=>!srcOrderOf(it).machine).length;
-    $("#srcSumTxt").innerHTML = `${orders.length}件　${yen(total)}円 <span style="font-size:11px;font-weight:400;opacity:.85">税抜</span>${total>SRC.limit?`<span style="display:block;font-size:11px;color:var(--gold)">上限警告 ${yen(SRC.limit)}円 を超えています</span>`:""}${noM?`<span style="display:block;font-size:11px;color:var(--gold)">機械タイプ未選択 ${noM}件</span>`:""}`;
+    $("#srcSumTxt").innerHTML = `${orders.length}件　${yen(taxIn(total))}円 <span style="font-size:11px;font-weight:400;opacity:.85">税込（税抜 ${yen(total)}円）</span>${total>SRC.limit?`<span style="display:block;font-size:11px;color:var(--gold)">上限警告 税抜 ${yen(SRC.limit)}円 を超えています</span>`:""}${noM?`<span style="display:block;font-size:11px;color:var(--gold)">機械タイプ未選択 ${noM}件</span>`:""}`;
     $("#srcSubmit").disabled = SRC.busy;
   }
   // 要求の状況
   const rc=$("#srcReqCard"); rc.hidden = !SRC.requests.length;
   if (SRC.requests.length){
     $("#srcReqCt").textContent = `${SRC.requests.length}件`;
-    $("#srcReqs").innerHTML = SRC.requests.slice(0,8).map(r=>`<div class="src-req"><div><b>${esc(r.orderNo||r.id)}</b>　${esc(r.at).slice(5,16)}　${r.n}商品 ${yen(r.amount)}円${r.staff?`　${esc(r.staff)}`:""}${r.result?`<div style="font-size:11px;color:var(--ink-3);margin-top:2px">${esc(r.result)}</div>`:""}</div><span class="st" style="color:${r.state==="完了"?"var(--aqua-ink)":r.state==="失敗"?"var(--critical-ink)":"var(--warning-ink)"}">${esc(r.state)}${r.mode&&r.mode!=="下書き"?`<br><span style="font-weight:400;font-size:11px">${esc(r.mode)}</span>`:""}</span></div>`).join("");
+    $("#srcReqs").innerHTML = SRC.requests.slice(0,8).map(r=>`<div class="src-req"><div><b>${esc(r.orderNo||r.id)}</b>　${esc(r.at).slice(5,16)}　${r.n}商品 ${yen(taxIn(r.amount))}円<span class="ex">税抜 ${yen(r.amount)}円</span>${r.staff?`　${esc(r.staff)}`:""}${r.result?`<div style="font-size:11px;color:var(--ink-3);margin-top:2px">${esc(r.result)}</div>`:""}</div><span class="st" style="color:${r.state==="完了"?"var(--aqua-ink)":r.state==="失敗"?"var(--critical-ink)":"var(--warning-ink)"}">${esc(r.state)}${r.mode&&r.mode!=="下書き"?`<br><span style="font-weight:400;font-size:11px">${esc(r.mode)}</span>`:""}</span></div>`).join("");
   }
   const at=$("#srcAt"); if (at) at.textContent = SRC.at ? `${new Date(SRC.at).getHours()}:${String(new Date(SRC.at).getMinutes()).padStart(2,"0")} 取得` : "";
 }
@@ -3297,16 +3312,16 @@ async function srcSubmit(){
   if (!orders.length) return;
   const total = orders.reduce((a,it)=>a+srcOrderOf(it).amount,0);
   const noM = orders.filter(it=>!srcOrderOf(it).machine);
-  const lines = orders.map(it=>{ const o=srcOrderOf(it); return `・${it.name}　${o.cases}ケース（${o.pcs}こ）${yen(o.amount)}円${o.machine?" "+o.machine:""}`; }).join("\n");
-  let msg = `この ${orders.length} 件で発注要求を出します。\n${lines}\n\n合計 ${yen(total)}円（税抜）`;
+  const lines = orders.map(it=>{ const o=srcOrderOf(it); return `・${it.name}　${o.cases}ケース（${o.pcs}こ）税込 ${yen(taxIn(o.amount))}円（税抜 ${yen(o.amount)}円）${o.machine?" "+o.machine:""}`; }).join("\n");
+  let msg = `この ${orders.length} 件で発注要求を出します。\n${lines}\n\n合計 税込 ${yen(taxIn(total))}円（税抜 ${yen(total)}円。発注書は税抜）`;
   if (noM.length) msg += `\n\n※機械タイプ未選択が ${noM.length} 件あります（景品マスタに空欄で入ります）`;
-  if (total>SRC.limit) msg += `\n\n※上限警告 ${yen(SRC.limit)}円 を超えています`;
+  if (total>SRC.limit) msg += `\n\n※上限警告 税抜 ${yen(SRC.limit)}円 を超えています`;
   msg += "\n\nMac が発注書と Mail の下書きを作ります。送信は Mac の Mail から行います。";
   if (!confirm(msg)) return;
   const btn=$("#srcSubmit"); btn.disabled=true;
   try {
     const r = await api("sourcingSubmit", {keys: orders.map(it=>it.key)});
-    toast(`発注要求 ${r.requestId} を出しました（${r.n}件 ${yen(r.total)}円）`);
+    toast(`発注要求 ${r.requestId} を出しました（${r.n}件 税抜 ${yen(r.total)}円）`);
     await Store.sync(false); await loadSourcing(true);
   } catch(e){ alert(errMsg(e)); btn.disabled=false; }
 }
@@ -4102,13 +4117,15 @@ function renderLogList(){
 const PZ_RATES = [15,20,25,30,35,40,45,50,55,60,70,80,90,100];   // 狙う原価率（％）
 const PZ_VENDORS_BASE = ["株式会社エスプラン"];    // よく使う仕入先。登録した仕入先は自動で候補に増える
 let pzCostRate = 30;
+let pzTax = "in", pzTaxTouched = false;   // 入力する単価が 税込（in）か 税抜（ex）か。仕入先で初期値が決まり、手で切り替えたら登録まで固定
+const pzCostIn = () => { const v=num($("#pzCost").value); return pzTax==="in" ? v : taxIn(v); };   // 入力値を税込に
 const vendorName = v => v==="エスプラン" ? "株式会社エスプラン" : v;    // 旧表記はシートと同じ正式名に寄せる
 function pzVendors(){
   const used = allPrizes().map(p=>vendorName(p.vendor)).filter(Boolean);
   return Array.from(new Set(PZ_VENDORS_BASE.concat(used)));
 }
 function pzDerived(){
-  const cost = num($("#pzCost").value);
+  const cost = pzCostIn();                                            // 原価率・1/N は税込で
   const n = (cost>0 && pzCostRate>0) ? Math.max(1, Math.ceil(cost / pzCostRate)) : null;    // 1/N（切り上げ＝狙いの原価率を超えない）
   const exp = n ? cost/n/PLAY_PRICE : (pzCostRate>0 ? pzCostRate/100 : null);
   return {cost, n, exp};
@@ -4127,6 +4144,11 @@ function renderPrizeForm(){
   { const st=$("#pzStore"), cs=st.value; st.innerHTML = `<option value="">共通（店舗を決めていない）</option>` + STORES.map(x=>`<option value="${esc(x.n)}">${esc(x.n)}</option>`).join(""); if (cs) st.value=cs; }
   if (!$("#pzBuyer").value) $("#pzBuyer").value = me()||"";
   const vendor = sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value;
+  if (!pzTaxTouched) pzTax = TAX_EX_VENDOR_RE.test(vendor) ? "ex" : "in";   // 卸は税抜、個店は税込
+  chipRow($("#pzTaxRow"), ["税込","税抜"], pzTax==="in"?"税込":"税抜", v=>{ pzTax = v==="税込"?"in":"ex"; pzTaxTouched=true; renderPrizeForm(); updatePzGauge(); }, "mini");
+  { const v=num($("#pzCost").value), h=$("#pzTaxHint");
+    h.innerHTML = v>0 ? (pzTax==="in" ? `税込 <b>${yen(v)}円</b> で登録（税抜 ${yen(taxEx(v))}円）。アプリの表示は税込です。` : `税抜 ${yen(v)}円 → アプリの表示は <b>税込 ${yen(taxIn(v))}円</b>。`)
+      : `個店（ブックオフ・ドンキなど）はレシートの<b>税込</b>、インフィニティ・エスプランは発注書の<b>税抜</b>。仕入先で自動で切り替わります（違えば上で選ぶ）。`; }
   $("#savePrize").disabled = !(clean($("#pzName").value) && vendor && num($("#pzCost").value)>0 && pzCostRate>0);
 }
 function updatePzGauge(){
@@ -4137,16 +4159,16 @@ function updatePzGauge(){
   $("#pzNote").innerHTML = n
     ? `${yen(cost)}円 ÷ ${pzCostRate}％ ＝ <b>${n}回に1回</b> 出す設定にすると、原価率はほぼ ${pct(exp,1)}。` +
       (stt==="warn" ? ` 目標30％を超えています。原価率を下げると回数が増えます。` : ` 100プレイで景品原価 ${yen(Math.round(exp*PLAY_PRICE*100))}円。`)
-    : "原価率 ＝ 仕入単価 × 獲得率 ÷ プレイ単価100円。目標30％。";
+    : "原価率 ＝ 仕入単価（税込） × 獲得率 ÷ プレイ単価100円。目標30％。";
 }
 async function savePrize(){
   const {n} = pzDerived();
   const sel=$("#pzVendor");
   {
-    const name=clean($("#pzName").value), cost=num($("#pzCost").value), qty=num($("#pzQty").value);
+    const name=clean($("#pzName").value), cost=pzCostIn(), qty=num($("#pzQty").value);
     const ask=[];
-    if (cost > 5000) ask.push(`仕入単価 ${yen(cost)}円 は高すぎませんか？（1 個あたり・税抜）`);
-    if (cost > 0 && cost < 10) ask.push(`仕入単価 ${yen(cost)}円 は安すぎませんか？`);
+    if (cost > 5500) ask.push(`仕入単価 ${yen(cost)}円（税込）は高すぎませんか？（1 個あたり）`);
+    if (cost > 0 && cost < 11) ask.push(`仕入単価 ${yen(cost)}円（税込）は安すぎませんか？`);
     if (qty > 500) ask.push(`数量 ${yen(qty)} は多すぎませんか？（入数×ケース数）`);
     const same = allPrizes().find(p=>normName(p.name)===normName(name));
     if (same) ask.push(`「${same.name}」はすでに登録があります（買った ${boughtQty(same.name)}）。追加の仕入れなら OK（数量は足し算されます）`);
@@ -4155,7 +4177,9 @@ async function savePrize(){
   const rec = {
     name:clean($("#pzName").value),
     vendor: sel.value==="__other" ? clean($("#pzVendorOther").value) : sel.value,
-    cost:num($("#pzCost").value), qty:num($("#pzQty").value), use:$("#pzUse").value,
+    cost: pzTax==="in" ? taxEx(num($("#pzCost").value)) : num($("#pzCost").value),   // 保存は税抜（景品マスタ D 列と同じ基準）
+    costIn: pzCostIn(), tax: pzTax,                                                      // 税込の額と、どちらで入力したか
+    qty:num($("#pzQty").value), use:$("#pzUse").value,
     costRate:pzCostRate, rateN:n||0, retail:0, proof:"", memo:clean($("#pzMemo").value), staff:me(),
     buyDate:$("#pzBuyDate").value||todayStr(), deliveryDate:$("#pzDelivDate").value||"", store:$("#pzStore").value||"", buyer:clean($("#pzBuyer").value)||me(),
     boxSet: Math.max(1, Math.round(num($("#pzBoxSet").value)||1))                       // BOX 1 枠に入れる個数（3 個セットなど）
@@ -4163,7 +4187,7 @@ async function savePrize(){
   $("#savePrize").disabled=true;
   if (await Store.add("prizes", rec)){
     toast(`${rec.name} を登録！`);
-    ["#pzName","#pzMemo","#pzQty","#pzVendorOther"].forEach(s=>$(s).value=""); $("#pzBoxSet").value="1";
+    ["#pzName","#pzMemo","#pzQty","#pzVendorOther","#pzCost"].forEach(s=>$(s).value=""); $("#pzBoxSet").value="1"; pzTaxTouched=false;
     if (rec.vendor && sel.value==="__other"){ renderPrizeForm(); sel.value=rec.vendor; }
   }
   renderPrizeForm(); updatePzGauge(); render();
@@ -4293,7 +4317,7 @@ function renderPrizeList(){
       <span class="sw"></span>
       <div class="bd">
         <div class="t1">${esc(r.name)}</div>
-        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}${num(r.cost)>0?`仕入 ${yen(r.cost)}円（税抜）`:"仕入単価 未入力"}${r.vendor?"　"+esc(r.vendor):""}</div>
+        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}${num(r.cost)>0?`仕入 ${yen(unitIn(r))}円（税込）`:"仕入単価 未入力"}${r.vendor?"　"+esc(r.vendor):""}</div>
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${r.stock!==null&&r.stock!==undefined&&r.stock!==""?`<span class="pill ${num(r.stock)>0?"flat":"bad"}">残り ${num(r.stock)}${num(r.qty)>0?`／${num(r.qty)}個`:"個"}</span>`:""}
           ${r.memo?`<span class="tag">${esc(r.memo).slice(0,40)}</span>`:""}
@@ -4309,14 +4333,14 @@ function renderPrizeList(){
     (r.slots||[]).forEach(x=>{ if (x.out && x.prize) used[x.prize]=(used[x.prize]||0)+1; });
   });
   el.innerHTML = rows.map(r=>{
-    const exp = num(r.cost)>0 && r.rateN>0 ? num(r.cost)/r.rateN/PLAY_PRICE : null;
+    const exp = num(r.cost)>0 && r.rateN>0 ? unitIn(r)/r.rateN/PLAY_PRICE : null;
     const stt = costStatus(exp);
     const rate = r.costRate ? `${r.costRate}％` : (exp!==null ? pct(exp,0) : "—");
     return `<div class="rowitem" style="--sc:var(--s3)">
       <span class="sw"></span>
       <div class="bd">
         <div class="t1">${esc(r.name)}</div>
-        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}仕入 ${yen(r.cost)}円（税抜）${r.vendor?"　"+esc(r.vendor):""}${r.staff?"　"+esc(r.staff):""}</div>
+        <div class="t2">${r.use?`<span class="tag" style="margin-right:6px">${esc(r.use)}</span>`:""}仕入 ${yen(unitIn(r))}円（税込）${r.vendor?"　"+esc(r.vendor):""}${r.staff?"　"+esc(r.staff):""}</div>
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <span class="pill ${exp===null?"flat":stt}">原価率 ${rate}${r.rateN?`＝1／${r.rateN}`:""}</span>
           ${num(r.qty)>0?`<span class="pill ${Math.max(0,num(r.qty)-(refill[r.name]||0))>0?"flat":"bad"}">残り ${Math.max(0,num(r.qty)-(refill[r.name]||0))}／${num(r.qty)}個</span>`:""}
@@ -4954,14 +4978,14 @@ function renderBosses(mon){
 }
 
 /* 原価率チェック：店舗×機械の直近の記録。目安 25〜30%。低すぎ（取れない）は苦情のもと */
-const COST_CHECK_NOTE = `目安は <b style="color:#f5c542">25〜30%</b>。低すぎると「取れない」とお客さんがコンビニに苦情を入れるので、下げすぎ注意。仕入 300円以下の景品だけ 5〜10% も可。`;
+const COST_CHECK_NOTE = `目安は <b style="color:#f5c542">25〜30%</b>。低すぎると「取れない」とお客さんがコンビニに苦情を入れるので、下げすぎ注意。仕入 330円（税込）以下の景品だけ 5〜10% も可。原価は税込。`;
 function renderCostCheck(){
   const el=$("#gqCosts"); if(!el) return;
   const latest={};
   (Store.data.weekly||[]).forEach(r=>{ const k=r.store+"|"+r.machine; if(!latest[k] || String(r.createdAt||"")>String(latest[k].createdAt||"")) latest[k]=r; });
   const rows=Object.values(latest).map(r=>{
     const sales=salesOfRec(r); if (!(sales>0)) return null;
-    const ratio=num(r.cost)/sales; const unit=prizeCostUnit(r.prize); const cheap = unit!==null && unit>0 && unit<=300;
+    const ratio=num(r.cost)/sales; const unit=prizeCostUnit(r.prize); const cheap = unit!==null && unit>0 && unit<=CHEAP_UNIT;
     const floor = cheap ? 0.05 : 0.15;
     const noUnit = num(r.cost)===0 && num(r.pays)>0;                 // 払出はあるのに原価0 → 景品マスタの単価が未登録
     const cls = noUnit ? "nounit" : ratio>0.35 ? "high" : ratio<floor ? "toolow" : ratio<0.25 ? "low" : "ok";
@@ -5066,7 +5090,7 @@ function prizeIntervals(){
   });
   return out;
 }
-function targetBand(unit){ return (unit!==null && unit>0 && unit<=300) ? [0.05,0.10] : [0.25,0.30]; }
+function targetBand(unit){ return (unit!==null && unit>0 && unit<=CHEAP_UNIT) ? [0.05,0.10] : [0.25,0.30]; }   // unit は税込
 function labAgg(){
   const iv=prizeIntervals();
   const byP={};
@@ -5191,12 +5215,12 @@ function renderLab(){
       return {P,cls,tag,act,recN,lo,hi, sort: cls==="bad"?0:cls==="warn"?1:cls===""?3:2};
     }).sort((a,b)=>a.sort-b.sort);
     html = rows.length ? rows.map(({P,cls,tag,act,recN,lo,hi})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
-      <div class="kv"><span>単価 <b>${P.unit?yen(P.unit)+"円":"—"}</b></span><span>実績 <b>${P.nOf?`1/${Math.round(P.nOf)}`:"—"}</b></span><span>原価率 <b>${P.ratio!==null?pct(P.ratio,0):"—"}</b></span>${recN?`<span>推奨 <b>1/${Math.round(recN[0])}〜1/${Math.round(recN[1])}</b>（${pct(lo,0)}〜${pct(hi,0)}）</span>`:""}<span>${P.plays}プレイ・${P.pays}こ</span></div>
+      <div class="kv"><span>単価（税込） <b>${P.unit?yen(P.unit)+"円":"—"}</b></span><span>実績 <b>${P.nOf?`1/${Math.round(P.nOf)}`:"—"}</b></span><span>原価率 <b>${P.ratio!==null?pct(P.ratio,0):"—"}</b></span>${recN?`<span>推奨 <b>1/${Math.round(recN[0])}〜1/${Math.round(recN[1])}</b>（${pct(lo,0)}〜${pct(hi,0)}）</span>`:""}<span>${P.plays}プレイ・${P.pays}こ</span></div>
       <div class="act">${act}</div></div>`).join("")
       : `<div class="gq-qnote">4人機で カウンターと残り数を入れた訪問が2回以上あると、景品ごとの獲得率と原価率が出ます。</div>`;
     const bad=rows.filter(r=>r.cls==="bad").length;
     $("#gqLabSub").textContent = rows.length ? (bad?`要調整 ${bad}`:"全部OK") : "";
-    note = `目安は 25〜30%（仕入300円以下は 5〜10%）。<b style="color:#f5c542">推奨 1/N</b> ＝ 仕入単価 ÷（目安の原価率 × 100円）。実績が推奨の中に入っている設定を「正解」として他店に横展開する。`;
+    note = `目安は 25〜30%（仕入 330円（税込）以下は 5〜10%）。<b style="color:#f5c542">推奨 1/N</b> ＝ 仕入単価（税込）÷（目安の原価率 × 100円）。実績が推奨の中に入っている設定を「正解」として他店に横展開する。`;
   }
   el.innerHTML = html || `<div class="gq-qnote">まだデータがありません。</div>`;
   $("#gqLabNote").innerHTML = note;
@@ -5350,7 +5374,7 @@ function drawDayLog(day, daily){
     `<div class="gq-sum">この日の EXP <b>${expFmt(exp)}</b>（売上100円＝+1／景品登録1件＝+100／拠点とうちゃく＝+100／経費100円＝−1）　${daily?(hit?`／ 日間目標 <b>たっせい ★</b>`:`／ 日間目標 ${w.length}／${daily}`):""}</div>` +
     bonus.map(h=>`<div class="gq-sum">${h.icon} <b>${h.name}</b> に とうちゃく！　ボーナス <b>+${MILESTONE_EXP} EXP</b></div>`).join("") +
     grp("巡回", w, gained, w.map(r=>`${esc(r.store)}／${esc(r.machine)}　売上${yen(num(r.sales)||num(r.plays)*PLAY_PRICE)}円 → ${expFmt(expOf(r))} EXP${r.pays?`　出${r.pays}`:""}`), "まだ 巡回報告が ありません", "マシーン") +
-    grp("景品", p, prizeExp, p.map(r=>`${esc(r.name)}　${yen(r.cost)}円${r.qty?`×${r.qty}`:""} → +${EXP_PER_PRIZE} EXP`), "景品登録は ありません") +
+    grp("景品", p, prizeExp, p.map(r=>`${esc(r.name)}　${yen(unitIn(r))}円${r.qty?`×${r.qty}`:""} → +${EXP_PER_PRIZE} EXP`), "景品登録は ありません") +
     grp("経費", x, -spent, x.map(r=>`${esc(r.kind)}　${yen(r.net)}円${r.payee?`（${esc(r.payee)}）`:""} → ${expFmt(-expCostOf(r))} EXP`), "経費登録は ありません");
 }
 /* ===== ジムランク：店舗ごと。今月の売上でランクが決まる（5万・10万・15万・20万・25万・30万=MAX。月が変わるとリセット）。
@@ -5579,7 +5603,7 @@ function wire(){
 
   // 景品
   ["#pzName","#pzCost","#pzVendorOther"].forEach(s=>$(s).oninput=()=>{renderPrizeForm();updatePzGauge();});
-  $("#pzVendor").onchange = () => { renderPrizeForm(); if($("#pzVendor").value==="__other") $("#pzVendorOther").focus(); };
+  $("#pzVendor").onchange = () => { renderPrizeForm(); updatePzGauge(); if($("#pzVendor").value==="__other") $("#pzVendorOther").focus(); };
   $("#pzRateN").oninput = e => { pzCostRate = Math.min(100, Math.max(1, Math.round(num(e.target.value)||1))); renderPrizeForm(); updatePzGauge(); };
   $("#savePrize").onclick = savePrize;
 
