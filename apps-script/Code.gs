@@ -174,6 +174,18 @@ function findDbRow(col, id) {
   for (var i = 0; i < v.length; i++) if (String(v[i][0]) === col && String(v[i][1]) === String(id)) return i + 2;
   return 0;
 }
+/* 端末が付けた cid を持つ記録を _app_db から探す（json に '"cid":"…"' を含む行だけ読む） */
+function findDocByCid(col, cid) {
+  cid = String(cid || ""); if (!cid || !/^[a-z0-9]{6,40}$/i.test(cid)) return null;
+  var sh = dbSheet(); var last = sh.getLastRow(); if (last < 2) return null;
+  var v = sh.getRange(2, 1, last - 1, 6).getValues(); var key = '"cid":"' + cid + '"';
+  for (var i = 0; i < v.length; i++) {
+    if (String(v[i][0]) !== col || String(v[i][5]).indexOf(key) < 0) continue;
+    var rec; try { rec = JSON.parse(v[i][5]); } catch (e) { continue; }
+    if (rec && rec.cid === cid) { rec.id = String(v[i][1]); return rec; }
+  }
+  return null;
+}
 function newId() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -182,6 +194,8 @@ function stripId(rec) { var o = {}; for (var k in rec) if (k !== "id") o[k] = re
 function addDoc(me, col, rec) {
   if (COLS.indexOf(col) < 0) throw new Error("不明な保存先: " + col);
   rec = rec || {};
+  // 同じ cid（端末が付けた id）の記録が既にあれば、それを返す（電波が弱くて応答だけ落ちたあとの送り直しで二重に保存しない。2026-11-13）
+  if (rec.cid) { var dup = findDocByCid(col, rec.cid); if (dup) return { ok: true, rec: dup, dup: true }; }
   var now = nowIso();
   rec.id = newId();
   rec.createdAt = rec.createdAt || now;
@@ -828,7 +842,7 @@ function addPhoto(me, id, data, mime, kind) {
   var h = photoHash(bytes);
   // 同じ記録の同じ種別に同じ写真は 2 回付けない。補充前と補充後が同じ写真なのは可（何も変えなかった訪問は同じ写真を上げる運用。2026-11-09）
   var same = (rec.photos || []).filter(function (p) { return p.h === h && (p.kind || "before") === kind; })[0];
-  if (same) throw new Error("同じ写真がもう " + PHOTO_KINDS[kind] + " に付いています");
+  if (same) { rec.id = id; return { ok: true, rec: rec, photo: same, dup: true }; }   // 送り直し（応答だけ落ちた）なら成功扱いで返す（2026-11-13。以前はエラー）
   var other = findPhotoByHash(h, id);
   if (other) throw new Error("この写真は " + String(other.rec.week || "").slice(5).replace("-", "/") + " " + clean(other.rec.store) + "／" + clean(other.rec.machine) + " の" + PHOTO_KINDS[other.photo.kind || "before"] + "として保存済みです。同じ写真は 2 回付けられません");
   var ext = /png/i.test(mime || "") ? "png" : "jpg";

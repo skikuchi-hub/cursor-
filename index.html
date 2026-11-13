@@ -1051,6 +1051,12 @@ body{font-variant-numeric:tabular-nums}
 .updbar{position:sticky;top:0;z-index:60;display:flex;align-items:center;justify-content:space-between;gap:10px;
   margin:0;padding:8px 14px;background:var(--gold-wash);color:var(--gold-text);font-size:12.5px;font-weight:700;border-bottom:1px solid var(--line)}
 .updbar .btn{padding:7px 12px;font-size:12px}
+.sendbar{position:fixed;top:0;left:0;right:0;max-width:560px;margin:0 auto;z-index:65;background:var(--sky-wash);color:var(--sky-ink);box-shadow:0 6px 18px -10px rgba(20,32,58,.45)}   /* .app が overflow:hidden なので sticky は効かない → 画面上端に固定（送信が終われば消える） */
+.sendbar .btn{white-space:nowrap;flex:none}
+.sendbar small{display:block;font-weight:600;opacity:.85;margin-top:2px}
+.sendbar.err{background:var(--rose-wash);color:var(--critical-ink)}
+.phs .ph.qd{width:44px;height:44px;border-radius:8px}
+.phs .ph.qd::after{content:"待ち";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,32,58,.5);color:#fff;font-size:10px;font-weight:700}
 /* 補充候補の印：当たり（全店）／在庫多め */
 .hinttag{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:700;vertical-align:middle;line-height:1.5}
 .hinttag.hit{background:var(--gold-wash);color:var(--gold-text)}
@@ -1085,6 +1091,7 @@ body{font-variant-numeric:tabular-nums}
     </div>
   </header>
   <div class="updbar" id="updBar" hidden><span>新しいバージョンがあります</span><button class="btn pri" id="updGo">更新する</button></div>
+  <div class="updbar sendbar" id="sendBar" hidden></div>
 
   <main>
     <!-- ========================= 巡回ログ入力 ========================= -->
@@ -1775,9 +1782,9 @@ const costStatus = r =>
 const STATUS_WORD = {ok:"◎ 目標内", warn:"△ 目標こえ", flat:"—"};
 
 let toastT;
-function toast(msg){
+function toast(msg, ms){
   const t=$("#toast"); t.textContent=msg; t.classList.add("on");
-  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"),2300);
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("on"), ms||2300);
 }
 
 /* ===================== API（Google Apps Script → スプレッドシート） =====================
@@ -1788,18 +1795,23 @@ const API_URL = String(CFG.api||"").trim();
 const PIN_KEY = "crane-lab-pin", CACHE_KEY = "crane-lab-cache-v1";
 let PIN = ""; try{ PIN = localStorage.getItem(PIN_KEY)||""; }catch(e){}
 function apiError(code,msg){ const e=new Error(msg||code); e.code=code; return e; }
-async function api(action, payload){
+const API_TIMEOUT = num(CFG.timeout)||30000, PHOTO_TIMEOUT = num(CFG.photoTimeout)||60000;   // 電波が弱いと fetch が何分も返ってこないことがある（iPhone）。時間切れで打ち切り、送信待ちの仕組みがあとで送り直す
+async function api(action, payload, opt){
   if (!API_URL) throw apiError("no_api","APIが設定されていません");
   const body = JSON.stringify(Object.assign({action, pin:PIN}, payload||{}));
+  const ms = (opt && opt.timeout) || API_TIMEOUT;
+  const ac = (typeof AbortController!=="undefined") ? new AbortController() : null;
+  const timer = ac ? setTimeout(()=>{ try{ ac.abort(); }catch(e){} }, ms) : null;
   let res;
-  try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store"}); }
-  catch(e){ throw apiError("network","通信できませんでした"); }
-  let j=null; try { j = await res.json(); } catch(e){ throw apiError("network","サーバーの応答が読めませんでした"); }
+  try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store", signal: ac ? ac.signal : undefined}); }
+  catch(e){ clearTimeout(timer); throw apiError("network", (e && e.name==="AbortError") ? "通信が時間切れになりました（電波が弱い）" : "通信できませんでした"); }
+  let j=null; try { j = await res.json(); } catch(e){ clearTimeout(timer); throw apiError("network","サーバーの応答が読めませんでした"); }
+  clearTimeout(timer);
   if (!j || !j.ok) throw apiError((j&&j.error)||"error", (j&&j.message)||"エラーが発生しました");
   return j;
 }
 const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になっています。入り直してください"
-  : e && e.code==="network" ? "通信できませんでした。電波のよい所でもう一度試してください"
+  : e && e.code==="network" ? (/時間切れ/.test(String(e.message||"")) ? "通信が時間切れになりました（電波が弱い）" : "通信できませんでした。電波のよい所でもう一度試してください")
   : (e && e.message) || "エラーが発生しました";
 
 /* 新しいバージョンの検知：index.html の ETag を同期のたびに HEAD で確認し、変わっていたら更新バーを出す
@@ -1814,7 +1826,8 @@ function formDirty(){
     if (clean($("#pzName").value) || clean($("#pzMemo").value)) return true;
     if (num($("#exNet").value)!==0 || clean($("#exMemo").value)) return true;
     if (clean($("#memoIn").value)) return true;
-    if (PHOTOS.length || PHOTO_BUSY) return true;                 // 写真の添付・送信中
+    if (PHOTOS.length) return true;                               // まだ記録に付けていない写真がフォームにある
+    if (PQ.inflight || (!PQ.db && PQ.items.length)) return true;  // 写真を送信中（端末に保存できない環境では送信待ちも）
     if (EDIT) return true;                                         // 記録の修正中
   } catch(e){}
   return false;
@@ -1897,12 +1910,14 @@ const Store = {
     applyPerms();
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+    mergeOutbox();                                  // まだ届いていない記録（送信待ち）を重ねる。届いていたら行列から外す
     overlaySourcing(r.__started||0);               // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
     applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks;
     this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
     render();
     try { refreshRoomsAfterSync(); } catch(e){}
+    pump(true);                                     // つながったので、送信待ちがあれば送る
   },
   paintMode(){
     const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
@@ -1913,6 +1928,7 @@ const Store = {
   loadCache(){
     try{ const raw=localStorage.getItem(CACHE_KEY); if (!raw) return; const r=JSON.parse(raw);
       const d=r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+      mergeOutbox();
       if (Array.isArray(r.staff) && r.staff.length) STAFF.splice(0, STAFF.length, ...r.staff);
       applyRookie();
       ME = r.me||null; if (ME && ME.name && STAFF.includes(ME.name)){ setMe(ME.name); lockStaff(ME.role!=="admin"); }
@@ -1958,6 +1974,7 @@ const Store = {
   },
   async remove(c,id){
     if (API_URL){
+      if (dropQueued(c,id)){ render(); return; }                     // まだ送っていない記録は端末から消すだけ
       if (!this.online()){ toast("いまは削除できません（オフライン）"); return; }
       try { const r = await api("remove", {col:c, id}); const upd={}; (r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
             this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id).map(x=> upd[x.id] || x); render(); }   // 消した記録のあとの訪問は計算し直されて返る
@@ -3393,22 +3410,29 @@ function restorePanel(key){
 /* ===================== 写真添付 =====================
    端末で長辺 1600px の JPEG に縮小してから送る（1枚 300〜600KB）。保存した記録の id に紐づけて Drive へ。
    PHOTOS：まだ送っていない写真（{blob, url}）。送信は報告の保存が成功したあと 1 枚ずつ */
-let PHOTOS = [], PHOTO_BUSY = false, PHOTO_TARGET = null, PHOTO_KIND = "before";   // PHOTO_TARGET：既存の記録に足すときの id
+let PHOTOS = [], PHOTO_TARGET = null, PHOTO_KIND = "before";   // PHOTOS：フォームに付けた、まだ記録に紐づいていない写真。PHOTO_TARGET：既存の記録に足すときの id
 let PHOTO_SKIP = {before:false, after:false};   // 「撮り忘れた」を押した種別。写真 2 枚は保存の必須条件だが、撮り忘れで配置を変えてしまったあとでも記録を残せる逃げ道
 const PHOTO_MAX = 3, PHOTO_EDGE = 1600, PHOTO_Q = 0.82;                             // 種別ごとに 3 枚まで
+const PHOTO_FILE_MAX = 80*1024*1024;                                                 // これ以上の元ファイルは読まない（iPhone のメモリ保護）
 const PHOTO_KINDS = {before:"補充前", after:"補充後"};
 const thumbUrl = fid => `https://drive.google.com/thumbnail?id=${encodeURIComponent(fid)}&sz=w240`;
+/* 一定時間で諦める（画像の読み込み・変換・IndexedDB が返ってこないときに画面を止めない） */
+const withTimeout = (p, ms, msg) => new Promise((ok,ng)=>{ const t=setTimeout(()=>ng(new Error(msg||"時間切れ")), ms); Promise.resolve(p).then(v=>{ clearTimeout(t); ok(v); }, e=>{ clearTimeout(t); ng(e); }); });
 async function shrinkImage(file){
+  if (file && file.size > PHOTO_FILE_MAX) throw new Error("写真のファイルが大きすぎます");
   const url = URL.createObjectURL(file);
+  let img=null, c=null;
   try {
-    const img = await new Promise((ok,ng)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>ng(new Error("読めない画像")); i.src=url; });
-    const w=img.naturalWidth, h=img.naturalHeight, sc=Math.min(1, PHOTO_EDGE/Math.max(w,h));
-    const c=document.createElement("canvas"); c.width=Math.round(w*sc); c.height=Math.round(h*sc);
+    img = await withTimeout(new Promise((ok,ng)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>ng(new Error("読めない画像")); i.src=url; }), 20000, "写真の読み込みに時間がかかりすぎました");
+    try { if (img.decode) await withTimeout(img.decode(), 20000); } catch(e){}   // 大きな写真は先にデコードを終わらせる（描画の瞬間に固まらない）
+    const w=img.naturalWidth, h=img.naturalHeight; if (!w || !h) throw new Error("読めない画像");
+    const sc=Math.min(1, PHOTO_EDGE/Math.max(w,h));
+    c=document.createElement("canvas"); c.width=Math.max(1,Math.round(w*sc)); c.height=Math.max(1,Math.round(h*sc));
     c.getContext("2d").drawImage(img,0,0,c.width,c.height);
-    const blob = await new Promise(ok=>c.toBlob(ok,"image/jpeg",PHOTO_Q));
+    const blob = await withTimeout(new Promise(ok=>c.toBlob(ok,"image/jpeg",PHOTO_Q)), 20000, "写真の変換に時間がかかりすぎました");
     if (!blob) throw new Error("変換できませんでした");
     return blob;
-  } finally { URL.revokeObjectURL(url); }
+  } finally { URL.revokeObjectURL(url); try{ if (c){ c.width=1; c.height=1; } if (img) img.src=""; }catch(e){} }   // メモリをすぐ返す（iPhone Safari は canvas・画像の総量に上限がある）
 }
 const blobToB64 = blob => new Promise((ok,ng)=>{ const r=new FileReader(); r.onload=()=>ok(String(r.result).split(",")[1]||""); r.onerror=()=>ng(new Error("読めませんでした")); r.readAsDataURL(blob); });
 /* 写真の指紋（縮小後 JPEG の SHA-256）。同じ写真を 同じ種別に 2 回付ける・別の機械に付け直す ミスを、送る前に止めるために使う（補充前と補充後が同じ写真なのは可）。
@@ -3417,19 +3441,21 @@ async function photoHash(blob){
   try { if (!(crypto && crypto.subtle)) return ""; const d = await crypto.subtle.digest("SHA-256", await blob.arrayBuffer()); return Array.from(new Uint8Array(d)).map(b=>b.toString(16).padStart(2,"0")).join(""); }
   catch(e){ return ""; }
 }
-/* 同じ指紋の写真が、いま付けている写真か、読み込み済みの記録（自分の端末が持っている分）にあれば、その場所を返す */
-function photoDupOf(h){
+/* 同じ指紋の写真が、いま付けている写真か、送信待ちの写真か、読み込み済みの記録（自分の端末が持っている分）にあれば、その場所を返す */
+function photoDupOf(h, skipRecId){
   if (!h) return null;
   const mine = PHOTOS.find(p=>p.h===h); if (mine) return {where:"form", kind:mine.kind};
-  for (const r of ((Store.data||{}).weekly||[])){ const p=(r.photos||[]).find(x=>x.h===h); if (p) return {where:"rec", rec:r, kind:p.kind||"before"}; }
+  const q = PQ.items.find(i=>i.h===h && i.recId!==skipRecId); if (q){ const r=(Store.data.weekly||[]).find(x=>x.id===q.recId); if (r) return {where:"rec", rec:r, kind:q.kind}; }
+  for (const r of ((Store.data||{}).weekly||[])){ if (r.id===skipRecId) continue; const p=(r.photos||[]).find(x=>x.h===h); if (p) return {where:"rec", rec:r, kind:p.kind||"before"}; }
   return null;
 }
+let PHOTO_READING = false;   // 写真を読み込み・縮小している間（ボタンに出す）
 function renderPhotoRow(){
   applyRookie();   // 記録が増えて新人案内が外れたら、写真ボタンとバッジもそれに合わせる
   Object.keys(PHOTO_KINDS).forEach(k=>{
     const el=document.querySelector(`.photo-row[data-row="${k}"]`); if(!el) return;
     const list=PHOTOS.filter(p=>p.kind===k);
-    el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph ${p.up?"up":""}"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
+    el.innerHTML = list.map(p=>{ const i=PHOTOS.indexOf(p); return `<div class="ph"><img src="${p.url}" alt=""><button type="button" class="x" data-ph="${i}" aria-label="外す">×</button></div>`; }).join("");
     const btn=document.querySelector(`.photo-btn[data-kind="${k}"]`); if (!btn) return;
     btn.dataset.has = list.length ? "1" : "0"; btn.disabled = list.length>=PHOTO_MAX;
     const sk = document.querySelector(`.ph-skip[data-skip="${k}"]`);
@@ -3438,41 +3464,165 @@ function renderPhotoRow(){
     renderGuide();
     const mach = F.machine ? `【${F.machine}】` : "";   // どの機械に付くかを見せる（同じ店で 2 台続けて登録するときの取り違え防止）
     const how = "撮影 または 写真から選ぶ";
-    const sm=btn.querySelector("small"); if (sm) sm.textContent = list.length ? `${mach}${list.length}枚 添付済み${list.length>1?"（2 枚以上は確認が出ます）":"（もう1枚足せる）"}` : (k==="before" ? `${mach}着いてすぐ、機械の正面を1枚（${how}）` : `${mach}補充・入れ替えが終わったら1枚（${how}）`);
+    const sm=btn.querySelector("small"); if (sm) sm.textContent = (PHOTO_READING && PHOTO_KIND===k) ? `${mach}写真を読み込んでいます…` : list.length ? `${mach}${list.length}枚 添付済み${list.length>1?"（2 枚以上は確認が出ます）":"（もう1枚足せる）"}` : (k==="before" ? `${mach}着いてすぐ、機械の正面を1枚（${how}）` : `${mach}補充・入れ替えが終わったら1枚（${how}）`);
   });
 }
-async function addPhotoFiles(files, kind){
-  for (const f of Array.from(files||[])){
-    if (PHOTOS.filter(p=>p.kind===kind).length>=PHOTO_MAX){ toast(`${PHOTO_KINDS[kind]}の写真は ${PHOTO_MAX} 枚まで`); break; }
-    try {
-      const blob = await shrinkImage(f); const h = await photoHash(blob);
-      // 同じ写真が 補充前 と 補充後 に付くのはミスではない（何も変えなかった訪問は同じ写真を上げる運用。2026-11-09 石原さん談）。同じ種別に 2 回だけ止める
-      if (h && PHOTOS.some(p=>p.h===h && p.kind===kind)){ toast(`同じ写真はもう ${PHOTO_KINDS[kind]} に付いています`); continue; }
-      const dup = photoDupOf(h);
-      if (dup && dup.where==="rec"){ toast(`その写真は ${jpDate(dup.rec.week)} ${dup.rec.store}／${dup.rec.machine} の${PHOTO_KINDS[dup.kind]}として保存済みです。別の写真を選んでください`); continue; }
-      PHOTOS.push({blob, url:URL.createObjectURL(blob), up:false, kind, h});
-    }
-    catch(e){ toast("この写真は読めませんでした"); }
-  }
-  renderPhotoRow();
-}
-/* 記録 id に PHOTOS を順に送る。送れた分は記録に反映、送れなかった分は残す（「写真を足す」で送り直せる） */
-async function uploadPhotos(id){
-  if (!PHOTOS.length || !Store.online()) return;
-  PHOTO_BUSY = true; let okN=0;
+async function addPhotoFiles(files, kind, targetId){
+  PHOTO_READING = true; renderPhotoRow();
   try {
-    while (PHOTOS.length){
-      const p = PHOTOS[0]; p.up=true; renderPhotoRow();
+    for (const f of Array.from(files||[])){
+      if (PHOTOS.filter(p=>p.kind===kind).length>=PHOTO_MAX){ toast(`${PHOTO_KINDS[kind]}の写真は ${PHOTO_MAX} 枚まで`); break; }
       try {
-        const data = await blobToB64(p.blob);
-        const r = await api("photo", {id, data, mime:"image/jpeg", kind:p.kind, h:p.h||""});
-        Store.data.weekly = (Store.data.weekly||[]).map(x=> x.id===id ? r.rec : x);
-        URL.revokeObjectURL(p.url); PHOTOS.shift(); okN++; renderPhotoRow();
-      } catch(e){ p.up=false; renderPhotoRow(); toast(`写真を送れませんでした：${errMsg(e)}`); break; }
+        const blob = await shrinkImage(f); const h = await photoHash(blob);
+        // 同じ写真が 補充前 と 補充後 に付くのはミスではない（何も変えなかった訪問は同じ写真を上げる運用。2026-11-09 石原さん談）。同じ種別に 2 回だけ止める
+        if (h && PHOTOS.some(p=>p.h===h && p.kind===kind)){ toast(`同じ写真はもう ${PHOTO_KINDS[kind]} に付いています`); continue; }
+        if (h && targetId && PQ.items.some(i=>i.recId===targetId && i.h===h && i.kind===kind)){ toast(`同じ写真はもう ${PHOTO_KINDS[kind]} に付いています（送信待ち）`); continue; }
+        const dup = photoDupOf(h, targetId);
+        if (dup && dup.where==="rec"){ toast(`その写真は ${jpDate(dup.rec.week)} ${dup.rec.store}／${dup.rec.machine} の${PHOTO_KINDS[dup.kind]}として${dup.rec._queued||PQ.forRec(dup.rec.id).length?"送信待ち":"保存済み"}です。別の写真を選んでください`, 5000); continue; }
+        PHOTOS.push({blob, url:URL.createObjectURL(blob), kind, h});
+      }
+      catch(e){ toast(`この写真は読めませんでした${e && e.message && /大きすぎ|時間/.test(e.message) ? `（${e.message}）` : ""}`, 4000); }
     }
-  } finally { PHOTO_BUSY=false; }
-  if (okN) toast(`写真 ${okN}枚 を保存しました`);
-  renderLogList();
+  } finally { PHOTO_READING = false; renderPhotoRow(); }
+}
+
+/* ===================== 送信待ち（記録と写真） =====================
+   「写真で詰まっても巡回の記録は必ず届く」ための仕組み（2026-11-13）。
+   - 記録：保存を押した瞬間に端末（localStorage の OUTBOX）へ入れ、画面上は「送信待ち」の記録として見せつつ、すぐ送る。
+     送れなければそのまま残し、電波が戻ったら（復帰・画面に戻る・1 分ごとの同期・「いま送る」）自動で送り直す。
+     送り直しても二重にならないよう cid（端末で付けた id）を一緒に送り、サーバーは同じ cid の記録があればそれを返す。
+   - 写真：記録とは別の行列（PQ、IndexedDB に保存）で 1 枚ずつ送る。フォームの PHOTOS は保存した瞬間に空になるので、
+     次の機械の入力・撮影を続けられ、写真が別の機械に付くこともない。1 枚ずつタイムアウト付き。失敗しても記録は届いている。
+   - 送信中・送信待ちはヘッダー下のバー（#sendBar）に出す（入力は止めない）。 */
+const OUTBOX_KEY = "crane-outbox-v1";
+let OUTBOX = [];                                   // [{cid, col, rec, tries, err, at}]
+const qid = cid => "q"+cid;
+function loadOutbox(){ try{ const v=JSON.parse(localStorage.getItem(OUTBOX_KEY)||"[]"); OUTBOX = Array.isArray(v) ? v : []; }catch(e){ OUTBOX=[]; } }
+function saveOutbox(){ try{ localStorage.setItem(OUTBOX_KEY, JSON.stringify(OUTBOX)); }catch(e){} }
+function queuedView(o){ return Object.assign({}, o.rec, {id:qid(o.cid), _queued:true, by:o.rec.by||(ME&&ME.name)||"", staff:o.rec.staff||(ME&&ME.name)||"", sentAt:null}); }
+/* サーバーから読んだ一覧に、まだ届いていない記録を重ねる。cid が一覧にあれば届いているので行列から外す（応答だけ落ちた場合もここで解決） */
+function mergeOutbox(){
+  const col="weekly"; const ws = Store.data[col] = Store.data[col]||[];
+  OUTBOX = OUTBOX.filter(o=>{
+    if (o.col!==col) return true;
+    const hit = ws.find(r=>r.cid && r.cid===o.cid);
+    if (hit){ PQ.rekey(qid(o.cid), hit.id); return false; }
+    return true;
+  });
+  saveOutbox();
+  OUTBOX.forEach(o=>{ if (o.col===col && !ws.some(r=>r.id===qid(o.cid))) ws.push(queuedView(o)); });
+}
+function queueRecord(col, obj){
+  const cid = Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const rec = Object.assign({createdAt:new Date().toISOString(), sentAt:null}, obj, {cid});
+  const o = {cid, col, rec, tries:0, at:Date.now()};
+  OUTBOX.push(o); saveOutbox();
+  const view = queuedView(o);
+  Store.data[col] = (Store.data[col]||[]).concat(view);
+  renderSendBar();
+  return view;
+}
+/* 送信待ちの記録を端末から消す（まだサーバーに無いので通信はいらない）。その記録に付く写真も消す */
+function dropQueued(col, id){
+  const o = OUTBOX.find(x=>x.col===col && qid(x.cid)===id); if (!o) return false;
+  OUTBOX = OUTBOX.filter(x=>x!==o); saveOutbox();
+  Store.data[col] = (Store.data[col]||[]).filter(x=>x.id!==id);
+  PQ.dropRec(id); renderSendBar();
+  toast("送信前だったので、この端末から消しました");
+  return true;
+}
+/* 写真の行列。端末の IndexedDB にも置くので、画面を閉じても消えない（開けない環境ではメモリだけ） */
+const PQ = {
+  items: [], inflight:false, db:null, nextAt:0, fails:0, msg:"", timer:null,
+  async init(){
+    this.db = await withTimeout(new Promise(ok=>{ try{ const rq=indexedDB.open("crane-photo-queue",1); rq.onupgradeneeded=()=>{ try{ rq.result.createObjectStore("q",{keyPath:"key"}); }catch(e){} }; rq.onsuccess=()=>ok(rq.result); rq.onerror=()=>ok(null); rq.onblocked=()=>ok(null); }catch(e){ ok(null); } }), 4000).catch(()=>null);
+    if (!this.db) return;
+    const rows = await withTimeout(new Promise(ok=>{ try{ const rq=this.db.transaction("q").objectStore("q").getAll(); rq.onsuccess=()=>ok(rq.result||[]); rq.onerror=()=>ok([]); }catch(e){ ok([]); } }), 4000).catch(()=>[]);
+    const have = new Set(this.items.map(i=>i.key));
+    rows.forEach(r=>{ if (have.has(r.key) || !r.buf) return; this.items.push({key:r.key, recId:r.recId, kind:r.kind, h:r.h, at:r.at, tries:0, blob:new Blob([r.buf],{type:"image/jpeg"})}); });
+    this.items.sort((a,b)=>(a.at||0)-(b.at||0));
+    this.items.forEach(i=>{ if (/^q/.test(i.recId) && !OUTBOX.some(o=>qid(o.cid)===i.recId)) this.remove(i); });   // 記録のほうが消えていたら写真も捨てる
+  },
+  async put(i){ if (!this.db) return; try{ const buf = await i.blob.arrayBuffer(); this.db.transaction("q","readwrite").objectStore("q").put({key:i.key, recId:i.recId, kind:i.kind, h:i.h, at:i.at, buf}); }catch(e){} },
+  del(key){ if (!this.db) return; try{ this.db.transaction("q","readwrite").objectStore("q").delete(key); }catch(e){} },
+  async add(recId, p){ this.seq=(this.seq||0)+1; const i={key:Date.now().toString(36)+Math.random().toString(36).slice(2,7), recId, kind:p.kind, h:p.h||"", blob:p.blob, at:Date.now()+this.seq/1000, tries:0, url:p.url||""}; this.items.push(i); await this.put(i); return i; },   // at は付けた順（補充前→補充後の順で送る）
+  remove(i){ this.items = this.items.filter(x=>x!==i); this.del(i.key); if (i.url){ try{ URL.revokeObjectURL(i.url); }catch(e){} i.url=""; } },
+  rekey(from, to){ if (from===to) return; this.items.forEach(i=>{ if (i.recId===from){ i.recId=to; this.put(i); } }); },
+  dropRec(recId){ this.items.filter(i=>i.recId===recId).forEach(i=>this.remove(i)); },
+  forRec(recId){ return this.items.filter(i=>i.recId===recId); },
+  urlOf(i){ if (!i.url){ try{ i.url=URL.createObjectURL(i.blob); }catch(e){ i.url=""; } } return i.url; }
+};
+/* フォームの写真（または picked）を記録 recId の送信待ちへ移す。フォームはすぐ空になる */
+function queuePhotos(recId, picked){
+  const list = picked || PHOTOS.slice();
+  if (!picked) PHOTOS = [];
+  list.forEach(p=>{ PQ.add(recId, p); });
+  renderPhotoRow(); renderLogList(); renderSendBar();
+}
+/* 恒久的に失敗する写真（もう付いている・記録が無い・他人の記録）は行列から外す。通信・時間切れ・サーバー混雑は後でもう一度 */
+const PHOTO_ERR_FINAL = /同じ写真|保存済み|記録が見つかりません|のものなので|データがありません|大きすぎます/;
+let PUMP_WANT = false;
+/* 送信待ちを送る：記録（OUTBOX）→ 写真（PQ）の順に 1 件ずつ。同時には 1 本だけ。失敗したら間をあけて（5 秒→10→20→40→80→最長 2 分）自動で再開 */
+async function pump(force){
+  if (!API_URL || !PIN) { renderSendBar(); return; }
+  if (PQ.inflight){ PUMP_WANT = true; return; }
+  if (!OUTBOX.length && !PQ.items.length){ renderSendBar(); return; }
+  if (!force && Date.now() < PQ.nextAt){ schedulePump(); return; }
+  PQ.inflight = true; renderSendBar(); clearTimeout(PQ.timer);
+  let okN = 0, failed = false;
+  try {
+    for (const o of OUTBOX.slice()){
+      if (o.tries>0){                                             // 前に送ったが応答が落ちたかもしれない → 先に一覧を取り直して確かめる
+        await Store.sync(false); if (!OUTBOX.includes(o)) continue;
+      }
+      try {
+        const r = await api("add", {col:o.col, rec:o.rec});
+        OUTBOX = OUTBOX.filter(x=>x!==o); saveOutbox();
+        Store.data[o.col] = (Store.data[o.col]||[]).filter(x=>x.id!==qid(o.cid) && x.id!==r.rec.id).concat(r.rec);
+        PQ.rekey(qid(o.cid), r.rec.id); o.err=""; PQ.fails=0; PQ.msg="";
+        render(); renderSendBar(); setTimeout(applyUpdateIfIdle, 1500);
+      } catch(e){
+        o.tries++; o.err = errMsg(e); saveOutbox();
+        if (e.code==="unauthorized"){ Store.sync(false); }
+        throw e;
+      }
+    }
+    while (PQ.items.length){
+      const it = PQ.items.find(i=>!/^q/.test(i.recId)); if (!it) break;   // 記録がまだ届いていない写真は、記録が届いてから
+      try {
+        const data = await blobToB64(it.blob);
+        const r = await api("photo", {id:it.recId, data, mime:"image/jpeg", kind:it.kind, h:it.h||""}, {timeout:PHOTO_TIMEOUT});
+        if (r.rec) Store.data.weekly = (Store.data.weekly||[]).map(x=> x.id===it.recId ? r.rec : x);
+        PQ.remove(it); okN++; PQ.fails=0; PQ.msg=""; renderLogList(); renderSendBar();
+      } catch(e){
+        if (e.code!=="network" && PHOTO_ERR_FINAL.test(String(e.message||""))){ PQ.remove(it); toast(`写真 1 枚は保存しませんでした：${errMsg(e)}`, 6000); renderLogList(); continue; }
+        it.tries++; throw e;
+      }
+    }
+  } catch(e){
+    failed = true; PQ.fails++; PQ.msg = errMsg(e);
+    PQ.nextAt = Date.now() + Math.min(120000, 5000*Math.pow(2, Math.min(PQ.fails-1, 5)));   // 5 秒 → 10 → 20 → 40 → 80 → 2 分ごと
+  } finally {
+    PQ.inflight = false; renderSendBar(); renderLogList();
+    if (okN) toast(`写真 ${okN}枚 を保存しました`);
+    if (PUMP_WANT && !failed){ PUMP_WANT=false; setTimeout(()=>pump(true), 0); } else { PUMP_WANT=false; schedulePump(); }
+  }
+}
+function schedulePump(){
+  clearTimeout(PQ.timer);
+  if (!OUTBOX.length && !PQ.items.length) return;
+  PQ.timer = setTimeout(()=>pump(true), Math.max(1000, PQ.nextAt - Date.now()));
+}
+function renderSendBar(){
+  const bar=$("#sendBar"); if (!bar) return;
+  const nR=OUTBOX.length, nP=PQ.items.length;
+  if (!nR && !nP){ bar.hidden=true; bar.classList.remove("err"); return; }
+  bar.hidden=false;
+  const what=[nR?`記録 ${nR}件`:"", nP?`写真 ${nP}枚`:""].filter(Boolean).join("・");
+  if (PQ.inflight){ bar.classList.remove("err"); bar.innerHTML=`<span>⏳ 送信中… ${what}<small>入力はそのまま続けられます</small></span>`; return; }
+  bar.classList.toggle("err", PQ.fails>0);
+  bar.innerHTML = `<span>📶 送信待ち：${what}<small>${PQ.fails>0 ? esc(PQ.msg)+"。" : ""}電波が戻ると自動で送ります</small></span><button class="btn pri" id="sendNow">いま送る</button>`;
+  const b=$("#sendNow"); if (b) b.onclick = ()=>{ PQ.nextAt=0; pump(true); };
 }
 /* 写真の自動チェックの結果（サーバーの bootstrap で 写真タブ I〜Q を fid ごとに受け取る）。記録の下に出し、問題があるものは登録者の「⚠ 要確認」にも出す */
 let PHOTO_CHECKS = {};
@@ -3487,10 +3637,11 @@ function photoCheckLine(r){
 function photoThumbs(r){
   const ps = (r.photos||[]).slice().sort((a,b)=>(a.kind==="after")-(b.kind==="after"));
   const mine = canDelete(r) && !r.source;
-  if (!ps.length && !mine) return "";
-  const nOf = k => ps.filter(p=>(p.kind||"before")===k).length;
+  if (!ps.length && !mine && !PQ.forRec(r.id).length) return "";
+  const nOf = k => ps.filter(p=>(p.kind||"before")===k).length + PQ.forRec(r.id).filter(q=>q.kind===k).length;
   const addBtn = k => mine && nOf(k)<PHOTO_MAX ? `<button type="button" class="addph" data-addph="${esc(r.id)}" data-kind="${k}">📷 ${nOf(k)?"＋":""}${PHOTO_KINDS[k]}</button>` : "";
-  return `<div class="phs">${ps.map(p=>`<a href="${esc(p.url)}" target="_blank" rel="noopener" data-k="${p.kind==="after"?"後":"前"}"><img src="${thumbUrl(p.fid)}" alt="" loading="lazy"></a>`).join("")}${addBtn("before")}${addBtn("after")}</div>`;
+  const qs = PQ.forRec(r.id);   // まだ送れていない写真（送信待ち）
+  return `<div class="phs">${ps.map(p=>`<a href="${esc(p.url)}" target="_blank" rel="noopener" data-k="${p.kind==="after"?"後":"前"}"><img src="${thumbUrl(p.fid)}" alt="" loading="lazy"></a>`).join("")}${qs.map(q=>`<span class="ph qd" data-k="${q.kind==="after"?"後":"前"}" title="送信待ち"><img src="${PQ.urlOf(q)}" alt=""></span>`).join("")}${addBtn("before")}${addBtn("after")}</div>`;
 }
 
 /* クレーン演出は撤去（保存の流れはそのまま） */
@@ -3836,12 +3987,21 @@ async function saveLog(){
     $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
     F.machine=""; R=null; builtFor=""; setWeek(iso(new Date())); setWhenOpen(false);
     renderEditBar(); renderMachineRow(); buildRooms(true); render();
-    if (PHOTOS.length) await uploadPhotos(id);
+    if (PHOTOS.length) queuePhotos(id);
     return;
   }
   const before = new Set((Store.data.weekly||[]).map(x=>x.id));
   const savedKey = draftKey(), savedMachine = F.machine;
-  if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
+  let added = null;
+  if (API_URL){
+    // 記録はまず端末の送信待ちに入れて（この時点で失わない）、すぐ送る。電波が弱くて送れなくても入力は続けられ、あとで自動で送る。
+    // 写真は記録とは別の行列で 1 枚ずつ送るので、写真で詰まっても記録は止まらない
+    if (!PIN){ toast("PIN を入れ直してください"); btn.disabled=false; showGate(""); return; }
+    added = queueRecord("weekly", rec);
+  } else {
+    if (!(await Store.add("weekly", rec))){ btn.disabled=false; return; }
+    added = (Store.data.weekly||[]).find(x=>!before.has(x.id));
+  }
   playCatch();
   clearDraft(savedKey);
   $("#memoIn").value=""; $("#timeIn").value=""; paysTouched=false; costTouched=false; $("#manualBox").hidden=true;
@@ -3853,8 +4013,8 @@ async function saveLog(){
   toast(next ? `GET! ${yen(t.sales)}円 を記録。次は ${next}` : `GET! ${yen(t.sales)}円 を記録。${F.store} は全台 完了`);
   setWhenOpen(false);
   renderMachineRow(); buildRooms(true); render();
-  const added = (Store.data.weekly||[]).find(x=>!before.has(x.id) && !x._local);
-  if (added && PHOTOS.length) await uploadPhotos(added.id);
+  if (added && PHOTOS.length) queuePhotos(added.id);   // フォームの写真を記録の送信待ちへ移す（フォームはすぐ次の機械に使える）
+  pump(true);                                           // 記録 → 写真 の順に送る（待たない）
 }
 /* 訪問日時の欄を開く／閉じる */
 function setWhenOpen(on){
@@ -3878,7 +4038,7 @@ function renderEditBar(){
 }
 function startEdit(id){
   const r=(Store.data.weekly||[]).find(x=>x.id===id); if(!r || !canDelete(r)) return;
-  if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }
+  if (r._queued){ toast("この記録はまだ送信待ちです。送信が終わってから直せます（上の「いま送る」か、電波のある所で）", 5000); return; }
   EDIT = {id:r.id, createdAt:r.createdAt||""};
   F.store=r.store||""; F.machine=r.machine||""; builtFor="";
   setWeek(r.week);                                   // 店舗・機械・日付でフォームを作り直す
@@ -4150,7 +4310,7 @@ function renderLogList(){
         <div style="margin-top:6px;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           ${editBtn(r)}
           <span class="pill ${ratio===null?"flat":stt}">原価率 ${ratio===null?"—":pct(ratio,1)}</span>${r.editedAt?`<span class="tag">修正済</span>`:""}
-          ${r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
+          ${r._queued?`<span class="tag todo">📶 送信待ち（電波が戻ると自動で送ります）</span>`:r.source==="sheet"?`<span class="tag sent">📗 シートから取り込み</span>`:`<span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>`}
         </div>
       </div>
       ${r.source==="sheet"?"":delBtn("weekly",r)}
@@ -5688,7 +5848,7 @@ function wire(){
   $("#photoIn").onchange = async e => {
     const files = Array.from(e.target.files||[]); e.target.value="";   // value を消すと FileList も空になるので先に複製
     const kind = PHOTO_KIND;
-    if (PHOTO_TARGET){ const id=PHOTO_TARGET; PHOTO_TARGET=null; const keep=PHOTOS; PHOTOS=[]; await addPhotoFiles(files, kind); await uploadPhotos(id); PHOTOS=keep.concat(PHOTOS); renderPhotoRow(); return; }
+    if (PHOTO_TARGET){ const id=PHOTO_TARGET; PHOTO_TARGET=null; const keep=PHOTOS; PHOTOS=[]; await addPhotoFiles(files, kind, id); const picked=PHOTOS; PHOTOS=keep; renderPhotoRow(); queuePhotos(id, picked); pump(true); return; }
     await addPhotoFiles(files, kind);
   };
   $$(".photo-row[data-row]").forEach(el=>el.onclick = e => { const b=e.target.closest("[data-ph]"); if(!b) return; const p=PHOTOS.splice(+b.dataset.ph,1)[0]; if(p) URL.revokeObjectURL(p.url); renderPhotoRow(); });
@@ -5717,7 +5877,6 @@ function wire(){
   $$(".ph-skip").forEach(b=>b.onclick = () => { const k=b.dataset.skip; PHOTO_SKIP[k]=!PHOTO_SKIP[k]; if (PHOTO_SKIP[k]) GUIDE.skip[k]=true; renderPhotoRow(); toast(PHOTO_SKIP[k] ? `${PHOTO_KINDS[k]}の写真は「撮り忘れ」として記録します` : "取り消しました"); });
   document.addEventListener("click", e=>{
     const b=e.target.closest("[data-addph]"); if(!b) return;
-    if (PHOTO_BUSY){ toast("写真を送信中です。少し待ってください"); return; }
     PHOTO_TARGET=b.dataset.addph; PHOTO_KIND=b.dataset.kind||"before"; $("#photoIn").click();
   });
 
@@ -5819,8 +5978,12 @@ setWeek(iso(new Date()));
 updateReadouts();
 updatePzGauge();
 render();
+loadOutbox();
 Store.init().then(render);
-if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store};   // ローカル検証用
+PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
+window.addEventListener("online", ()=>pump(true));
+if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit,
+  get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
 
 
 })();
