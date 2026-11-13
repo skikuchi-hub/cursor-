@@ -472,6 +472,7 @@ body.gbar-on #p-log{padding-bottom:72px}
 .empty{padding:26px 16px;text-align:center;color:var(--ink-3);font-size:12.5px;line-height:1.7}
 .empty b{display:block;font-size:26px;margin-bottom:6px;opacity:.5}
 .tblwrap{overflow-x:auto}
+#sumTbl.profit-off th:nth-child(n+8),#sumTbl.profit-off td:nth-child(n+8){display:none}   /* 人件費・粗利・粗利率の列（粗利タイルと同じ条件で出す） */
 table{border-collapse:collapse;width:100%;font-size:12px}
 th,td{padding:7px 9px;text-align:right;white-space:nowrap;border-bottom:1px solid var(--line)}
 th{font-size:10px;letter-spacing:.06em;color:var(--ink-3);font-weight:700;text-align:right;background:var(--surface-2)}
@@ -1488,8 +1489,8 @@ body{font-variant-numeric:tabular-nums}
         <details class="gq-details">
           <summary>📈 うりあげの きろく（グラフ）</summary>
           <div class="card" style="padding:12px 13px;margin-top:10px">
-            <span class="lbl">見る月</span>
             <div class="field" id="dashWhoField" hidden style="margin-bottom:8px"><span class="lbl">だれの記録</span><div class="chips scroll" id="dashWhoRow"></div></div>
+            <span class="lbl">見る月</span>
             <div class="chips scroll" id="monthRow"></div>
             <div id="demoBar"></div>
           </div>
@@ -4421,9 +4422,13 @@ function buildDemo(){
   return DEMO;
 }
 const demoOn = () => demoWanted && Store.data.weekly.length===0 && Store.data.expenses.length===0;
-/* うりあげのきろく：ふつうは見ている人の分だけ。管理者が自分のタブを見ているときは「全員／スタッフごと」を選べる */
+/* うりあげのきろく：この欄だけは、誰が見ても全員の記録を集計し「全員／スタッフごと」を選べる
+   （2026-11-13 菊地さん「石原さんの表示をおれと同じように」。成果一覧・報酬など他の欄は従来どおり本人分だけ）。
+   粗利（人件費・経費込み）だけは dashProfitOn で別管理 */
 let dashScope = "all";
-const dashRows = rows => (typeof adminView==="function" && adminView())
+const dashWide = () => true;                                           // false に戻すと、管理者以外は従来どおり自分の記録だけ
+const dashProfitOn = () => (typeof adminView==="function" && adminView());   // 粗利タイル・サマリーの人件費/粗利列を出す条件（ここ 1 か所で切替）
+const dashRows = rows => (dashWide() || (typeof adminView==="function" && adminView()))
   ? (dashScope==="all" ? (rows||[]) : (rows||[]).filter(r=>staffOf(r)===dashScope))
   : mine(rows);
 const activeWeekly   = () => demoOn() ? buildDemo().weekly   : dashRows(Store.data.weekly);
@@ -4446,7 +4451,7 @@ function agg(rows){
 function renderDash(){
   const whoField=$("#dashWhoField");
   if (whoField){
-    const on = (typeof adminView==="function" && adminView());
+    const on = dashWide() || (typeof adminView==="function" && adminView());
     whoField.hidden = !on;
     if (on){
       const opts=["全員"].concat(STAFF);
@@ -4478,7 +4483,7 @@ function renderDash(){
   const exMonthAll = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
   const laborM = laborOf(rows);                                          // 人件費＝店舗巡回 × 担当ごとの単価
   const grossM = a.gross - exMonthAll - laborM;                          // 粗利 ＝ 売上 − 景品原価 − 場所代 − 経費 − 人件費
-  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !adminView(); }   // 粗利は管理者だけ（プールの率を逆算されないように）
+  { const tp=$("#tProfitTile"); if (tp) tp.hidden = !dashProfitOn(); }   // 粗利（人件費・経費込み）は dashProfitOn のときだけ（石原さんにも出すかは菊地さん確認中 2026-11-13）
   $("#tProfit").textContent = yen(grossM);
   const gp=$("#tProfitPill");
   gp.className="pill "+(a.sales===0?"flat":grossM>0?"ok":"bad");
@@ -4623,6 +4628,7 @@ function drawCostTrend(){
 function drawSummary(rows){
   $("#sumMonth").textContent = jpMonth(selMonth);
   const tb = $("#sumTbl tbody"); if (!tb) return;
+  { const t=$("#sumTbl"); if (t) t.classList.toggle("profit-off", !dashProfitOn()); }   // 人件費・粗利・粗利率の列は粗利タイルと同じ条件で出す
   // 経費（経費台帳の日付がその月のもの）。店舗ごと＋「共通」（店舗が無い・その他）
   const exRows = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth);
   const exOf = store => exRows.filter(x=>x.store===store).reduce((a,x)=>a+num(x.net),0);
