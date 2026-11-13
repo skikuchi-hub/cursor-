@@ -1658,6 +1658,8 @@ const BOSS_MONTHS = 5;
 const FULL_MONTH_GRACE = 7;
 function firstRecordDay(s){ let f=""; (Store.data.weekly||[]).forEach(r=>{ if (r.store===s.n && r.week && (!f || r.week<f)) f=r.week; }); return f; }
 function isFullMonth(s, m){ const f=firstRecordDay(s); if (!f) return false; const fm=monthOf(f); return fm<m || (fm===m && +f.slice(8,10)<=FULL_MONTH_GRACE); }
+/* その月に記録のある店が全部「まる 1 か月」か（バッジ「前月超え」の月どうしの比較に使う。部分月の店が 1 つでもあればその月は比べない） */
+function isFullMonthAll(m){ const seen=new Set((Store.data.weekly||[]).filter(r=>monthOf(r.week)===m).map(r=>r.store)); return Array.from(seen).every(n=>{ const s=storeOf(n); return !s || isFullMonth(s, m); }); }
 function bossHp(s, mon){
   const byM={}; (Store.data.weekly||[]).forEach(r=>{ if (r.store!==s.n) return; const m=monthOf(r.week); if (!m || m>=mon) return; byM[m]=(byM[m]||0)+salesOfRec(r); });
   const ours = Object.keys(byM).sort().filter(m=>byM[m]>0 && isFullMonth(s, m)).map(m=>byM[m]);
@@ -4497,11 +4499,16 @@ function renderDash(){
   const rows = activeWeekly().filter(r=>monthOf(r.week)===selMonth);
   const a = agg(rows);
   $("#tSales").innerHTML = yen(a.sales)+'<small> 円</small>';
-  const withBench = STORES.filter(s=>s.bench);
+  // 引継ぎ前との比較は「その月をまる 1 か月運営した店」だけ（月の途中から始めた月は比べない。2026-11-13 菊地さん）
+  const withBench = STORES.filter(s=>s.bench && isFullMonth(s, selMonth));
+  const partialN = STORES.filter(s=>s.bench && !isFullMonth(s, selMonth) && rows.some(r=>r.store===s.n)).length;
   const benchTotal = withBench.reduce((x,st)=>x+benchAvg(st),0);
   const nowSame = rows.filter(r=>withBench.some(s=>s.n===r.store)).reduce((x,r)=>x+num(r.plays)*PLAY_PRICE,0);
+  const cmp = withBench.length
+    ? `引継ぎ前実績がある${withBench.length}店で比べると <b>${pct(nowSame/benchTotal,0)}</b>（${yen(benchTotal)}円 → ${yen(nowSame)}円）${partialN?`。月の途中から始めた ${partialN}店は比べない`:""}`
+    : `月の途中から始めた月なので、引継ぎ前との比較は出しません`;
   $("#tSalesSub").innerHTML = a.sales>0
-    ? `${a.plays.toLocaleString()}プレイ・${a.n}件のログ　／　引継ぎ前実績がある${withBench.length}店で比べると <b>${pct(nowSame/benchTotal,0)}</b>（${yen(benchTotal)}円 → ${yen(nowSame)}円）`
+    ? `${a.plays.toLocaleString()}プレイ・${a.n}件のログ　／　${cmp}`
     : `${jpMonth(selMonth)}のログはまだありません。入力すると、ここが埋まります。`;
   if (demoOn()) $("#tSalesSub").innerHTML = "サンプルの数字です。入力を始めると本物に変わります。";
   const exMonthAll = expCountedRows(activeExpenses()).filter(x=>(x.date||"").slice(0,7)===selMonth).reduce((s,x)=>s+num(x.net),0);
@@ -4528,7 +4535,7 @@ function renderDash(){
 function drawBench(rows){
   const per = STORES.map(s=>{
     const now = rows.filter(r=>r.store===s.n).reduce((x,r)=>x+num(r.plays)*PLAY_PRICE,0);
-    return {s, now, bench:benchAvg(s)};
+    return {s, now, bench:benchAvg(s), partial: now>0 && !isFullMonth(s, selMonth)};   // partial＝月の途中から始めた月（比べない）
   });
   const max = Math.max(1, ...per.map(p=>Math.max(p.now, p.bench||0)));
   const BW = 168, X0 = 4, H = 60;
@@ -4536,7 +4543,7 @@ function drawBench(rows){
     const y = i*H + 14;
     const wB = p.bench ? Math.max(2, p.bench/max*BW) : 0;
     const wN = p.now   ? Math.max(2, p.now/max*BW)   : 0;
-    const over = p.bench && p.now > p.bench;
+    const over = p.bench && !p.partial && p.now > p.bench;
     return `
       <text x="${X0}" y="${y}" font-size="11" font-weight="700" fill="var(--ink)">${esc(p.s.n)}</text>
       ${p.bench ? `<rect x="${X0}" y="${y+6}" width="${wB}" height="8" rx="4" fill="var(--bench)"/>
@@ -4544,7 +4551,7 @@ function drawBench(rows){
       : `<text x="${X0}" y="${y+13}" font-size="9.5" fill="var(--ink-3)">引継ぎ前データなし</text>`}
       <rect x="${X0}" y="${y+18}" width="${wN}" height="11" rx="5" fill="${storeColor(p.s.n)}"/>
       ${p.now>0
-        ? `<text x="${X0+wN+6}" y="${y+27}" font-size="10" font-weight="700" fill="var(--ink)" class="mn">${yen(p.now)}${over?" 🏆":""}</text>`
+        ? `<text x="${X0+wN+6}" y="${y+27}" font-size="10" font-weight="700" fill="var(--ink)" class="mn">${yen(p.now)}${over?" 🏆":""}${p.partial?`<tspan font-size="9" font-weight="400" fill="var(--ink-3)"> ${jpDate(firstRecordDay(p.s))}から・比べない</tspan>`:""}</text>`
         : `<text x="${X0}" y="${y+27}" font-size="9.5" fill="var(--ink-3)">まだ入力なし</text>`}
       ${p.bench ? `<line x1="${X0+wB}" y1="${y+4}" x2="${X0+wB}" y2="${y+31}" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="2 2"/>`:""}
     `;
@@ -5511,9 +5518,9 @@ function badgeList(W, L, g, monthN){
   W.forEach(r=>{ const m=monthOf(r.week); if(!m) return;
     const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r);
     byM[m] = byM[m] || {sales:0,cost:0}; byM[m].sales += salesOf(r); byM[m].cost += num(r.cost); });
-  // 前月超え：全店合計の月売上が、前の月（売上あり）を上回った月がある
+  // 前月超え：全店合計の月売上が、前の月（売上あり）を上回った月がある。月の途中から始めた店がある月は、どちら側でも比べない（2026-11-13 菊地さん）
   const months = Object.keys(byM).sort();
-  const beatPrev = months.some((m,i)=>{ if (i===0) return false; const pv=byM[months[i-1]]; return pv.sales>0 && byM[m].sales>pv.sales && addMonth(months[i-1])===m; });
+  const beatPrev = months.some((m,i)=>{ if (i===0) return false; const pm=months[i-1], pv=byM[pm]; return pv.sales>0 && byM[m].sales>pv.sales && addMonth(pm)===m && isFullMonthAll(pm) && isFullMonthAll(m); });
   const store150k = Object.values(bySM).some(v=>v>150000);
   // 2店舗で25万：同じ月の上位2店舗の売上合計が 25万円を超えた
   const top2={}; Object.keys(bySM).forEach(k=>{ const m=k.split("|")[1]; (top2[m]=top2[m]||[]).push(bySM[k]); });
