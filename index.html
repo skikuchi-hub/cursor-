@@ -1002,12 +1002,12 @@ body{font-variant-numeric:tabular-nums}
 .gq-labi .srow.best .sn{color:#f5c542}
 /* 景品人気ランキング（店舗ごと 1〜4 位） */
 .gq-labi .rank{display:flex;flex-direction:column;gap:4px;margin-top:6px}
-.gq-labi .rkrow{display:flex;align-items:center;gap:8px;font-size:13px;color:#eef3fb}
+.gq-labi .rkrow{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#eef3fb}
 .gq-labi .rkrow .rk{flex:none;width:36px;font-weight:900;color:#a8b8d4;font-variant-numeric:tabular-nums}
 .gq-labi .rkrow:first-child .rk{color:#f5c542;font-size:15px}
-.gq-labi .rkrow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.gq-labi .rkrow .nm{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere;word-break:break-all;line-height:1.35;font-weight:700}   /* 名前は見切らず折り返す（2026-11-14 菊地さん） */
 .gq-labi .rkrow:first-child .nm{color:#f5c542}
-.gq-labi .rkrow .ct{flex:none;font-size:11px;color:#a8b8d4;font-variant-numeric:tabular-nums}
+.gq-labi .rkrow .ct{flex:none;font-size:11px;color:#a8b8d4;font-variant-numeric:tabular-nums;white-space:nowrap;padding-top:2px}
 .gq-labi .srow.best .gq-bar i{background:linear-gradient(#ffe08a,#e4a900)}
 .gq-labi .srow .v{width:92px;flex:none;text-align:right;font-family:var(--fs-mono);font-variant-numeric:tabular-nums}
 .gq-gym{display:flex;align-items:center;gap:10px;background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:7px 10px}
@@ -5394,10 +5394,10 @@ function renderLab(){
       const arr=(byStore[s.n]||[]).slice().sort((a,b)=>b.plays-a.plays || b.pays-a.pays).slice(0,4);
       if (!arr.length) return `<div class="gq-labi"><div class="hd"><b>${esc(s.n)}</b><span class="tag">データなし</span></div><div class="act">4人機のカウンターを 2 回以上入れると、ランキングが出ます。</div></div>`;
       return `<div class="gq-labi good"><div class="hd"><b>${esc(s.n)}</b><span class="tag">人気ランキング</span></div>
-        <div class="rank">${arr.map((x,i)=>`<div class="rkrow"><span class="rk">${i+1}位</span><span class="nm">${esc(x.prize)}</span><span class="ct">課金 ${yen(x.plays)}回</span></div>`).join("")}</div></div>`;
+        <div class="rank">${arr.map((x,i)=>`<div class="rkrow"><span class="rk">${i+1}位</span><span class="nm">${esc(x.prize)}</span><span class="ct">プレイ数 ${yen(x.plays)}回</span></div>`).join("")}</div></div>`;
     }).join("");
     $("#gqLabSub").textContent = "4人機・店舗ごと 1〜4位";
-    note = `店舗ごとに、その景品の部屋で<b style="color:#f5c542">課金された回数</b>（4人機のカウンター差の累計）が多い順。BOX 機は入らない。`;
+    note = `店舗ごとに、その景品の部屋の<b style="color:#f5c542">プレイ数</b>（4人機のカウンター差の累計）が多い順。BOX 機は入らない。`;
   } else if (labTab==="pos"){
     const ms=posAgg();
     html = ms.map(m=>{
