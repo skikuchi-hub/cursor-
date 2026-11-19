@@ -23,25 +23,26 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-19a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-19b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
   return out({ ok: true, service: "crane-nippo-api", version: 2, build: CODE_BUILD,
                loader: viaLoader ? LOADER_BUILD : "", codeSource: viaLoader ? (p.codeSource || "") : "pasted", codeFetchedAt: viaLoader ? (p.codeFetchedAt || "") : "",
                codeError: viaLoader ? (p.codeError || "") : "",
+               photoTrigger: p.photoTrigger || "", photoChecksAt: p.photoChecksAt ? Utilities.formatDate(new Date(num(p.photoChecksAt)), TZ, "yyyy-MM-dd'T'HH:mm:ssXXX") : "",   // 10 分トリガーが入っているか・最後に動いた時刻（クラウド側から確認する用。2026-11-19）
                deployedAt: viaLoader ? "" : (p.deployedAt || ""), deployedVersion: viaLoader ? "" : (p.deployedVersion || ""), selfUpdateLast: viaLoader ? "" : (p.selfUpdateLast || ""), time: nowIso() });
 }
 
 function doPost(e) {
-  var req = {};
+  var t0 = Date.now(), req = {};
   try { req = JSON.parse((e && e.postData && e.postData.contents) || "{}"); }
   catch (err) { return out({ ok: false, error: "bad_request", message: "JSONが読めません" }); }
   try {
     var me = auth(req.pin);
     if (!me) return out({ ok: false, error: "unauthorized", message: "PINが違います" });
     switch (String(req.action || "")) {
-      case "bootstrap": return out(Object.assign({ ok: true }, bootstrap(me)));
+      case "bootstrap": return out(Object.assign({ ok: true }, bootstrap(me), { took: Date.now() - t0 }));   // took＝サーバー内でかかった時間（ms）。アプリの window.__dbg.NET で見える
       case "add":    return out(withLock(function () { return addDoc(me, req.col, req.rec); }));
       case "patch":  return out(withLock(function () { return patchDoc(me, req.col, req.id, req.obj); }));
       case "remove": return out(withLock(function () { return removeDoc(me, req.col, req.id); }));
@@ -95,7 +96,9 @@ function randomPin() {
   for (var i = 0; i < 6; i++) s += Math.floor(Math.random() * 10);
   return s;
 }
+var STAFF_ROWS_ = null;   // 1 回の実行の中では 1 度だけ読む（auth と bootstrap の staffNames で 2 回読んでいた。2026-11-19）
 function staffRows() {
+  if (STAFF_ROWS_) return STAFF_ROWS_;
   var sh = ensureStaffSheet();
   var last = sh.getLastRow();
   if (last < 2) return [];
@@ -111,6 +114,7 @@ function staffRows() {
     var role = clean(r[2]) === "管理者" ? "admin" : "staff";
     rows.push({ name: name, pin: pin, role: role, active: yes(r[3]), sourcing: role === "admin" || (sc >= 0 && yes(r[sc])) });
   });
+  STAFF_ROWS_ = rows;
   return rows;
 }
 /* スタッフタブに「仕入れ」列（F）を足す。管理者と石原さんに初期チェック。再実行しても安全 */
@@ -429,9 +433,8 @@ function putDoc(me, col, id, obj) {
 
 /* ===================== 起動時にアプリへ渡すもの ===================== */
 function bootstrap(me) {
-  if (!PropertiesService.getScriptProperties().getProperty("photoTrigger")) {   // 10分ごとのトリガーが無いときだけ、起動時に取り込む（遅くなるので setup でトリガーを入れる）
-    try { importPhotoChecksIfDue(); } catch (e) { Logger.log("importPhotoChecks: " + e); }
-  }
+  // 2026-11-19（依頼⑪）：以前は 10 分トリガーが無いとき（ScriptProperties photoTrigger 無し）に、ここで importPhotoChecks（写真チェックの取り込み＋一度だけ処理＋在庫の作り直し＋必要指標）を
+  // 起動の中で動かしていた。利用者の起動が数十秒〜数分止まる原因になるので、起動の中では重い処理をいっさいしない。取り込みは 10 分トリガー（setup／installTriggers）だけで行う。
   return {
     me: me,
     staff: staffNames(),

@@ -1055,6 +1055,11 @@ body{font-variant-numeric:tabular-nums}
 .sendbar .btn{white-space:nowrap;flex:none}
 .sendbar small{display:block;font-weight:600;opacity:.85;margin-top:2px}
 .sendbar.err{background:var(--rose-wash);color:var(--critical-ink)}
+/* 通信の状態バー（起動の読み込み中・サーバーにつながらないときだけ。2026-11-19 依頼⑪） */
+.netbar{background:var(--sky-wash);color:var(--sky-ink)}
+.netbar.err{background:var(--rose-wash);color:var(--critical-ink)}
+.netbar small{display:block;font-weight:600;opacity:.85;margin-top:2px}
+.netbar .btn{white-space:nowrap;flex:none}
 .phs .ph.qd{width:44px;height:44px;border-radius:8px}
 .phs .ph.qd::after{content:"待ち";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,32,58,.5);color:#fff;font-size:10px;font-weight:700}
 /* 補充候補の印：当たり（全店）／在庫多め */
@@ -1092,6 +1097,7 @@ body{font-variant-numeric:tabular-nums}
   </header>
   <div class="updbar" id="updBar" hidden><span>新しいバージョンがあります</span><button class="btn pri" id="updGo">更新する</button></div>
   <div class="updbar sendbar" id="sendBar" hidden></div>
+  <div class="updbar netbar" id="netBar" hidden></div>
 
   <main>
     <!-- ========================= 巡回ログ入力 ========================= -->
@@ -1796,22 +1802,32 @@ const PIN_KEY = "crane-lab-pin", CACHE_KEY = "crane-lab-cache-v1";
 let PIN = ""; try{ PIN = localStorage.getItem(PIN_KEY)||""; }catch(e){}
 function apiError(code,msg){ const e=new Error(msg||code); e.code=code; return e; }
 const API_TIMEOUT = num(CFG.timeout)||30000, PHOTO_TIMEOUT = num(CFG.photoTimeout)||60000;   // 電波が弱いと fetch が何分も返ってこないことがある（iPhone）。時間切れで打ち切り、送信待ちの仕組みがあとで送り直す
+/* 起動の bootstrap（全記録＋景品マスタをまとめて取り込む）だけは長く待つ。2026-11-19 依頼⑪：30 秒で打ち切ると、サーバーの応答が遅い朝などに
+   「オフライン」のまま一度もオンラインにならず、キャッシュの無い端末は何も表示できなかった。待っている間は前回の内容で使える（下の Store.sync） */
+const BOOT_TIMEOUT = num(CFG.bootTimeout)||120000;
+/* 通信の記録（最後の失敗・直近の呼び出し）。ヘッダーの保存先の説明（長押し/ホバー）と window.__dbg.NET で見える */
+const NET = { lastErr:"", lastErrAt:0, lastOkAt:0, fails:0, retryT:null, uiErr:"", bootMs:0, bootBytes:0, log:[],
+  note(action, t0, bytes, err){ const e={action, ms:Date.now()-t0, bytes, err, at:new Date().toISOString()}; this.log.push(e); if (this.log.length>20) this.log.shift(); if (action==="bootstrap" && !err){ this.bootMs=e.ms; this.bootBytes=bytes; } } };
 async function api(action, payload, opt){
   if (!API_URL) throw apiError("no_api","APIが設定されていません");
   const body = JSON.stringify(Object.assign({action, pin:PIN}, payload||{}));
   const ms = (opt && opt.timeout) || API_TIMEOUT;
   const ac = (typeof AbortController!=="undefined") ? new AbortController() : null;
   const timer = ac ? setTimeout(()=>{ try{ ac.abort(); }catch(e){} }, ms) : null;
+  const t0 = Date.now(), timeoutMsg = `通信が時間切れになりました（${Math.round(ms/1000)} 秒・電波が弱い）`;
   let res;
   try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store", signal: ac ? ac.signal : undefined}); }
-  catch(e){ clearTimeout(timer); throw apiError("network", (e && e.name==="AbortError") ? "通信が時間切れになりました（電波が弱い）" : "通信できませんでした"); }
-  let j=null; try { j = await res.json(); } catch(e){ clearTimeout(timer); throw apiError("network","サーバーの応答が読めませんでした"); }
+  catch(e){ clearTimeout(timer); const to = e && e.name==="AbortError"; NET.note(action, t0, 0, to ? "timeout" : "fetch"); throw apiError("network", to ? timeoutMsg : "通信できませんでした"); }
+  let j=null, txt="";
+  try { txt = await res.text(); j = JSON.parse(txt); }          // 本文の受信中に時間切れになることもある（応答が大きいとき）
+  catch(e){ clearTimeout(timer); const to = e && e.name==="AbortError"; NET.note(action, t0, txt.length, to ? "timeout" : "parse"); throw apiError("network", to ? timeoutMsg : `サーバーの応答が読めませんでした${res.ok ? "" : `（HTTP ${res.status}）`}`); }
   clearTimeout(timer);
+  NET.note(action, t0, txt.length, (j && j.ok) ? "" : String((j&&j.error)||"error"));
   if (!j || !j.ok) throw apiError((j&&j.error)||"error", (j&&j.message)||"エラーが発生しました");
   return j;
 }
 const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になっています。入り直してください"
-  : e && e.code==="network" ? (/時間切れ/.test(String(e.message||"")) ? "通信が時間切れになりました（電波が弱い）" : "通信できませんでした。電波のよい所でもう一度試してください")
+  : e && e.code==="network" ? (/時間切れ/.test(String(e.message||"")) ? String(e.message) : "通信できませんでした。電波のよい所でもう一度試してください")   // 時間切れは何秒で切ったかも出す（2026-11-19）
   : (e && e.message) || "エラーが発生しました";
 
 /* 新しいバージョンの検知：index.html の ETag を同期のたびに HEAD で確認し、変わっていたら更新バーを出す
@@ -1854,18 +1870,27 @@ function showGate(msg){
   setTimeout(()=>{ try{ $("#gatePin").focus(); }catch(e){} }, 50);
 }
 function hideGate(){ const g=$("#gate"); if (g) g.hidden=true; }
-async function submitGate(){
+let GATE_TRY = 0;                                                  // 通信の失敗で自動でやり直した回数
+async function submitGate(auto){
+  const n = (typeof auto==="number") ? auto : 0;
   const v = clean($("#gatePin").value);
   if (!v){ $("#gateErr").textContent="PINを入れてください"; return; }
-  const btn=$("#gateGo"); btn.disabled=true; $("#gateErr").textContent="確認中…";
+  const btn=$("#gateGo"); btn.disabled=true;
+  $("#gateErr").textContent = n ? `確認中…（${n+1} 回目。サーバーの応答を待っています）` : "確認中…（記録を読み込んでいます。初回は 1〜2 分かかることがあります）";
   PIN = v;
   try {
-    const r = await api("bootstrap");
+    const r = await api("bootstrap", null, {timeout:BOOT_TIMEOUT});
     try{ localStorage.setItem(PIN_KEY, PIN); }catch(e){}
-    Store.applyBootstrap(r); hideGate(); toast(`ようこそ、${ME.name}さん`);
+    GATE_TRY = 0; hideGate(); Store.applyBootstrap(r); toast(`ようこそ、${ME.name}さん`);
   } catch(e){
     PIN = "";
-    $("#gateErr").textContent = e.code==="unauthorized" ? "PINが違います" : errMsg(e);
+    if (e.code==="unauthorized"){ GATE_TRY = 0; $("#gateErr").textContent = "PINが違います"; }
+    else {
+      // 通信の失敗（時間切れ・電波なし・サーバーの混雑）では入力を消さず、5 秒おきに自動でやり直す（最大 5 回）。2026-11-19 依頼⑪
+      GATE_TRY = n+1;
+      $("#gateErr").textContent = errMsg(e) + (GATE_TRY<=5 ? "。自動でもう一度試します…" : "。「はじめる」をもう一度押してください");
+      if (GATE_TRY<=5) setTimeout(()=>{ const g=$("#gate"); if (g && !g.hidden && clean($("#gatePin").value)===v && !PIN) submitGate(GATE_TRY); }, 5000);
+    }
   } finally { btn.disabled=false; }
 }
 function signOut(){
@@ -1883,9 +1908,11 @@ const Store = {
       this.mode="local"; this.loadLocal(); this.paintMode(); return;
     }
     this.canWrite = true;
-    this.loadCache();                               // 前回の内容で先に描く
+    this.loadCache();                               // 前回の内容で先に描く（読み込みを待たずに使える）
+    if (this.mode==="local") this.mode="offline";   // キャッシュが無い端末でも「API未設定」ではなく「読み込み中…」と出す
+    this.loading = !!PIN;                           // 起動の読み込み中（「⏳ 読み込み中…」のバー）
     this.paintMode();
-    if (!PIN){ showGate(""); return; }
+    if (!PIN){ showGate(""); return; }              // PIN 画面に戻すのは「PIN が無い」「PIN が無効（unauthorized）」のときだけ。通信の失敗では戻さない
     await this.sync(true);
     this.startPolling();
   },
@@ -1893,37 +1920,58 @@ const Store = {
     clearInterval(this.pollT);
     this.pollT = setInterval(()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); }, 60000);
     document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN){ applyUpdateIfIdle(); this.sync(false); } });
+    window.addEventListener("online", ()=>{ if (PIN) this.sync(false); });   // 電波が戻ったらすぐ
   },
+  /* 起動・1 分ごと・画面に戻ったときの同期。2026-11-19 依頼⑪：
+     - 時間切れは BOOT_TIMEOUT（120 秒）。待っている間も前回の内容（キャッシュ）で画面を使える。
+     - 失敗しても PIN 画面には戻さない（unauthorized のときだけ）。5 秒→10→20→40→最長 60 秒の間隔で自動で再接続。
+     - 応答が届いたら、画面の描画でエラーが出てもオンライン扱い（以前は描画の例外も「オフライン」になり、二度と戻らなかった） */
   async sync(first){
-    if (this.syncing || !PIN) return; this.syncing=true;
-    try { const started=Date.now(); const r = await api("bootstrap"); r.__started=started; this.applyBootstrap(r); checkAppUpdate(); }
+    if (this.syncing || !PIN) return; this.syncing=true; this.loading=true; clearTimeout(NET.retryT); renderNetBar();
+    try { const started=Date.now(); const r = await api("bootstrap", null, {timeout:BOOT_TIMEOUT}); r.__started=started; this.applyBootstrap(r); checkAppUpdate(); }   // applyBootstrap は例外を外に出さない（段階ごとに囲む）
     catch(e){
-      if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; this.mode="offline"; this.paintMode(); showGate("PINが無効です。入り直してください"); }
-      else { this.mode="offline"; this.paintMode(); if (first) toast(errMsg(e)); }
-    } finally { this.syncing=false; }
+      if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; NET.fails=0; this.mode="offline"; this.loading=false; this.paintMode(); showGate("PINが無効です。入り直してください"); }
+      else {
+        NET.fails++; NET.lastErr = errMsg(e); NET.lastErrAt = Date.now();
+        this.mode="offline"; this.loading=false; this.paintMode();
+        if (first) toast(errMsg(e)+"。自動で再接続します", 4000);
+        const wait = Math.min(60000, 5000*Math.pow(2, Math.min(NET.fails-1, 4)));
+        NET.retryT = setTimeout(()=>{ if (document.visibilityState!=="hidden" && PIN) this.sync(false); }, wait);
+      }
+    } finally { this.syncing=false; this.loading=false; }
+    renderNetBar();
   },
   applyBootstrap(r){
-    if (Array.isArray(r.staff) && r.staff.length){ STAFF.splice(0, STAFF.length, ...r.staff); }
-    ME = r.me || ME;
-    if (ME && ME.name){ if (STAFF.indexOf(ME.name)<0) STAFF.push(ME.name); setMe(ME.name); lockStaff(ME.role!=="admin"); }
-    applyRookie();
-    applyPerms();
+    // 途中で例外が出ても「オンライン」にはなるように、段階ごとに囲む。出たエラーは NET.uiErr としてバーに出す
+    const guard = (what, f) => { try { f(); } catch(e){ console.error(what, e); NET.uiErr = `${what}：${String(e && e.message || e).slice(0,120)}`; NET.lastErr = NET.uiErr; NET.lastErrAt = Date.now(); } };
+    NET.uiErr = "";
+    guard("スタッフ情報", ()=>{
+      if (Array.isArray(r.staff) && r.staff.length){ STAFF.splice(0, STAFF.length, ...r.staff); }
+      ME = r.me || ME;
+      if (ME && ME.name){ if (STAFF.indexOf(ME.name)<0) STAFF.push(ME.name); setMe(ME.name); lockStaff(ME.role!=="admin"); }
+      applyRookie();
+      applyPerms();
+    });
     const d = r.docs||{};
     COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
-    mergeOutbox();                                  // まだ届いていない記録（送信待ち）を重ねる。届いていたら行列から外す
-    overlaySourcing(r.__started||0);               // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
-    applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks;
-    this.mode="cloud"; this.live=true; this.paintMode(); this.saveCache(r);
+    guard("送信待ちの照合", ()=>mergeOutbox());                     // まだ届いていない記録（送信待ち）を重ねる。届いていたら行列から外す
+    guard("仕入れの判断", ()=>overlaySourcing(r.__started||0));      // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
+    guard("景品マスタ", ()=>{ applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks; });
+    this.mode="cloud"; this.live=true; this.loading=false; NET.fails=0; NET.lastOkAt=Date.now(); NET.took=num(r.took); clearTimeout(NET.retryT);
+    this.paintMode(); this.saveCache(r);
     if (!this.pollT) this.startPolling();
-    render();
+    guard("画面の描画", ()=>render());
     try { refreshRoomsAfterSync(); } catch(e){}
-    pump(true);                                     // つながったので、送信待ちがあれば送る
+    guard("送信待ちの送信", ()=>pump(true));                        // つながったので、送信待ちがあれば送る
+    renderNetBar();
   },
   paintMode(){
     const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
     $("#saveMode").textContent = this.mode==="cloud" ? "スプレッドシートに保存"
-      : this.mode==="offline" ? "オフライン（表示のみ・再接続待ち）"
+      : this.mode==="offline" ? (this.loading ? "読み込み中…" : "オフライン（再接続中）")
       : "この端末に保存（API未設定）";
+    d.title = netInfo();
+    renderNetBar();
   },
   loadCache(){
     try{ const raw=localStorage.getItem(CACHE_KEY); if (!raw) return; const r=JSON.parse(raw);
@@ -3620,6 +3668,36 @@ function schedulePump(){
   clearTimeout(PQ.timer);
   if (!OUTBOX.length && !PQ.items.length) return;
   PQ.timer = setTimeout(()=>pump(true), Math.max(1000, PQ.nextAt - Date.now()));
+}
+/* 通信の様子（ヘッダー右上の保存先をタップすると出る。iPhone で「なぜ遅いか」を見る用。2026-11-19 依頼⑪） */
+function netInfo(){
+  const parts=[];
+  if (NET.bootMs) parts.push(`読み込み ${(NET.bootMs/1000).toFixed(1)} 秒・${Math.round(NET.bootBytes/1024)}KB${NET.took ? `（サーバー内 ${(NET.took/1000).toFixed(1)} 秒）` : ""}`);
+  if (NET.lastOkAt) parts.push(`最終同期 ${new Date(NET.lastOkAt).toTimeString().slice(0,5)}`);
+  if (NET.lastErr) parts.push(`前回のエラー：${NET.lastErr}${NET.lastErrAt ? `（${new Date(NET.lastErrAt).toTimeString().slice(0,5)}）` : ""}`);
+  return parts.join(" ／ ") || "まだ同期していません";
+}
+/* 通信の状態バー（ヘッダー下）。起動の読み込み中・サーバーにつながらないとき・画面の一部が描けなかったときだけ出す。2026-11-19 依頼⑪ */
+function renderNetBar(){
+  const bar=$("#netBar"); if (!bar) return;
+  if (!API_URL || !PIN){ bar.hidden=true; return; }
+  const hasData = (Store.data.weekly||[]).length>0;
+  if (Store.mode==="cloud"){
+    if (!NET.uiErr){ bar.hidden=true; bar.classList.remove("err"); return; }
+    bar.hidden=false; bar.classList.add("err");
+    bar.innerHTML = `<span>⚠ 画面の一部が表示できませんでした<small>${esc(NET.uiErr)}。記録の保存はできます。直らないときは「更新」を押してください</small></span><button class="btn pri" id="netReload">更新</button>`;
+    const b=$("#netReload"); if (b) b.onclick = ()=>location.reload();
+    return;
+  }
+  bar.hidden=false;
+  if (Store.loading || Store.syncing){
+    bar.classList.remove("err");
+    bar.innerHTML = `<span>⏳ 読み込み中… サーバーから記録を取り込んでいます<small>${hasData ? "前回の内容を表示しています。そのまま入力できます（巡回の記録は送信待ちに入り、つながると届きます）" : "初回は 1〜2 分かかることがあります。そのままお待ちください"}</small></span>`;
+    return;
+  }
+  bar.classList.add("err");
+  bar.innerHTML = `<span>📶 サーバーにつながりません<small>${esc(NET.lastErr||"")}。自動で再接続します${hasData ? "（前回の内容を表示中。巡回の記録は送信待ちに入ります）" : ""}</small></span><button class="btn pri" id="netRetry">いま再接続</button>`;
+  const b=$("#netRetry"); if (b) b.onclick = ()=>{ clearTimeout(NET.retryT); Store.sync(false); };
 }
 function renderSendBar(){
   const bar=$("#sendBar"); if (!bar) return;
@@ -5919,6 +5997,7 @@ function wire(){
   // PIN 入力
   $("#gateGo").onclick = submitGate;
   $("#updGo").onclick = () => location.reload();
+  $("#saveDot").onclick = () => toast(netInfo(), 6000);           // 保存先をタップ → 読み込み秒数・最終同期・前回のエラー
   $("#gatePin").onkeydown = e => { if (e.key==="Enter") submitGate(); };
   // 担当バッジを長押し（1.2秒）で PIN を入れ直す
   (function(){ const b=$("#meBadge"); if(!b) return; let t; const arm=()=>{ clearTimeout(t); t=setTimeout(()=>{ if (API_URL && confirm("PINを入れ直しますか？")) signOut(); },1200); }; const dis=()=>clearTimeout(t);
@@ -5990,7 +6069,7 @@ Store.init().then(render);
 PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
 window.addEventListener("online", ()=>pump(true));
 if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit,
-  get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
+  get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, NET, get PIN(){ return PIN; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
 
 
 })();
