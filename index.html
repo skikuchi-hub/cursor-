@@ -1816,25 +1816,37 @@ const API_TIMEOUT = num(CFG.timeout)||30000, PHOTO_TIMEOUT = num(CFG.photoTimeou
    「オフライン」のまま一度もオンラインにならず、キャッシュの無い端末は何も表示できなかった。待っている間は前回の内容で使える（下の Store.sync） */
 const BOOT_TIMEOUT = num(CFG.bootTimeout)||120000;
 /* 通信の記録（最後の失敗・直近の呼び出し）。ヘッダーの保存先の説明（長押し/ホバー）と window.__dbg.NET で見える */
-const NET = { lastErr:"", lastErrAt:0, lastOkAt:0, fails:0, retryT:null, uiErr:"", bootMs:0, bootBytes:0, log:[],
+const NET = { lastErr:"", lastErrAt:0, lastOkAt:0, fails:0, retryT:null, tickT:null, uiErr:"", bootMs:0, bootBytes:0, log:[],
   note(action, t0, bytes, err){ const e={action, ms:Date.now()-t0, bytes, err, at:new Date().toISOString()}; this.log.push(e); if (this.log.length>20) this.log.shift(); if (action==="bootstrap" && !err){ this.bootMs=e.ms; this.bootBytes=bytes; } } };
 async function api(action, payload, opt){
   if (!API_URL) throw apiError("no_api","APIが設定されていません");
   const body = JSON.stringify(Object.assign({action, pin:PIN}, payload||{}));
   const ms = (opt && opt.timeout) || API_TIMEOUT;
-  const ac = (typeof AbortController!=="undefined") ? new AbortController() : null;
-  const timer = ac ? setTimeout(()=>{ try{ ac.abort(); }catch(e){} }, ms) : null;
+  const ac = (opt && opt.ac) || ((typeof AbortController!=="undefined") ? new AbortController() : null);   // 呼び出し側が渡した AbortController なら、外から中断できる（Store.abortSync）
   const t0 = Date.now(), timeoutMsg = `通信が時間切れになりました（${Math.round(ms/1000)} 秒・電波が弱い）`;
-  let res;
-  try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store", signal: ac ? ac.signal : undefined}); }
-  catch(e){ clearTimeout(timer); const to = e && e.name==="AbortError"; NET.note(action, t0, 0, to ? "timeout" : "fetch"); throw apiError("network", to ? timeoutMsg : "通信できませんでした"); }
-  let j=null, txt="";
-  try { txt = await res.text(); j = JSON.parse(txt); }          // 本文の受信中に時間切れになることもある（応答が大きいとき）
-  catch(e){ clearTimeout(timer); const to = e && e.name==="AbortError"; NET.note(action, t0, txt.length, to ? "timeout" : "parse"); throw apiError("network", to ? timeoutMsg : `サーバーの応答が読めませんでした${res.ok ? "" : `（HTTP ${res.status}）`}`); }
-  clearTimeout(timer);
-  NET.note(action, t0, txt.length, (j && j.ok) ? "" : String((j&&j.error)||"error"));
-  if (!j || !j.ok) throw apiError((j&&j.error)||"error", (j&&j.message)||"エラーが発生しました");
-  return j;
+  const abortedMsg = () => (ac && ac.reason) ? String(ac.reason) : timeoutMsg;   // abort の理由（時間切れ／手でやり直し／復帰）
+  let txt="", timer=null, hard=null;
+  const run = async ()=>{
+    let res;
+    try { res = await fetch(API_URL, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body, redirect:"follow", cache:"no-store", signal: ac ? ac.signal : undefined}); }
+    catch(e){ const to = (e && e.name==="AbortError") || !!(ac && ac.signal && ac.signal.aborted); NET.note(action, t0, 0, to ? "timeout" : "fetch"); throw apiError("network", to ? abortedMsg() : "通信できませんでした"); }
+    let j=null;
+    try { txt = await res.text(); j = JSON.parse(txt); }          // 本文の受信中に時間切れになることもある（応答が大きいとき）
+    catch(e){ const to = (e && e.name==="AbortError") || !!(ac && ac.signal && ac.signal.aborted); NET.note(action, t0, txt.length, to ? "timeout" : "parse"); throw apiError("network", to ? abortedMsg() : `サーバーの応答が読めませんでした${res.ok ? "" : `（HTTP ${res.status}）`}`); }
+    NET.note(action, t0, txt.length, (j && j.ok) ? "" : String((j&&j.error)||"error"));
+    if (!j || !j.ok) throw apiError((j&&j.error)||"error", (j&&j.message)||"エラーが発生しました");
+    return j;
+  };
+  /* 2026-11-19 依頼⑭：時間切れは「abort を呼ぶ」だけでなく、fetch が終わらなくても ms＋3 秒で必ず失敗にする。
+     iOS のホーム画面アプリでは、裏に回っている間に止まった fetch が abort() しても resolve も reject もしないことがあり、
+     その 1 回の bootstrap が終わらないせいで「⏳ 読み込み中…」のまま二度と動かなくなっていた（Store.syncing が true のまま） */
+  const p = run(); p.catch(()=>{});                              // 遅れて落ちてきた結果は捨てる（未処理の reject にしない）
+  try {
+    return await Promise.race([p, new Promise((_, ng)=>{
+      timer = setTimeout(()=>{ try{ if (ac && !ac.reason) ac.reason = timeoutMsg; if (ac) ac.abort(); }catch(e){} }, ms);
+      hard  = setTimeout(()=>{ NET.note(action, t0, txt.length, "hang"); ng(apiError("network", timeoutMsg+"。応答が返ってきませんでした")); }, ms+3000);
+    })]);
+  } finally { clearTimeout(timer); clearTimeout(hard); }
 }
 const errMsg = e => e && e.code==="unauthorized" ? "PINが無効になっています。入り直してください"
   : e && e.code==="network" ? (/時間切れ/.test(String(e.message||"")) ? String(e.message) : "通信できませんでした。電波のよい所でもう一度試してください")   // 時間切れは何秒で切ったかも出す（2026-11-19）
@@ -1911,7 +1923,7 @@ function signOut(){
 /* ===================== データ層（Apps Script 経由でスプレッドシートに保存） ===================== */
 const COLS = ["weekly","prizes","expenses","settings","sourcing","stock","collect"];   // stock＝在庫整理（棚卸で数えた数）、collect＝集金（店舗ごとの売上確定）
 const Store = {
-  db:null, canWrite:true, mode:"local", live:false, syncing:false, pollT:null,
+  db:null, canWrite:true, mode:"local", live:false, syncing:false, loading:false, syncAt:0, syncSeq:0, syncAc:null, pollT:null, dogT:null, listening:false,
   data:{weekly:[],prizes:[],expenses:[],settings:[],sourcing:[]},
   async init(){
     if (!API_URL){                                  // API 未設定（開発プレビュー）：従来どおり端末保存
@@ -1923,33 +1935,58 @@ const Store = {
     this.loading = !!PIN;                           // 起動の読み込み中（「⏳ 読み込み中…」のバー）
     this.paintMode();
     if (!PIN){ showGate(""); return; }              // PIN 画面に戻すのは「PIN が無い」「PIN が無効（unauthorized）」のときだけ。通信の失敗では戻さない
+    this.startPolling();                            // 2026-11-19 依頼⑭：最初の読み込みを待つ前に監視を始める（以前は最初の bootstrap が終わらないと監視も画面復帰の再同期も始まらなかった）
     await this.sync(true);
-    this.startPolling();
   },
   startPolling(){
-    clearInterval(this.pollT);
+    clearInterval(this.pollT); clearInterval(this.dogT);
     this.pollT = setInterval(()=>{ if (document.visibilityState==="visible" && PIN) this.sync(false); }, 60000);
-    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN){ applyUpdateIfIdle(); this.sync(false); } });
+    /* 取り残しの番犬（2026-11-19 依頼⑭）：読み込みが BOOT_TIMEOUT＋8 秒たっても終わらないときは捨ててやり直す（api() の保険が効かなかった場合の最後の網） */
+    this.dogT = setInterval(()=>{ if (this.syncing && PIN && Date.now()-(this.syncAt||0) > BOOT_TIMEOUT+8000){ this.abortSync("読み込みが終わらなかったのでやり直します"); this.sync(false); } }, 5000);
+    if (this.listening) return; this.listening = true;
+    document.addEventListener("visibilitychange", ()=>{ if (document.visibilityState==="visible" && PIN){
+      applyUpdateIfIdle();
+      // 画面を閉じていた間に止まった通信（iOS は裏に回ると通信を止める）は、15 秒以上たっていれば捨ててやり直す
+      if (this.syncing && Date.now()-(this.syncAt||0) > 15000) this.abortSync("画面を閉じている間に通信が止まったのでやり直します");
+      this.sync(false); } });
     window.addEventListener("online", ()=>{ if (PIN) this.sync(false); });   // 電波が戻ったらすぐ
+  },
+  /* いま進んでいる bootstrap を捨てる（結果が遅れて来ても無視する）。理由は「前回のエラー」として残す */
+  abortSync(why){
+    const ac=this.syncAc; this.syncAc=null; this.syncSeq=(this.syncSeq||0)+1;
+    if (ac){ try{ ac.reason = why||""; ac.abort(); }catch(e){} }
+    this.syncing=false; this.loading=false;
+    NET.fails++; NET.lastErr = why||"通信を中断しました"; NET.lastErrAt = Date.now();
+    if (this.mode!=="cloud") this.mode="offline";
+    try{ this.paintMode(); }catch(e){}
   },
   /* 起動・1 分ごと・画面に戻ったときの同期。2026-11-19 依頼⑪：
      - 時間切れは BOOT_TIMEOUT（120 秒）。待っている間も前回の内容（キャッシュ）で画面を使える。
      - 失敗しても PIN 画面には戻さない（unauthorized のときだけ）。5 秒→10→20→40→最長 60 秒の間隔で自動で再接続。
      - 応答が届いたら、画面の描画でエラーが出てもオンライン扱い（以前は描画の例外も「オフライン」になり、二度と戻らなかった） */
   async sync(first){
-    if (this.syncing || !PIN) return; this.syncing=true; this.loading=true; clearTimeout(NET.retryT); renderNetBar();
-    try { const started=Date.now(); const r = await api("bootstrap", null, {timeout:BOOT_TIMEOUT}); r.__started=started; this.applyBootstrap(r); checkAppUpdate(); }   // applyBootstrap は例外を外に出さない（段階ごとに囲む）
+    if (!PIN) return;
+    if (this.syncing){                                             // 進んでいる読み込みがある。ただし時間切れ＋余裕を超えても終わらないものは捨ててやり直す（2026-11-19 依頼⑭）
+      if (Date.now()-(this.syncAt||0) < BOOT_TIMEOUT+8000) return;
+      this.abortSync("前回の読み込みが終わらなかったのでやり直します");
+    }
+    const seq = this.syncSeq = (this.syncSeq||0)+1;               // 世代番号：捨てた通信の結果が遅れて来ても、新しい読み込みの状態を壊さない
+    this.syncing=true; this.loading=true; this.syncAt=Date.now();
+    this.syncAc = (typeof AbortController!=="undefined") ? new AbortController() : null;
+    clearTimeout(NET.retryT); try{ renderNetBar(); }catch(e){}
+    try { const started=Date.now(); const r = await api("bootstrap", null, {timeout:BOOT_TIMEOUT, ac:this.syncAc}); if (seq!==this.syncSeq) return; r.__started=started; this.applyBootstrap(r); checkAppUpdate(); }   // applyBootstrap は例外を外に出さない（段階ごとに囲む）
     catch(e){
-      if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; NET.fails=0; this.mode="offline"; this.loading=false; this.paintMode(); showGate("PINが無効です。入り直してください"); }
+      if (seq!==this.syncSeq) return;                              // 捨てた通信の結果は見ない
+      if (e.code==="unauthorized"){ PIN=""; try{ localStorage.removeItem(PIN_KEY); }catch(_){}; NET.fails=0; this.mode="offline"; this.loading=false; this.syncing=false; try{ this.paintMode(); }catch(_){}; showGate("PINが無効です。入り直してください"); }
       else {
         NET.fails++; NET.lastErr = errMsg(e); NET.lastErrAt = Date.now();
-        this.mode="offline"; this.loading=false; this.paintMode();
+        this.mode="offline"; this.loading=false; this.syncing=false; try{ this.paintMode(); }catch(_){}
         if (first) toast(errMsg(e)+"。自動で再接続します", 4000);
         const wait = Math.min(60000, 5000*Math.pow(2, Math.min(NET.fails-1, 4)));
         NET.retryT = setTimeout(()=>{ if (document.visibilityState!=="hidden" && PIN) this.sync(false); }, wait);
       }
-    } finally { this.syncing=false; this.loading=false; }
-    renderNetBar();
+    } finally { if (seq===this.syncSeq){ this.syncing=false; this.loading=false; this.syncAc=null; } }
+    try{ renderNetBar(); }catch(e){}
   },
   applyBootstrap(r){
     // 途中で例外が出ても「オンライン」にはなるように、段階ごとに囲む。出たエラーは NET.uiErr としてバーに出す
@@ -1962,19 +1999,18 @@ const Store = {
       applyRookie();
       applyPerms();
     });
-    const d = r.docs||{};
-    COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; });
+    guard("記録の取り込み", ()=>{ const d = r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; }); });
     guard("送信待ちの照合", ()=>mergeOutbox());                     // まだ届いていない記録（送信待ち）を重ねる。届いていたら行列から外す
     guard("仕入れの判断", ()=>overlaySourcing(r.__started||0));      // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
     guard("景品マスタ", ()=>{ applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks; });
-    this.mode="cloud"; this.live=true; this.loading=false; NET.fails=0; NET.lastOkAt=Date.now(); NET.took=num(r.took); clearTimeout(NET.retryT);
-    this.paintMode(); this.saveCache(r);
+    this.mode="cloud"; this.live=true; this.loading=false; this.syncing=false; NET.fails=0; NET.lastOkAt=Date.now(); NET.took=num(r.took); clearTimeout(NET.retryT);
+    guard("保存先の表示", ()=>this.paintMode()); this.saveCache(r);
     if (!this.pollT) this.startPolling();
     guard("画面の描画", ()=>render());
     try { refreshRoomsAfterSync(); } catch(e){}
-    try { if (canSource() && Date.now()-SRC.at > 90000) loadSourcing(false); } catch(e){}   // 仕入れできる人は起動時に商品一覧も読む（景品・在庫整理の「🔁 おかわり」を最初から出すため。依頼⑫）
+    try { if (canSource() && Date.now()-SRC.at > 90000) Promise.resolve(loadSourcing(false)).catch(()=>{}); } catch(e){}   // 仕入れできる人は起動時に商品一覧も読む（景品・在庫整理の「🔁 おかわり」を最初から出すため。依頼⑫）。bootstrap とは別の通信で、失敗しても起動の状態には関係しない
     guard("送信待ちの送信", ()=>pump(true));                        // つながったので、送信待ちがあれば送る
-    renderNetBar();
+    try{ renderNetBar(); }catch(e){}
   },
   paintMode(){
     const d=$("#saveDot"); d.dataset.mode = this.mode==="cloud" ? "cloud":"local";
@@ -3796,6 +3832,8 @@ function netInfo(){
   if (NET.bootMs) parts.push(`読み込み ${(NET.bootMs/1000).toFixed(1)} 秒・${Math.round(NET.bootBytes/1024)}KB${NET.took ? `（サーバー内 ${(NET.took/1000).toFixed(1)} 秒）` : ""}`);
   if (NET.lastOkAt) parts.push(`最終同期 ${new Date(NET.lastOkAt).toTimeString().slice(0,5)}`);
   if (NET.lastErr) parts.push(`前回のエラー：${NET.lastErr}${NET.lastErrAt ? `（${new Date(NET.lastErrAt).toTimeString().slice(0,5)}）` : ""}`);
+  if (NET.fails) parts.push(`続けて失敗 ${NET.fails} 回`);
+  if (Store.syncing) parts.push(`読み込み中 ${Math.round((Date.now()-(Store.syncAt||Date.now()))/1000)} 秒`);
   return parts.join(" ／ ") || "まだ同期していません";
 }
 /* 通信の状態バー（ヘッダー下）。起動の読み込み中・サーバーにつながらないとき・画面の一部が描けなかったときだけ出す。2026-11-19 依頼⑪ */
@@ -3813,7 +3851,15 @@ function renderNetBar(){
   bar.hidden=false;
   if (Store.loading || Store.syncing){
     bar.classList.remove("err");
-    bar.innerHTML = `<span>⏳ 読み込み中… サーバーから記録を取り込んでいます<small>${hasData ? "前回の内容を表示しています。そのまま入力できます（巡回の記録は送信待ちに入り、つながると届きます）" : "初回は 1〜2 分かかることがあります。そのままお待ちください"}</small></span>`;
+    const sec = Math.max(0, Math.round((Date.now()-(Store.syncAt||Date.now()))/1000)), retry = NET.fails>0;   // 2026-11-19 依頼⑭：経過秒・何回目か・前回の理由を出し、20 秒たったら手でやり直せる
+    bar.innerHTML = `<span>⏳ ${retry ? `再接続中…（${NET.fails+1} 回目）` : "読み込み中…"} サーバーから記録を取り込んでいます <span id="netSec">${sec} 秒</span><small>${retry && NET.lastErr ? `前回：${esc(NET.lastErr)}。` : ""}${hasData ? "前回の内容を表示しています。そのまま入力できます（巡回の記録は送信待ちに入り、つながると届きます）" : "初回は 1〜2 分かかることがあります。そのままお待ちください"}</small></span>${sec>=20 ? `<button class="btn pri" id="netRedo">やり直す</button>` : ""}`;
+    const rb=$("#netRedo"); if (rb) rb.onclick = ()=>{ Store.abortSync("手でやり直しました"); Store.sync(false); };
+    if (!NET.tickT) NET.tickT = setInterval(()=>{                 // 1 秒ごとに経過秒を進める（読み込みが終わればやめる）
+      if (!(Store.loading || Store.syncing) || Store.mode==="cloud"){ clearInterval(NET.tickT); NET.tickT=null; return; }
+      const s2 = Math.max(0, Math.round((Date.now()-(Store.syncAt||Date.now()))/1000)), el=$("#netSec");
+      if (s2>=20 && !$("#netRedo")) { renderNetBar(); return; }
+      if (el) el.textContent = `${s2} 秒`;
+    }, 1000);
     return;
   }
   bar.classList.add("err");
@@ -6199,7 +6245,7 @@ updateReadouts();
 updatePzGauge();
 render();
 loadOutbox();
-Store.init().then(render);
+Store.init().then(render).catch(e=>{ console.error("init", e); try{ Store.loading=false; Store.syncing=false; if (Store.mode!=="cloud") Store.mode="offline"; NET.lastErr="起動でエラー："+String(e&&e.message||e).slice(0,120); NET.lastErrAt=Date.now(); Store.paintMode(); render(); }catch(_){} });   // 2026-11-19 依頼⑭：起動の途中で例外が出ても「読み込み中…」のまま止まらない
 PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
 window.addEventListener("online", ()=>pump(true));
 if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit, SRC, srcReorderInfo, srcDecision, stockOf, todayStr, srcNewerMail,
