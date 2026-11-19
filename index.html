@@ -284,89 +284,9 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
 .save-cancel{width:100%;margin-top:8px;padding:13px;border-radius:var(--r-m);border:2px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-weight:700;font-size:14px}
 .save-cancel:active{background:var(--surface-sunk)}
-/* 仕入れ（EXAmuse の新着商品カード） */
-.src-top{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
-.src-q{position:relative;margin-bottom:8px}
-.src-q input.txt{padding-left:34px;padding-right:38px;background:var(--surface)}
-.src-q .ic{position:absolute;left:11px;top:50%;transform:translateY(-50%);width:16px;height:16px;stroke:var(--ink-3);fill:none;stroke-width:2;pointer-events:none}
-.src-q input::-webkit-search-cancel-button{-webkit-appearance:none;display:none}
-.src-q .x{position:absolute;right:4px;top:50%;transform:translateY(-50%);width:34px;height:34px;border:0;background:none;color:var(--ink-3);font-size:18px;line-height:1}
-.src-hit{font-size:12px;color:var(--ink-2);margin:0 2px 10px}
-.sc .stb{display:inline-block;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--surface-sunk);color:var(--ink-2);margin-right:6px;vertical-align:1px}
-.src-sum{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;border-radius:var(--r-m);background:var(--navy);color:#fff;margin-bottom:12px}
-.src-sum b{font-size:16px}
-.src-sum .btn{background:var(--gold);color:#1b2d5b;border:0;font-weight:900;padding:9px 12px;border-radius:9px;font-size:13px;white-space:nowrap}
-.src-sum .btn:disabled{opacity:.5}
-.sc{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-l);overflow:hidden;margin-bottom:12px;box-shadow:0 1px 3px rgba(20,32,58,.05)}
-.sc.skip{opacity:.55}
-.sc .pic{width:100%;max-height:230px;background:#fff;display:block;object-fit:contain;border-bottom:1px solid var(--line)}
-.sc .pic.none{display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;aspect-ratio:auto;height:44px}
-.sc .bd{padding:11px 13px}
-.sc .nm{font-weight:800;font-size:15px;line-height:1.35;word-break:break-all}
-.sc .nm.miss{color:var(--critical-ink)}
-.sc .sub{font-size:11.5px;color:var(--ink-3);margin-top:2px}
-.sc .price{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:var(--fs-mono)}
-.sc .price b{font-size:20px}
-.sc .price .per{font-size:12px;color:var(--ink-2)}
-.sc .meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.sc .meta span{font-size:11px;padding:3px 7px;border-radius:6px;background:var(--surface-sunk);color:var(--ink-2)}
-.sc .meta span.warn{background:var(--rose-wash);color:var(--critical-ink);font-weight:700}
-.sc .meta span.ok{background:var(--aqua-wash);color:var(--aqua-ink)}
-.sc .acts{display:grid;grid-template-columns:1fr 1fr 1.4fr;gap:6px;margin-top:11px}
-.sc .acts button{padding:11px 6px;border-radius:10px;border:1.5px solid var(--line-2);background:var(--surface);font-weight:800;font-size:13px;color:var(--ink)}
-.sc .acts button.on{background:var(--ink);border-color:var(--ink);color:var(--surface)}
-.sc .acts button.go{background:var(--navy);border-color:var(--navy);color:var(--gold)}
-.sc .acts button.go.on{background:var(--gold);border-color:var(--gold);color:#1b2d5b}
-.sc .fix{margin-top:8px;font-size:12px;color:var(--ink-3);text-decoration:underline;background:none;border:0;padding:4px 0}
-.sc .panel2{margin-top:10px;padding:10px;border-radius:12px;background:var(--surface-2);border:1px dashed var(--line-2)}
-.sc .panel2 .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
-.sc .panel2 .row:last-child{margin-bottom:0}
-.sc .panel2 .k{font-size:11px;font-weight:700;color:var(--ink-3);width:100%}
-.sc .panel2 input.num{width:90px;font-size:16px;padding:8px}
-.sc .panel2 input.txt{font-size:16px;padding:8px}
-.sc .panel2 .ok{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:10px 14px;font-weight:800;font-size:13px}
-.sc .panel2 .ok:disabled{background:var(--surface-sunk);color:var(--ink-3)}
-.sc .panel2 .opt{flex:1;min-width:120px;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px 6px;border-radius:10px;border:1.5px solid var(--line-2);background:var(--surface);color:var(--ink)}
-.sc .panel2 .opt b{font-size:14px}
-.sc .panel2 .opt small{font-size:11px;color:var(--ink-2)}
-.sc .panel2 .opt.on{background:var(--navy);border-color:var(--navy);color:#fff}
-.sc .panel2 .opt.on small{color:#dbe3ee}
-.sc .panel2 .opt:disabled{opacity:.45}
-.sc .acts button:disabled{opacity:.4}
-.sc .recv{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px}
-.sc .recv.ghost{background:var(--surface);color:var(--ink-2);border:1.5px solid var(--line-2)}
-/* おかわり（再発注）ブロック：受取済・発注済のカードに。soon＝在庫が切れそう */
-.sc .reorder{margin-top:9px;padding:9px 10px;border-radius:12px;background:var(--surface-2);border:1.5px solid var(--line);display:flex;flex-direction:column;gap:7px}
-.sc .reorder.soon{border-color:var(--gold);background:var(--gold-wash)}
-.sc .reorder .rl{font-size:11.5px;color:var(--ink-2);line-height:1.5}
-.sc .reorder .rl b{color:var(--ink)}
-.sc .reorder .rp{font-size:11px;color:var(--ink-3);line-height:1.45}
-.sc .reorder .recv{align-self:flex-start}
-.sc .rebadge{display:inline-block;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--gold-wash);color:var(--gold-ink);margin-right:6px;vertical-align:1px}
-.sc.flash{box-shadow:0 0 0 3px var(--gold);transition:box-shadow .3s}
-.re-btn{background:var(--gold-wash);border-color:var(--gold);color:var(--gold-ink);font-weight:800}
-.sc .rank{display:flex;gap:10px;align-items:stretch;margin-top:9px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;background:var(--surface-2)}
-.sc .rank .rk{flex:none;width:58px;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface-sunk);color:var(--ink-2);padding:4px 0}
-.sc .rank .rk b{font-size:24px;line-height:1.15;font-family:var(--fs-display),-apple-system,sans-serif}
-.sc .rank .rk small{font-size:9px;line-height:1.2;text-align:center;margin-top:2px;opacity:.8;white-space:nowrap}
-.sc .rank .rt{flex:1;min-width:0;padding:7px 9px 7px 0;font-size:11.5px;color:var(--ink-2);line-height:1.5}
-.sc .rank .rt .w{font-weight:800;color:var(--ink);font-size:12.5px}
-.sc .rank .rt .bs{font-weight:600;color:var(--ink-3);margin-left:6px;font-size:11px}
-.sc .rank .rt .g{color:var(--ink-3);font-size:11px}
-.sc .rank.s .rk{background:var(--gold);color:#1b2d5b}
-.sc .rank.a .rk{background:var(--aqua-wash);color:var(--aqua-ink)}
-.sc .rank.b .rk{background:var(--sky-wash,#e3effb);color:var(--navy)}
-.sc .rank.c .rk{background:var(--surface-sunk);color:var(--ink-3)}
-.sc .rank.none .rk{background:var(--surface-sunk);color:var(--ink-3)}
-.sc .panel2 .cancel{background:none;border:0;color:var(--ink-3);font-size:12px;padding:10px 6px}
-.sc .state{margin-top:10px;padding:8px 10px;border-radius:10px;background:var(--gold-wash);font-size:12.5px;line-height:1.5}
-.sc .state.done{background:var(--aqua-wash);color:var(--aqua-ink)}
-.sc .state.bad{background:var(--rose-wash);color:var(--critical-ink)}
-.sc .state b{font-size:13px}
-.src-req{font-size:12px;color:var(--ink-2);padding:9px 12px;border-top:1px solid var(--line);display:flex;justify-content:space-between;gap:8px}
-.src-req .st{font-weight:800;white-space:nowrap}
+/* 仕入れのカードは専用アプリ shiire/ に移した（2026-11-19 依頼⑯）。残すのは「🔁 おかわり」のリンクだけ */
 .tag.dup{background:var(--danger-wash);color:var(--danger-ink);font-weight:800}
-.sizeng{margin-top:6px;font-size:12px;font-weight:700;color:var(--danger-ink);background:var(--danger-wash);border-radius:8px;padding:5px 8px;display:inline-block}
+.re-btn{text-decoration:none;display:inline-flex;align-items:center;background:var(--gold-wash);border-color:var(--gold);color:var(--gold-ink);font-weight:800}
 /* 一覧の折り畳み見出し */
 .xhead.fold{cursor:pointer;user-select:none;-webkit-user-select:none}
 .xhead.fold .chev{width:22px;height:22px;border-radius:50%;background:var(--surface);border:1px solid var(--line-2);display:grid;place-items:center;flex:none}
@@ -1567,18 +1487,11 @@ body{font-variant-numeric:tabular-nums}
       </div>
     </section>
     <section class="panel" id="p-src" role="tabpanel" aria-label="仕入れ">
-      <div class="card">
-        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><h2 style="font-family:var(--fs-display);font-size:16px;font-weight:900;margin:0">📦 とどいた商品</h2><button type="button" class="chip mini" id="srcReload">最新を取り直す</button><span class="hint" id="srcAt" style="margin:0"></span></div>
-        <p class="hint" style="margin-top:5px">インフィニティからのメールが自動で並びます。写真と単価を見て <b>見送り／保留／発注</b> をタップ。「発注要求を出す」で、Mac が発注書と Mail の下書きを作ります。</p>
-      </div>
-      <div class="src-sum" id="srcSum" hidden><div><div style="font-size:11px;opacity:.8">発注予定</div><b id="srcSumTxt">0件</b></div><button type="button" class="btn" id="srcSubmit">発注要求を出す</button></div>
-      <div class="src-q"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="search" class="txt" id="srcQ" placeholder="商品名・品番・件名でさがす" autocomplete="off" enterkeyhint="search" aria-label="仕入れの商品をさがす"><button type="button" class="x" id="srcQx" aria-label="検索をクリア" hidden>×</button></div>
-      <div class="src-hit" id="srcHit" hidden></div>
-      <div class="src-top" id="srcFilter"></div>
-      <div id="srcList"><div class="empty"><b>📦</b>読み込み中…</div></div>
-      <div class="card flush" id="srcReqCard" hidden style="margin-top:4px">
-        <div class="xhead"><span class="nm">発注要求の状況</span><span class="ct" id="srcReqCt"></span></div>
-        <div id="srcReqs"></div>
+      <div class="card" style="text-align:center;padding:22px 16px">
+        <h2 style="font-family:var(--fs-display);font-size:17px;font-weight:900;margin:0 0 6px">📦 仕入れは専用アプリに移りました</h2>
+        <p class="hint" style="margin:0 0 14px">とどいた商品の判断・発注要求・🔁 おかわりは「EXAmuse 仕入れ」アプリで行います（PIN はクレーンログと同じ）。iPhone で固まらないように、商品の一覧はクレーンログでは読み込みません。</p>
+        <a class="btn pri link" href="shiire/" style="font-size:15px;padding:14px;color:#fff">📦 EXAmuse 仕入れアプリを開く</a>
+        <p class="hint" style="margin-top:14px;text-align:left">ホーム画面に別のアイコンで追加するには：Safari で <b>skikuchi-hub.github.io/cursor-/shiire/</b> を開く → 共有ボタン → 「ホーム画面に追加」。</p>
       </div>
     </section>
   </main>
@@ -1820,7 +1733,7 @@ const NET = { lastErr:"", lastErrAt:0, lastOkAt:0, fails:0, retryT:null, tickT:n
   note(action, t0, bytes, err){ const e={action, ms:Date.now()-t0, bytes, err, at:new Date().toISOString()}; this.log.push(e); if (this.log.length>20) this.log.shift(); if (action==="bootstrap" && !err){ this.bootMs=e.ms; this.bootBytes=bytes; } } };
 /* 起動の記録（2026-11-19 依頼⑮）：各段階の時刻（ページを開いてからの ms）と例外を残す。URL に ?debug=1（または #debug）を付けると画面下に
    そのまま出す（iPhone で「読み込み中…」が終わらないとき、菊地さんがスクショを送れるように）。window.__dbg.BOOT でも見える */
-const APP_BUILD = "2026-11-19c";
+const APP_BUILD = "2026-11-19d";
 const BOOT = { rows:[], on: /[?&#]debug/.test(location.search+location.hash) };
 function bootLog(stage, extra){
   try {
@@ -2034,17 +1947,13 @@ const Store = {
     });
     guard("記録の取り込み", ()=>{ const d = r.docs||{}; COLS.forEach(c=>{ this.data[c] = Array.isArray(d[c]) ? d[c] : []; }); });
     guard("送信待ちの照合", ()=>mergeOutbox());                     // まだ届いていない記録（送信待ち）を重ねる。届いていたら行列から外す
-    guard("仕入れの判断", ()=>overlaySourcing(r.__started||0));      // 取得中に端末で変えた仕入れの判断を、古いサーバー応答で上書きしない
     guard("景品マスタ", ()=>{ applySheetData(r.sheet_master, r.stores); if (r.photo_checks) PHOTO_CHECKS = r.photo_checks; });
     this.mode="cloud"; this.live=true; this.loading=false; this.syncing=false; NET.fails=0; NET.lastOkAt=Date.now(); NET.took=num(r.took); clearTimeout(NET.retryT);
     guard("保存先の表示", ()=>this.paintMode()); bootLog("オンライン");
     if (!this.pollT) this.startPolling();
     guard("画面の描画", ()=>renderStaged());                        // 2026-11-19 依頼⑮：開いているタブだけ先に描き、残りは後から 1 つずつ（iPhone で 1 回の長い処理にしない）
     try { refreshRoomsAfterSync(); } catch(e){}
-    /* 2026-11-19 依頼⑮：起動時の loadSourcing（依頼⑫で足した「仕入れできる人は起動時に商品一覧も読む」）はやめた。仕入れの一覧は 仕入れタブを開いたとき／🔁 おかわり／「最新を取り直す」でだけ読む（依頼⑫以前の挙動）。
-       仕入れの読み込み（別スプシ・画像 URL つき）が起動の bootstrap・オンライン表示・「読み込み中」バーに一切影響しないようにするため */
-    guard("送信待ちの送信", ()=>pump(true));                        // つながったので、送信待ちがあれば送る
-    try { if ($("#p-src").classList.contains("on") && canSource() && Date.now()-SRC.at > 90000) Promise.resolve(loadSourcing(false)).catch(()=>{}); } catch(e){}   // 仕入れタブを開いたまま起動した（読み込み中に開いた）ときだけ、つながった時点で一覧を読む。loadSourcing は起動の状態に触らない
+    /* 仕入れの一覧（loadSourcing）はもう呼ばない：仕入れは専用アプリ shiire/ に移した（2026-11-19 依頼⑯） */
     this.saveCacheLater(r);                                         // キャッシュの保存（JSON 化＋localStorage 書き込み）は描画のあとに回す（iPhone で同期書き込みが遅い）
     try{ renderNetBar(); }catch(e){}
   },
@@ -3201,460 +3110,28 @@ function updateReadouts(){
   renderGuide();
 }
 
-/* ===================== 仕入れ（EXAmuse 仕入れ想定商品スプシの「商品一覧」をカードで仕分ける） =====================
-   品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
-   判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
-   「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", q:"", open:{}, fix:{}, sel:{}, busy:false, agg:null, iv:null, local:{} };   // agg／iv＝描画 1 回分のキャッシュ（labAgg／prizeIntervals）
-/* 端末で変えた判断（key → {doc, at, pending}）。bootstrap の応答がその変更より前に取りに行ったものなら、応答で上書きせず端末の値を残す。
-   送信中（pending）の間は同じ商品の二重タップを受け付けない */
-function setLocalSourcing(key, doc, pending){
-  SRC.local[key] = {doc, at:Date.now(), pending:!!pending};
-  Store.data.sourcing = (Store.data.sourcing||[]).filter(d=>d.id!==key && d.key!==key).concat(doc ? [doc] : []);
-}
-function overlaySourcing(started){
-  if (typeof SRC==="undefined" || !SRC.local) return;
-  let docs = Store.data.sourcing||[];
-  Object.keys(SRC.local).forEach(k=>{
-    const e = SRC.local[k];
-    if (!e.pending && e.at < started){ delete SRC.local[k]; return; }     // この応答はその変更より後に取りに行ったもの → サーバーの値で良い
-    docs = docs.filter(d=>d.id!==k && d.key!==k).concat(e.doc ? [e.doc] : []);
-  });
-  Store.data.sourcing = docs;
-}
-const SRC_KEY = "crane-lab-sourcing-v1";
-/* lh3.googleusercontent.com/d/ID は末尾に =w480 を付けると縮小版が返る（iPhone での読み込みを軽くする） */
-const thumbSrc = u => /lh3\.googleusercontent\.com\/d\/[^=?]+$/.test(u||"") ? u + "=w480" : u;
-const MACHINES = ["4人機用","カリーノ用"];
-function srcDecision(key){ return (Store.data.sourcing||[]).find(d=>d.id===key || d.key===key) || null; }
-function srcState(it){
-  const d = srcDecision(it.key);
-  if (/発注済/.test(it.status||"") && d && d.cancelledAt) return "cancelled";
-  if (/発注済/.test(it.status||"") && d && d.receivedAt) return "received";
-  if (/発注済/.test(it.status||"")) return "done";
-  if (/下書き作成/.test(it.status||"")) return "drafted";
-  if (d && d.requestId) return "requested";
-  if (d && d.decision==="order") return "order";
-  if (d && d.decision==="hold") return "hold";
-  if (d && d.decision==="skip") return "skip";
-  if (srcMissing(it)) return "check";
-  return "todo";
-}
-const srcMissing = it => !it.name || !(it.qty>0) || !(it.price>0);     // メールから読み取れていない（発注できない）
-const SRC_LABEL = {check:"要確認", todo:"未判断", order:"発注予定", hold:"保留", skip:"見送り", requested:"要求中", drafted:"下書き済", done:"発注済", received:"受取済", cancelled:"キャンセル"};
-const SRC_TIMEOUT = num(CFG.sourcingTimeout)||45000;   // 仕入れの一覧（別スプシ・画像 URL つき）の時間切れ。起動の BOOT_TIMEOUT とは別
-async function loadSourcing(force){
-  /* 2026-11-19 依頼⑮：仕入れの読み込みは起動（bootstrap・オンライン表示・「読み込み中」バー）と完全に別。仕入れタブを開いたとき／🔁 おかわり／「最新を取り直す」でだけ呼ぶ。
-     Store の状態（mode・loading・syncing）には一切触らず、時間切れも別（SRC_TIMEOUT）、例外はすべてここで握る（起動時には呼ばれない） */
-  try {
-    if (!Store.online()) { try{ renderSourcing(); }catch(e){} return; }
-    if (SRC.busy) return; SRC.busy=true;
-    const el=$("#srcAt"); if (el) el.textContent="読み込み中…";
-    try {
-      const r = await api("sourcing", {force:!!force}, {timeout:SRC_TIMEOUT});
-      SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.history = r.history||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now(); SRC.error = "";
-      try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, history:SRC.history, limit:SRC.limit, at:SRC.at})); } catch(e){ bootLog("⚠ 仕入れキャッシュ保存 失敗", e && e.name); }
-    } catch(e){ SRC.error = e && e.code==="unknown_action" ? "Apps Script がまだ古い版です。「デプロイを管理 → 新バージョン」を行ってください" : errMsg(e); try{ toast(SRC.error); }catch(_){} }
-    finally { SRC.busy=false; }
-    try { renderSourcing(); } catch(e){ bootLog("⚠ 仕入れの描画", e && e.message); }
-    try { renderPrizeList(); renderStock(); } catch(e){}   // 景品・在庫整理の「🔁 おかわり」も最新の商品一覧で描き直す（依頼⑫）
-  } catch(e){ SRC.busy=false; bootLog("⚠ loadSourcing", e && e.message); }
-}
-function srcLoadCache(){ try { const r=JSON.parse(localStorage.getItem(SRC_KEY)||"null"); if (r){ SRC.items=r.items||[]; SRC.requests=r.requests||[]; SRC.history=r.history||[]; SRC.limit=r.limit||300000; SRC.at=r.at||0; } } catch(e){} }
-
-/* ===================== 仕入れランク（過去の売れ行きから、この商品が出そうかを判定） =====================
-   根拠は 3 つ。① 同系統（キャラ・ブランド・品種の語が一致する景品）の払出ペースと原価率
-   ② 同じ価格帯（仕入単価の帯）の景品の払出ペース ③ 過去に発注した商品か（発注履歴）。
-   データが無いときは無理に判定せず「初めての系統」とし、原価率の目安（推奨 1/N）だけ出す */
-const IP_WORDS = ["サンリオ","ハローキティ","キティ","シナモン","クロミ","マイメロ","ポムポムプリン","ハンギョドン","ポチャッコ","けろっぴ","ちいかわ","ハチワレ","うさぎ","ポケモン","ピカチュウ","モンコレ","イーブイ","ディズニー","トイストーリー","トイ・ストーリー","ミッキー","プーさん","スティッチ","スヌーピー","すみっコ","ドラえもん","クレヨンしんちゃん","しんちゃん","NICI","FUGGLER","ファグラー","シマエナガ","kirby","カービィ","ミッフィー","リラックマ","たまごっち","ワンピース","鬼滅","呪術","ハイキュー","SPY","ジブリ","トトロ","まっくろくろすけ","ムーミン","スポンジボブ","ミニオン","カピバラ","しろたん","ころはむ","ZEESEA","ズーシー","rom&nd","ロムアンド","AMUSE","ペリペラ","PERIPERA","コスメ","リップ","アイシャドウ","ぬいぐるみ","マスコット","キーリング","キーホルダー","クッション","ブランケット","ポーチ","パスケース","フィギュア","じゃがりこ","お菓子","タオル","ランプ","ファン","時計","ヘアクリップ","nici","nica","BABYFUGG"];
+/* ===================== 仕入れ（2026-11-19 依頼⑯：専用アプリ shiire/ に移した） =====================
+   仕入れタブの一覧・判断・発注要求・🔁 おかわりは EXAmuse 仕入れアプリ（shiire/index.html。同じ Apps Script・同じ PIN）で行う。
+   本体は仕入れの一覧（action sourcing）を読まない・描かない（iPhone で仕入れタブを押すと固まった原因＝商品カード 300 件超の一括描画）。
+   残っているのは「🔁 おかわり」のリンク（景品・在庫整理・在庫回転）だけ：在庫が少ない景品に shiire/?reorder=<景品名> へのリンクを出す */
+const SHIIRE_URL = "shiire/";
+const SRC = { agg:null };                                   // 描画 1 回分の labAgg キャッシュ（おかわりのリンクの「あと○週」用）
 const normName = s => String(s||"").normalize("NFKC").toLowerCase().replace(/[\s【】\[\]（）()・、,．.「」『』!！?？&＆\-_／\/●★☆×]/g,"");
-function nameTokens(s){
-  const n=normName(s), t=new Set();
-  IP_WORDS.forEach(w=>{ if (n.includes(normName(w))) t.add(normName(w)); });
-  (String(s||"").normalize("NFKC").match(/[ァ-ヴー]{3,}/g)||[]).forEach(k=>t.add(normName(k)));
-  return t;
-}
-const priceBand = p => p<=300 ? "〜300円" : p<=600 ? "301〜600円" : p<=1000 ? "601〜1,000円" : "1,001円〜";
-/* 単価が「数量按分」の目安値（まとめ買いを数量で割っただけ）の景品は、仕入れのランク判定の材料から外す（菊地さん指示 2026-10-08）。
-   景品マスタのメモに「数量按分」が入っている景品が対象。手で適正単価を入れた景品（例：nici 620円）は対象内 */
-const isEstCost = name => { const m = allPrizes().find(x=>x.name===name); return !!(m && /数量按分/.test(m.memo||"")); };
-function srcRank(it){
-  const agg = SRC.agg || (SRC.agg = labAgg());
-  const list = Object.values(agg).filter(P=>P.days>0 && !P.est);
-  const toks = nameTokens(it.name);
-  const hits = toks.size ? list.filter(P=>{ const pt=nameTokens(P.prize); return [...toks].some(t=>pt.has(t)); }) : [];
-  const avg = arr => arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : null;
-  const paceOf = arr => avg(arr.map(P=>P.pacePerWeek));
-  let score=null, basis="", detail=[];
-  if (hits.length){
-    const pace=paceOf(hits), ratios=hits.filter(P=>P.ratio!==null).map(P=>P.ratio), ratio=avg(ratios);
-    const best=hits.slice().sort((a,b)=>b.pacePerWeek-a.pacePerWeek)[0];
-    score = pace;
-    basis = `同系統 ${hits.length}件`;
-    detail.push(`「${best.prize}」など 週 ${pace>=10?Math.round(pace):pace.toFixed(1)}こ${ratio!==null?`・原価率 ${pct(ratio,0)}`:""}${best.nOf?`・1/${Math.round(best.nOf)}`:""}`);
-    const bestStore = Object.entries(best.stores||{}).sort((a,b)=>b[1].paysPerDay-a[1].paysPerDay)[0];
-    if (bestStore && bestStore[1].pays>0) detail.push(`よく出た店：${String(bestStore[0]).replace(/店$/,"")}`);
-  } else if (it.price>0){
-    const band = priceBand(taxIn(it.price)), same = list.filter(P=>P.unit>0 && priceBand(P.unit)===band);   // 価格帯は税込で比べる
-    if (same.length){ score = paceOf(same)*0.8; basis=`価格帯 ${band} の平均`; detail.push(`同じ価格帯 ${same.length}件が 週 ${paceOf(same).toFixed(1)}こ（系統の実績はまだ無し）`); }
-  }
-  const ordered = /発注済|下書き作成/.test(it.status||"");          // この商品自身が発注済みなら「再発注」とは言わない
-  const hist = ordered ? [] : SRC.history.filter(h=>normName(h.name)===normName(it.name) || (toks.size && [...nameTokens(h.name)].some(t=>toks.has(t) && t.length>=4)));
-  const exact = hist.find(h=>normName(h.name)===normName(it.name));
-  if (exact) detail.push(`再発注：${jpDate(exact.date)} に ${exact.cases}ケース`);
-  else if (hist.length) detail.push(`同系統を ${jpDate(hist[0].date)} に発注済み（${hist[0].name.slice(0,14)}…）`);
-  // 原価率の目安（4人機 100円/プレイ想定）
-  let guide="";
-  if (it.price>0){ const u=taxIn(it.price); const [lo,hi]=targetBand(u); guide=`原価率 ${pct(lo,0)}〜${pct(hi,0)} なら 1/${Math.round(u/(hi*PLAY_PRICE))}〜1/${Math.round(u/(lo*PLAY_PRICE))}（税込 ${yen(u)}円で計算）`; }
-  // 同系統の在庫（景品マスタ）。実績が無くても「すでに持っている」は分かる
-  const stockHits = toks.size ? allPrizes().filter(p=>{ const pt=nameTokens(p.name); return [...toks].some(t=>pt.has(t)); }).map(p=>({name:p.name, stock:stockOf(p.name)})).filter(x=>x.stock>0) : [];
-  if (stockHits.length){ const tot=stockHits.reduce((a,x)=>a+x.stock,0); detail.push(`同系統の在庫あり：${stockHits[0].name.slice(0,16)}${stockHits.length>1?` ほか${stockHits.length-1}件`:""}（計 ${yen(tot)}こ）`); }
-  let rank, cls, why;
-  if (score===null){ rank="?"; cls="none"; why = it.name ? "判定材料なし" : ""; if (it.name) detail.unshift("同系統の払出データがまだ無い。巡回で「取られた数」を入れると判定できる"); }
-  else if (score>=5){ rank="S"; cls="s"; why="よく出る系統"; }
-  else if (score>=2){ rank="A"; cls="a"; why="出る系統"; }
-  else if (score>=0.7){ rank="B"; cls="b"; why="ふつう"; }
-  else { rank="C"; cls="c"; why="出が弱い系統"; }
-  if (exact && rank!=="S" && score!==null) { /* 再発注は実績ありの証拠。1段上げる */ const up={C:"B",B:"A",A:"S"}; if (up[rank]){ rank=up[rank]; cls=rank.toLowerCase(); why+="・再発注"; } }
-  return {rank, cls, why, basis, detail, guide, score: score===null ? -1 : score};
-}
-function rankBlock(it){
-  const r = srcRank(it);
-  return `<div class="rank ${r.cls}"><div class="rk"><b>${r.rank}</b><small>ランク</small></div><div class="rt"><div class="w">${esc(r.why)}${r.basis?`<span class="bs">${esc(r.basis)}</span>`:""}</div>${r.detail.map(d=>`<div>${esc(d)}</div>`).join("")}${r.guide?`<div class="g">${esc(r.guide)}</div>`:""}</div></div>`;
-}
-function srcOrderOf(it){
-  const d=srcDecision(it.key); const cases = d && d.cases!=null ? num(d.cases) : num(it.cases);
-  const pcs = Math.round(num(it.qty)*cases), amount = Math.round(num(it.price)*pcs);
-  return {cases, pcs, amount, machine:(d&&d.machine)||it.machine||"", note:(d&&d.note)||it.memo||""};
-}
-/* ===================== おかわり発注（2026-11-19 依頼⑫：一度仕入れて届いた商品をもう一度） =====================
-   受取済（発注済）のカードの「🔁 おかわり」→ 前回と同じ 商品名・品番・入数・単価・機械タイプ・ケース数 で「発注予定」に 1 タップで入る。
-   最新のメールに同じ商品（品番または商品名が同じ）が来ていればその行を発注予定にする（単価・納期の新しい情報を優先）。
-   無ければサーバー（sourcingReorder）が商品一覧に同じ内容の新しい行を足して order にする。元の行は触らない。
-   その先（発注要求を出す → Mac → 発注済 → 受け取った）は従来と同じ。景品マスタには Mac が同名の行を足す（＝追加仕入れの決まり） */
-const srcSameProduct = (a,b) => { const ca=normName(a.code||""), cb=normName(b.code||""); const na=normName(a.name||""); return (ca && cb) ? ca===cb : !!(na && na===normName(b.name||"")); };
-const srcOrderNo = it => { const m=String(it.status||"").match(/EH-\d{8}-\d+/); return m ? m[0] : ""; };
-const srcIsReorder = it => { const d=srcDecision(it.key); return !!((d && d.reorderOf) || /^おかわり/.test(it.raw||"")); };
+function srcLoadCache(){ try{ localStorage.removeItem("crane-lab-sourcing-v1"); }catch(e){} }   // 本体が持っていた仕入れ一覧のキャッシュは消す（もう読まない。端末の容量を空ける）
 const wk1 = v => v>=10 ? String(Math.round(v)) : v.toFixed(1);
-const casesLabel = c => c===0.5 ? "ハーフ" : `${c}ケース`;
-/* おかわりの材料：発注履歴（何回目・前回の発注）、前回の発注日からの払出ペース、在庫とあと何週（景品ラボ「在庫回転」と同じ式） */
-function srcReorderInfo(it){
-  const hist = SRC.history.filter(h=>srcSameProduct(h,it)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-  const times = Math.max(/発注済/.test(it.status||"") ? 1 : 0, new Set(hist.map(h=>h.orderNo||h.date)).size);
-  const d = srcDecision(it.key);
-  const dm = String(it.status||"").match(/\d{4}-\d{2}-\d{2}/);
-  const lastDate = dm ? dm[0] : (hist[0] ? hist[0].date : "");
-  const n = normName(it.name);
-  const pz = allPrizes().find(p=>normName(p.name)===n) || null;
-  const stock = pz ? stockOf(pz.name) : null;
-  // 前回の発注日以降の払出 ÷ 暦の日数（部屋ごとの区間を足した日数ではなく、最初の区間の始まりから最後の記録までの実日数。複数の部屋に同時に入っていても週あたりの実消費になる）
-  const iv = pz ? (SRC.iv || (SRC.iv = prizeIntervals())).filter(e=>e.prize===pz.name && (!lastDate || e.date>=lastDate)) : [];
-  const pays = iv.reduce((a,e)=>a+(e.pays||0),0);
-  const span = iv.length ? Math.max(1, daysSince(iv.reduce((m,e)=>{ const st=new Date(e.date+"T00:00:00"); st.setDate(st.getDate()-e.days); const s2=iso_(st); return m && m<s2 ? m : s2; }, "")) - Math.min(...iv.map(e=>daysSince(e.date)))) : 0;
-  let pace = span>0 ? pays/span*7 : null;
-  if (pace===null && pz){ const agg = SRC.agg || (SRC.agg = labAgg()); const P = agg[pz.name]; if (P && P.days>0) pace = P.pacePerWeek; }
-  const weeksLeft = (stock!==null && pace>0) ? stock/pace : null;
-  const prevCases = d && num(d.cases)>0 ? num(d.cases) : (num(it.cases)>0 ? num(it.cases) : (hist[0] && num(hist[0].cases)>0 ? num(hist[0].cases) : 1));
-  const prevMachine = (d && d.machine) || it.machine || (pz && pz.use && pz.use!=="両方" ? pz.use : "");
-  return {times, lastDate, orderNo: srcOrderNo(it), stock, pace, weeksLeft, prevCases, prevMachine, prize: pz ? pz.name : ""};
-}
-/* 発注の目安（在庫回転の「あと○週」から） */
-function reorderHint(info){
-  if (info.stock===null) return "";
-  if (info.stock<=0) return "在庫なし → いま発注";
-  if (info.weeksLeft===null) return `在庫 ${info.stock}こ（前回の発注後の払出がまだ無い）`;
-  const w=info.weeksLeft;
-  return w<=2 ? `あと ${wk1(w)}週で切れる → いま発注` : w<=4 ? `あと ${wk1(w)}週 → 来週には発注` : `あと ${wk1(w)}週 → まだ余裕`;
-}
 const reorderSoon = (stock, weeksLeft) => stock!==null && (stock<=5 || (weeksLeft!==null && weeksLeft<=2));
-/* 同じ商品の、もっと新しいメールの行（まだ発注していないもの）。あればおかわりはこちらを使う */
-function srcNewerMail(it){
-  return SRC.items.filter(x=>x.key!==it.key && srcSameProduct(x,it) && String(x.date)>String(it.date) && !srcMissing(x) && ["todo","hold","skip","order","check"].includes(srcState(x)))
-    .sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0] || null;
-}
-/* 景品名から、おかわりの元になる発注済の商品（商品一覧）を探す */
-function srcItemForPrize(name){
-  const n=normName(name); if (!n) return null;
-  return SRC.items.filter(it=>/発注済/.test(it.status||"") && normName(it.name)===n && !srcMissing(it)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0] || null;
-}
-function reorderBlock(it){
-  const info = srcReorderInfo(it), newer = srcNewerMail(it), hint = reorderHint(info);
-  const soon = reorderSoon(info.stock, info.weeksLeft);
-  const lines = [`これまで <b>${info.times}回</b> 発注　前回 ${info.orderNo ? esc(info.orderNo)+" " : ""}${jpDate(info.lastDate)}　<b>${casesLabel(info.prevCases)}</b>${info.prevMachine?`　${esc(info.prevMachine)}`:""}`];
-  if (info.pace!==null) lines.push(`前回の発注から 週 ${wk1(info.pace)}こ 払出${info.stock!==null?`　在庫 ${info.stock}こ`:""}`);
-  else if (info.stock!==null) lines.push(`在庫 ${info.stock}こ`);
-  if (hint) lines.push(soon ? `<b>${esc(hint)}</b>` : esc(hint));
-  const price = newer
-    ? `最新のメール（${jpDate(newer.date)} 受信）の 単価 税込 ${yen(taxIn(newer.price))}円・入数 ${yen(newer.qty)} を使います${newer.price!==it.price?`（前回 ${yen(taxIn(it.price))}円）`:""}。`
-    : `前回の 単価 税込 ${yen(taxIn(it.price))}円（税抜 ${yen(it.price)}円）・入数 ${yen(it.qty)} で発注します。単価・納期が変わっている可能性があります（インフィニティの返信で確認）。`;
-  return `<div class="reorder ${soon?"soon":""}"><div class="rl">${lines.join("<br>")}</div><button type="button" class="recv" data-reorder="1">🔁 おかわり（${casesLabel(info.prevCases)}）</button><div class="rp">${esc(price)}</div></div>`;
-}
-/* 他のタブ（景品・在庫整理・在庫回転）用：在庫が少ない景品に「🔁 おかわり」 */
+const reorderOn = () => canSource();
+/* 在庫が少ない景品（在庫 5 以下、または あと 2 週以内）に「🔁 おかわり」。押すと仕入れアプリが開き、その景品の前回の発注内容で発注予定に入れる（依頼⑫の流れ）。
+   仕入れ一覧は読まないので「EXAmuse で買った景品か」は仕入先で見る（インフィニティ以外＝個店・エスプランの景品には出さない）。「あと○週」は景品ラボ「在庫回転」と同じ labAgg の式 */
 function reorderChip(name, bare){
   if (!canSource()) return "";
-  const it = srcItemForPrize(name); if (!it) return "";
-  const info = srcReorderInfo(it);                      // カードと同じ数字（前回の発注日からの実ペース）
-  if (!reorderSoon(info.stock, info.weeksLeft)) return "";
-  return `<button type="button" class="chip mini re-btn" data-reorder-name="${esc(name)}">🔁 おかわり${bare?"":info.weeksLeft!==null?`（あと ${wk1(info.weeksLeft)}週）`:info.stock<=0?"（在庫なし）":`（残 ${info.stock}）`}</button>`;
-}
-const reorderOn = () => canSource() && (typeof SRC!=="undefined") && (SRC.items||[]).some(it=>/発注済/.test(it.status||""));
-function srcFocus(key){ const el=document.querySelector(`.sc[data-key="${CSS.escape(key)}"]`); if (!el) return; el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 2400); }
-async function srcReorder(it){
-  if (!canSource()) return;
-  if (!Store.online()){ toast("いまは保存できません（オフライン）"); return; }
-  const dup = SRC.items.find(x=>x.key!==it.key && srcSameProduct(x,it) && ["order","requested","drafted"].includes(srcState(x)));
-  if (dup){ SRC.filter=srcState(dup); renderSourcing(); srcFocus(dup.key); toast(`「${it.name}」はすでに ${SRC_LABEL[srcState(dup)]} にあります`); return; }
-  const info = srcReorderInfo(it);
-  const note = `おかわり ${info.times+1}回目（前回 ${info.orderNo || jpDate(info.lastDate)}）`;
-  const newer = srcNewerMail(it);
-  let key, msg;
-  if (newer){
-    if (!(await srcSet(newer.key, "order", {cases:info.prevCases, machine:info.prevMachine, note}))) return;
-    key = newer.key;
-    msg = `最新のメール（${jpDate(newer.date)} 受信）の商品を発注予定に入れました（${casesLabel(info.prevCases)}）${newer.price!==it.price?`。単価 税込 ${yen(taxIn(it.price))}円 → ${yen(taxIn(newer.price))}円`:""}`;
-  } else {
-    try {
-      const r = await api("sourcingReorder", {key:it.key, cases:info.prevCases, machine:info.prevMachine, note});
-      SRC.items = SRC.items.filter(x=>x.key!==r.item.key).concat([r.item]);
-      setLocalSourcing(r.item.key, Object.assign({id:r.item.key}, r.rec), false);
-      try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, history:SRC.history, limit:SRC.limit, at:SRC.at})); } catch(e){}
-      key = r.item.key;
-      msg = `前回と同じ内容で発注予定に入れました（${casesLabel(info.prevCases)}）`;
-    } catch(e){ toast(errMsg(e)); return; }
-  }
-  SRC.filter="order"; SRC.q=""; const q=$("#srcQ"); if (q){ q.value=""; $("#srcQx").hidden=true; }
-  renderSourcing(); srcFocus(key);
-  toast(msg + "。数量を変えるなら「発注予定 ✓」", 5000);
-}
-async function goReorder(name){
-  if (!canSource()) return;
-  if (Store.online()) await loadSourcing(true);
-  const it = srcItemForPrize(name);
-  if (!it){ toast("この景品の発注済みの記録（商品一覧）が見つかりません"); return; }
-  const t=document.querySelector('.tab[data-p="p-src"]'); if (t) t.click();
-  await srcReorder(it);
-}
-/* 景品サイズ：商品名・件名・注意・メール原文から「〇cm」「W10×H20×D5cm」「130mm」を拾い、一辺の最大値を返す（取れなければ null） */
-function srcSizeCm(it){
-  const t = [it.name, it.subject, it.caution, it.memo, it.variety, it.raw].filter(Boolean).join(" ").replace(/[０-９．]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/，/g,",");
-  let max = null;
-  const take = (n, unit) => { const v = /mm|ミリ/.test(unit) ? n/10 : n; if (v>0 && v<300 && (max===null || v>max)) max = v; };
-  // 「W10×H20×D5cm」「10x20x5 cm」のように、単位が最後にだけ付くもの
-  for (const m of t.matchAll(/((?:[WHDwhd全長高幅奥行約]*\s*\d+(?:\.\d+)?\s*(?:[×xX＊*]|\s)\s*){1,3}[WHDwhd全長高幅奥行約]*\s*\d+(?:\.\d+)?)\s*(cm|㎝|ｃｍ|センチ|mm|ミリ)/g))
-    m[1].match(/\d+(?:\.\d+)?/g).forEach(n=>take(Number(n), m[2]));
-  // 「約25cm」「H13cm」単独
-  for (const m of t.matchAll(/(\d+(?:\.\d+)?)\s*(cm|㎝|ｃｍ|センチ|mm|ミリ)/g)) take(Number(m[1]), m[2]);
-  return max;
-}
-const SIZE_LIMIT_CM = 13;
-const srcTooBig = it => { const c = srcSizeCm(it); return c!==null && c>SIZE_LIMIT_CM ? c : null; };
-function srcCard(it){
-  const st = srcState(it), d = srcDecision(it.key);
-  const big = srcTooBig(it);
-  const o = srcOrderOf(it);
-  const miss = srcMissing(it);
-  const caseAmt = (it.qty>0 && it.price>0) ? it.qty*it.price : null;
-  const halfNG = /不可|×|NG/.test(it.half||"");
-  const meta = [];
-  if (it.lead) meta.push(`<span>納期 ${esc(it.lead)}</span>`);
-  if (it.half) meta.push(`<span>ハーフ ${esc(it.half)}</span>`);
-  if (it.ship) meta.push(`<span>${esc(it.ship)}</span>`);
-  if (it.variety) meta.push(`<span>${esc(it.variety)}</span>`);
-  if (it.caution) meta.push(`<span class="warn">⚠ ${esc(it.caution)}</span>`);
-  if (it.check && /⚠|エラー/.test(it.check)) meta.push(`<span class="warn">${esc(it.check)}</span>`);
-  const req = (st==="requested" && d) ? SRC.requests.find(r=>r.id===d.requestId) : null;
-  let state="";
-  if (st==="done") state=`<div class="state done"><b>発注済</b>　${esc(it.status)}<div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="recv" data-recv="1">📦 受け取った</button><button type="button" class="recv ghost" data-cancel="1">キャンセルした</button></div></div>`;
-  else if (st==="cancelled") state=`<div class="state bad"><b>キャンセル ${jpDate(d.cancelledAt)}</b>${d.cancelledBy?`　${esc(d.cancelledBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><br><span style="font-size:11px">景品マスタに入っている分は手で消してください。</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
-  else if (st==="received") state=`<div class="state done"><b>受取済 ${jpDate(d.receivedAt)}</b>${d.receivedBy?`　${esc(d.receivedBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
-  else if (st==="drafted") state=`<div class="state done"><b>Mail の下書き作成済み</b>　${esc(it.status)}<br>Mac で送信したら、スプシのメニュー「手動で送った→発注済みにして景品マスタへ登録」を実行。</div>`;
-  else if (st==="requested") state=`<div class="state ${req&&req.state==="失敗"?"bad":""}"><b>発注要求 ${esc(d.requestId)}</b>　${req ? esc(req.state) : "確認中"}${req&&req.result?`<br>${esc(req.result)}`:""}${!req||req.state==="待機中"||req.state==="処理中(Mac)" ? "<br>Mac が 2 分以内に発注書と Mail の下書きを作ります。" : ""}</div>`;
-  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(taxIn(o.amount))}円</b><span class="ex">税抜 ${yen(o.amount)}円</span>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}${srcIsReorder(it)?`<br><span style="font-size:11px;color:var(--ink-3)">前回と同じ単価・入数です。インフィニティの返信で単価が変わっていたら${ME&&ME.role==="admin"?"「編集する」で直してください":"菊地さんに伝えてください"}。</span>`:""}</div>`;
-  else if (st==="check") state=`<div class="state bad"><b>メールから読み取れていません</b>　${[!it.name&&"商品名", !(it.qty>0)&&"入数", !(it.price>0)&&"単価"].filter(Boolean).join("・")} が空です。${ME&&ME.role==="admin" ? "「直す」でメールを見て入力するか、見送りにしてください。" : "菊地さんに確認してください（単価・入数は管理者だけが直せます）。"}${it.raw?`<br><span style="font-size:11px">メールの原文：${esc(it.raw)}</span>`:""}${it.subject?`<br><span style="font-size:11px;color:var(--ink-3)">件名：${esc(it.subject)}</span>`:""}</div>`;
-  const reBlock = (st==="received" || st==="done") && canSource() ? reorderBlock(it) : "";
-  const reBadge = srcIsReorder(it) ? (()=>{ const d2=srcDecision(it.key); const m=(it.raw||"").match(/EH-\d{8}-\d+/) || (it.raw||"").match(/前回 (\S+)/); const no=(d2&&d2.prevNo)||(m?(m[1]||m[0]):""); const info=srcReorderInfo(it); const nth = /発注済|下書き作成/.test(it.status||"") ? info.times : info.times+1; return `<span class="rebadge">🔁 おかわり ${Math.max(2, nth)}回目${no?`（前回 ${esc(no)}）`:""}</span>`; })() : "";   // 発注済なら自分の分が履歴に入っているので +1 しない
-  const openOrder = SRC.open[it.key]==="order", openFix = SRC.open[it.key]==="fix";
-  const canAct = st==="todo"||st==="order"||st==="hold"||st==="skip"||st==="check";
-  const canOrder = canAct && !miss;
-  // 発注の選択：1ケース（入数）か ハーフ（入数の半分）。ケース数は 1 のときだけ増やせる
-  const sel = SRC.sel[it.key] || {mode: o.cases===0.5 ? "half" : (o.cases>=1 ? "case" : ""), n: o.cases>=1 ? o.cases : 1};
-  const selCases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? sel.n : 0;
-  const selPcs = Math.round(num(it.qty)*selCases), selAmt = Math.round(num(it.price)*selPcs);
-  const orderPanel = openOrder ? `<div class="panel2" data-key="${esc(it.key)}">
-      <div class="row"><span class="k">数量（入数）を選ぶ</span>
-        <button type="button" class="opt ${sel.mode==="case"?"on":""}" data-smode="case"><b>1ケース</b><small>${yen(it.qty)}こ ＝ ${yen(taxIn(caseAmt))}円<span class="ex">税抜 ${yen(caseAmt)}円</span></small></button>
-        <button type="button" class="opt ${sel.mode==="half"?"on":""}" data-smode="half" ${halfNG?"disabled":""}><b>ハーフ</b><small>${halfNG?"ハーフ不可":`${yen(Math.round(it.qty/2))}こ ＝ ${yen(taxIn(Math.round(caseAmt/2)))}円<span class="ex">税抜 ${yen(Math.round(caseAmt/2))}円</span>`}</small></button>
-      </div>
-      ${sel.mode==="case" ? `<div class="row"><span class="k">ケース数</span><button type="button" class="chip mini" data-sn="-1">−</button><b style="font-size:18px;min-width:28px;text-align:center">${sel.n}</b><button type="button" class="chip mini" data-sn="1">＋</button><span style="font-size:12px;color:var(--ink-2)">＝ ${yen(selPcs)}こ ${yen(taxIn(selAmt))}円<span class="ex">税抜 ${yen(selAmt)}円</span></span></div>` : ""}
-      <div class="row"><span class="k">機械タイプ</span>${MACHINES.map(m=>`<button type="button" class="chip mini" data-sm="${esc(m)}" aria-pressed="${o.machine===m}">${m}</button>`).join("")}</div>
-      <div class="row"><span class="k">備考（発注書には出ません）</span><input class="txt" data-snote="1" value="${esc(o.note)}" placeholder="例：下山門用"></div>
-      <div class="row"><button type="button" class="ok" data-sok="1" ${selCases>0?"":"disabled"}>${selCases>0?`${selCases===0.5?"ハーフ":selCases+"ケース"}（${yen(selPcs)}こ 税込 ${yen(taxIn(selAmt))}円）で発注予定に入れる`:"数量を選んでください"}</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
-    </div>` : "";
-  const isAdmin = !!(ME && ME.role==="admin");
-  const f = SRC.fix[it.key] || {name:it.name, code:it.code, qty:it.qty??"", price:it.price??""};
-  const fixPanel = openFix ? `<div class="panel2" data-key="${esc(it.key)}">
-      <div class="row"><span class="k">商品名</span><input class="txt" data-fx="name" value="${esc(f.name||"")}" style="flex:1"></div>
-      <div class="row"><span class="k">品番</span><input class="txt" data-fx="code" value="${esc(f.code||"")}" style="flex:1"></div>
-      ${isAdmin ? `<div class="row"><span class="k">入数（1ケース）／ 単価（税抜）　※管理者のみ</span>
-        <input class="num" type="number" inputmode="numeric" data-fx="qty" value="${esc(String(f.qty))}" placeholder="入数">
-        <input class="num" type="number" inputmode="numeric" data-fx="price" value="${esc(String(f.price))}" placeholder="単価"></div>` : `<div class="row"><span class="k">入数・単価はメールのとおり（管理者だけが直せます）</span></div>`}
-      ${it.raw?`<div class="row"><span class="k">メールの数量・金額の原文：${esc(it.raw)}</span></div>`:""}
-      <div class="row"><button type="button" class="ok" data-fok="1">スプシに保存</button><button type="button" class="cancel" data-scancel="1">閉じる</button></div>
-    </div>` : "";
-  return `<div class="sc ${st}" data-key="${esc(it.key)}">
-    ${it.img ? `<img class="pic" src="${esc(thumbSrc(it.img))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic none',textContent:'画像を表示できません'}))">` : `<div class="pic none">画像なし</div>`}
-    <div class="bd">
-      <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
-      <div class="sub">${SRC.q.trim() ? `<span class="stb">${esc(SRC_LABEL[st]||st)}</span>` : ""}${reBadge}${srcIsReorder(it) ? `${jpDate(it.date)} 作成` : `${jpDate(it.date)} 受信`}${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
-      <div class="price">${it.price>0?`<b>${yen(taxIn(it.price))}</b><span class="per">円（税込）<span class="ex">税抜 ${yen(it.price)}円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span></span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
-      ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
-      ${big ? `<div class="sizeng">📏 一辺 ${big}cm（${SIZE_LIMIT_CM}cm 超）→ <b>見送り候補</b></div>` : ""}
-      ${it.name ? rankBlock(it) : ""}
-      ${state}${reBlock}
-      ${canAct ? `<div class="acts">
-        <button type="button" class="${st==="skip"?"on":""}" data-sd="skip">見送り</button>
-        <button type="button" class="${st==="hold"?"on":""}" data-sd="hold">保留</button>
-        <button type="button" class="go ${st==="order"?"on":""}" data-sd="order" ${canOrder?"":"disabled"}>${st==="order"?"発注予定 ✓":"発注する"}</button>
-      </div>` : ""}
-      ${orderPanel}${fixPanel}
-      ${canAct && !openFix ? `<button type="button" class="fix" data-sfix="1">${miss?"⚠ 読み取れていない項目を編集する":"編集する"}</button>` : ""}
-    </div>
-  </div>`;
-}
-/* 検索（2026-11-06 菊地さん）：商品名・品番・件名・メーカー・種類・メモ・メール原文から。空白区切りはすべてを含むもの。
-   ひらがな／カタカナ、全角／半角、大文字／小文字、記号の違いは無視する */
-const srcFold = s => normName(s).replace(/[\u3041-\u3096]/g, c=>String.fromCharCode(c.charCodeAt(0)+0x60));
-function srcMatch(it, words){
-  const hay = srcFold([it.name, it.code, it.subject, it.maker, it.variety, it.memo, it.raw, it.key].filter(Boolean).join(" "));
-  return words.every(w=>hay.includes(w));
-}
-function renderSourcing(){
-  const list=$("#srcList"); if (!list) return;
-  SRC.agg = null; SRC.iv = null;
-  const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
-  const words = String(SRC.q||"").split(/[\s\u3000]+/).map(srcFold).filter(Boolean);
-  const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
-  const groups = [["todo","未判断"],["check","要確認"],["order","発注予定"],["hold","保留"],["skip","見送り"],["requested","要求中"],["drafted","下書き済"],["done","発注済"],["received","受取済"],["cancelled","キャンセル"]];
-  if (!cnt[SRC.filter] && SRC.filter!=="todo"){ /* keep */ }
-  $("#srcFilter").innerHTML = groups.filter(([k])=>cnt[k]||k==="todo").map(([k,l])=>`<button type="button" class="chip mini" data-sf="${k}" aria-pressed="${SRC.filter===k}">${l} ${cnt[k]||0}</button>`).join("");
-  // 検索中は状態のボタンに関係なく、すべての商品から探す（カードに状態を出す）
-  $("#srcFilter").hidden = !!words.length;
-  const shown = words.length ? items.filter(it=>srcMatch(it, words)) : items.filter(it=>srcState(it)===SRC.filter);
-  const hit=$("#srcHit"); hit.hidden = !words.length;
-  if (words.length){
-    const by = {}; shown.forEach(it=>{ const st=srcState(it); by[st]=(by[st]||0)+1; });
-    hit.innerHTML = shown.length ? `<b>${shown.length}件</b> 見つかりました（${groups.filter(([k])=>by[k]).map(([k,l])=>`${l} ${by[k]}`).join("・")}）` : "";
-  }
-  if (!words.length && SRC.filter==="todo") shown.sort((a,b)=>(srcTooBig(a)?1:0)-(srcTooBig(b)?1:0) || srcRank(b).score-srcRank(a).score || String(b.date).localeCompare(String(a.date)));   // 未判断はランク順（13cm 超は後ろ）
-  list.innerHTML = shown.length ? shown.map(srcCard).join("")
-    : words.length && SRC.items.length ? `<div class="empty"><b>🔍</b>「${esc(SRC.q.trim())}」に合う商品はありません。</div>`
-    : `<div class="empty"><b>📦</b>${SRC.items.length ? `${SRC_LABEL[SRC.filter]}の商品はありません。` : SRC.error ? `<span style="color:var(--critical-ink)">読み込めませんでした：${esc(SRC.error)}</span>` : (Store.online() ? (SRC.at ? "まだ商品が届いていません。" : "読み込み中…") : "オンラインのときに読み込まれます。")}</div>`;
-  // 発注予定のまとめ
-  const orders = items.filter(it=>srcState(it)==="order");
-  const total = orders.reduce((a,it)=>a+srcOrderOf(it).amount,0);
-  const sum=$("#srcSum"); sum.hidden = !orders.length;
-  if (orders.length){
-    const noM = orders.filter(it=>!srcOrderOf(it).machine).length;
-    $("#srcSumTxt").innerHTML = `${orders.length}件　${yen(taxIn(total))}円 <span style="font-size:11px;font-weight:400;opacity:.85">税込（税抜 ${yen(total)}円）</span>${total>SRC.limit?`<span style="display:block;font-size:11px;color:var(--gold)">上限警告 税抜 ${yen(SRC.limit)}円 を超えています</span>`:""}${noM?`<span style="display:block;font-size:11px;color:var(--gold)">機械タイプ未選択 ${noM}件</span>`:""}`;
-    $("#srcSubmit").disabled = SRC.busy;
-  }
-  // 要求の状況
-  const rc=$("#srcReqCard"); rc.hidden = !SRC.requests.length;
-  if (SRC.requests.length){
-    $("#srcReqCt").textContent = `${SRC.requests.length}件`;
-    $("#srcReqs").innerHTML = SRC.requests.slice(0,8).map(r=>`<div class="src-req"><div><b>${esc(r.orderNo||r.id)}</b>　${esc(r.at).slice(5,16)}　${r.n}商品 ${yen(taxIn(r.amount))}円<span class="ex">税抜 ${yen(r.amount)}円</span>${r.staff?`　${esc(r.staff)}`:""}${r.result?`<div style="font-size:11px;color:var(--ink-3);margin-top:2px">${esc(r.result)}</div>`:""}</div><span class="st" style="color:${r.state==="完了"?"var(--aqua-ink)":r.state==="失敗"?"var(--critical-ink)":"var(--warning-ink)"}">${esc(r.state)}${r.mode&&r.mode!=="下書き"?`<br><span style="font-weight:400;font-size:11px">${esc(r.mode)}</span>`:""}</span></div>`).join("");
-  }
-  const at=$("#srcAt"); if (at) at.textContent = SRC.at ? `${new Date(SRC.at).getHours()}:${String(new Date(SRC.at).getMinutes()).padStart(2,"0")} 取得` : "";
-}
-async function srcSet(key, decision, extra){
-  if (!Store.online()){ toast("いまは保存できません（オフライン）"); return false; }
-  try {
-    const r = await api("sourcingSet", Object.assign({key, decision}, extra||{}));
-    setLocalSourcing(key, r.rec ? Object.assign({id:key}, r.rec) : null, false);
-    const it = SRC.items.find(x=>x.key===key);
-    if (it && decision!=="received" && decision!=="cancelled" && decision!=="unreceive"){ if (decision==="order"){ it.cases=num(extra.cases); if (extra.machine) it.machine=extra.machine; it.memo=extra.note||""; } else it.cases=null; }
-    return true;
-  } catch(e){ toast(errMsg(e)); return false; }
-}
-async function srcSubmit(){
-  const orders = SRC.items.filter(it=>srcState(it)==="order");
-  if (!orders.length) return;
-  const total = orders.reduce((a,it)=>a+srcOrderOf(it).amount,0);
-  const noM = orders.filter(it=>!srcOrderOf(it).machine);
-  const lines = orders.map(it=>{ const o=srcOrderOf(it); return `・${it.name}　${o.cases}ケース（${o.pcs}こ）税込 ${yen(taxIn(o.amount))}円（税抜 ${yen(o.amount)}円）${o.machine?" "+o.machine:""}`; }).join("\n");
-  let msg = `この ${orders.length} 件で発注要求を出します。\n${lines}\n\n合計 税込 ${yen(taxIn(total))}円（税抜 ${yen(total)}円。発注書は税抜）`;
-  if (noM.length) msg += `\n\n※機械タイプ未選択が ${noM.length} 件あります（景品マスタに空欄で入ります）`;
-  if (total>SRC.limit) msg += `\n\n※上限警告 税抜 ${yen(SRC.limit)}円 を超えています`;
-  msg += "\n\nMac が発注書と Mail の下書きを作ります。送信は Mac の Mail から行います。";
-  if (!confirm(msg)) return;
-  const btn=$("#srcSubmit"); btn.disabled=true;
-  try {
-    const r = await api("sourcingSubmit", {keys: orders.map(it=>it.key)});
-    toast(`発注要求 ${r.requestId} を出しました（${r.n}件 税抜 ${yen(r.total)}円）`);
-    await Store.sync(false); await loadSourcing(true);
-  } catch(e){ alert(errMsg(e)); btn.disabled=false; }
-}
-function wireSourcing(){
-  $("#srcReload").onclick = ()=>loadSourcing(true);
-  $("#srcSubmit").onclick = srcSubmit;
-  $("#srcFilter").onclick = e=>{ const b=e.target.closest("[data-sf]"); if(!b) return; SRC.filter=b.dataset.sf; renderSourcing(); };
-  let qt=0; const q=$("#srcQ"), qx=$("#srcQx");
-  q.addEventListener("input", ()=>{ qx.hidden = !q.value; clearTimeout(qt); qt=setTimeout(()=>{ SRC.q=q.value; renderSourcing(); }, 200); });
-  q.addEventListener("keydown", e=>{ if (e.key==="Enter"){ e.preventDefault(); q.blur(); } });   // 「検索」キーでキーボードを閉じる
-  qx.onclick = ()=>{ q.value=""; qx.hidden=true; SRC.q=""; renderSourcing(); q.focus(); };
-  $("#srcList").addEventListener("click", async e=>{
-    const card=e.target.closest(".sc"); if(!card) return; const key=card.dataset.key; const it=SRC.items.find(x=>x.key===key); if(!it) return;
-    const b=e.target.closest("button"); if(!b) return;
-    if (b.dataset.sd){
-      const dec=b.dataset.sd, cur=srcState(it);
-      if (dec==="order"){ SRC.open[key] = SRC.open[key]==="order" ? null : "order"; renderSourcing(); return; }
-      if (SRC.local[key] && SRC.local[key].pending){ toast("前の操作を送信中です。少し待ってください"); return; }
-      const next = cur===dec ? "" : dec;               // 同じボタンをもう一度で未判断に戻す
-      // 先に画面を更新してから通信する（待たせない）。失敗したらこの商品だけ元に戻す
-      const prevDoc = srcDecision(key) ? Object.assign({}, srcDecision(key)) : null;
-      setLocalSourcing(key, next ? {id:key, key, decision:next, by:me(), at:new Date().toISOString(), _pending:true} : null, true);
-      SRC.open[key]=null; renderSourcing(); toast(next==="skip"?"見送りにしました":next==="hold"?"保留にしました":"未判断に戻しました");
-      srcSet(key, next).then(ok=>{ if (!ok){ setLocalSourcing(key, prevDoc, false); renderSourcing(); } });
-      return;
-    }
-    if (b.dataset.recv || b.dataset.unrecv || b.dataset.cancel){
-      if (b.dataset.cancel && !confirm(`「${it.name}」をキャンセル扱いにします。インフィニティへのキャンセル連絡は別途必要です。よろしいですか？`)) return;
-      b.disabled=true;
-      const dec = b.dataset.recv ? "received" : b.dataset.cancel ? "cancelled" : "unreceive";
-      if (await srcSet(key, dec)) toast(dec==="received" ? "受取済みにしました" : dec==="cancelled" ? "キャンセルにしました" : "発注済に戻しました");
-      renderSourcing(); return;
-    }
-    if (b.dataset.reorder){ b.disabled=true; await srcReorder(it); return; }
-    if (b.dataset.sfix){ SRC.open[key]="fix"; SRC.fix[key]={name:it.name, code:it.code, qty:it.qty??"", price:it.price??""}; renderSourcing(); return; }
-    if (b.dataset.scancel){ SRC.open[key]=null; renderSourcing(); return; }
-    const keepPanel = () => { const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const nt=card.querySelector("[data-snote]"); SRC.keep = {machine: mb?mb.dataset.sm:"", note: nt?nt.value:""}; };
-    if (b.dataset.smode){ keepPanel(); const cur=SRC.sel[key]||{mode:"",n:1}; SRC.sel[key]={mode: cur.mode===b.dataset.smode ? "" : b.dataset.smode, n: cur.n||1}; renderSourcing(); restorePanel(card.dataset.key); return; }
-    if (b.dataset.sn){ keepPanel(); const cur=SRC.sel[key]||{mode:"case",n:1}; SRC.sel[key]={mode:"case", n: Math.max(1, (cur.n||1)+num(b.dataset.sn))}; renderSourcing(); restorePanel(card.dataset.key); return; }
-    if (b.dataset.sm){ card.querySelectorAll("[data-sm]").forEach(x=>x.setAttribute("aria-pressed", String(x===b && x.getAttribute("aria-pressed")!=="true"))); return; }
-    if (b.dataset.sok){
-      const sel=SRC.sel[key]||{}; const cases = sel.mode==="half" ? 0.5 : sel.mode==="case" ? num(sel.n)||1 : 0;
-      if (!(cases>0)){ toast("数量を選んでください"); return; }
-      if (cases > 5 && !confirm(`${cases}ケース（${yen(Math.round(num(it.qty)*cases))}こ、${yen(Math.round(num(it.price)*num(it.qty)*cases))}円）です。多すぎませんか？`)) return;
-      const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const machine = mb ? mb.dataset.sm : "";
-      const note=clean(card.querySelector("[data-snote]").value);
-      b.disabled=true;
-      if (await srcSet(key,"order",{cases, machine, note})){ SRC.open[key]=null; toast(`発注予定に入れました（${cases}ケース）`); }
-      renderSourcing(); return;
-    }
-    if (b.dataset.fok){
-      const fields={}; card.querySelectorAll("[data-fx]").forEach(i=>{ fields[i.dataset.fx]=i.value; });
-      b.disabled=true;
-      try { await api("sourcingFix",{key, fields}); Object.assign(it,{name:clean(fields.name), code:clean(fields.code)}); if ("qty" in fields) it.qty = fields.qty===""?null:num(fields.qty); if ("price" in fields) it.price = fields.price===""?null:num(fields.price); SRC.open[key]=null; toast("スプシに保存しました"); }
-      catch(err){ toast(errMsg(err)); }
-      renderSourcing(); return;
-    }
-  });
-}
-/* 数量ボタンで描き直したあと、機械タイプと備考の入力を戻す */
-function restorePanel(key){
-  const k=SRC.keep; if (!k) return; const card=document.querySelector(`.sc[data-key="${CSS.escape(key)}"]`); if(!card) return;
-  card.querySelectorAll("[data-sm]").forEach(x=>x.setAttribute("aria-pressed", String(x.dataset.sm===k.machine)));
-  const nt=card.querySelector("[data-snote]"); if (nt) nt.value=k.note; SRC.keep=null;
+  const p = allPrizes().find(x=>x.name===name); if (!p) return "";
+  if (p.vendor && !/インフィニティ/.test(p.vendor)) return "";
+  const stock = stockOf(name); if (stock===null) return "";
+  const agg = SRC.agg || (SRC.agg = labAgg()); const P = agg[name];
+  const weeksLeft = (P && P.weeksLeft!==undefined) ? P.weeksLeft : null;
+  if (!reorderSoon(stock, weeksLeft)) return "";
+  return `<a class="chip mini re-btn" href="${SHIIRE_URL}?reorder=${encodeURIComponent(name)}">🔁 おかわり${bare?"":weeksLeft!==null?`（あと ${wk1(weeksLeft)}週）`:stock<=0?"（在庫なし）":`（残 ${stock}）`}</a>`;
 }
 
 /* ===================== 写真添付 =====================
@@ -4753,7 +4230,7 @@ function renderStock(){
   const typed = Object.keys(STK.v).filter(k=>STK.v[k]!=="").length;
   const ct=$("#stkCt"); if (ct) ct.textContent = typed ? `${typed}件 入力中` : `${rows.length}景品`;
   const dif = r => { const v=STK.v[r.name]; if (v===undefined||v==="") return ""; const d = num(v) - (r.calc===null?0:r.calc); return d===0 ? `<span class="stk-dif ok">計算どおり</span>` : `<span class="stk-dif ${d<0?"minus":"plus"}">差 ${d>0?"+":""}${d}（${d<0?"計算より少ない":"計算より多い"}）</span>`; };
-  const reAgg = reorderOn(); if (reAgg) SRC.iv = null;   // 在庫が少ない景品に「🔁 おかわり」（依頼⑫）
+  const reAgg = reorderOn(); if (reAgg) SRC.agg = null;   // 在庫が少ない景品に「🔁 おかわり」（依頼⑫。依頼⑯から仕入れアプリへのリンク）
   el.innerHTML = `
     <div class="stk-top">
       <p class="hint" style="margin:0">スプレッドシートの「在庫整理」タブと同じ内容です。<b>倉庫の分と機械の中に入っている分を合わせた全部</b>を数えて「数えた数」に入れ、下の保存を押してください。計算上の在庫 ＝ 買った数 − 累計払出数 ± 調整 です。計算と違っても、数えた数が正になります。3 個セットは個数で数えます。</p>
@@ -4811,10 +4288,10 @@ function renderPrizeList(){
   // 同じ品名の行がシートに複数あるとき（発注送信時の自動追加が重なった等）は「重複？」を出す
   const dupN = {}; sheetOnly.forEach(p=>{ const k=normName(p.name); dupN[k]=(dupN[k]||0)+1; });
   // おかわり・追加仕入れで同名の行が増えるのは正しい（2026-11-12 の決まり：同じ品名の行の合計＝在庫）。その景品は「追加仕入れ」と出す（2026-11-19 依頼⑫）
-  const reN = {}; (SRC.items||[]).forEach(it=>{ if (srcIsReorder(it) && /発注済|下書き作成/.test(it.status||"")) { const k=normName(it.name); reN[k]=(reN[k]||0)+1; } });
-  const dupTag = name => { const k=normName(name); if (!(dupN[k]>1)) return ""; return reN[k] ? `<span class="tag">追加仕入れ ${dupN[k]} 行（在庫は合算）</span>` : `<span class="tag dup">⚠ 重複？ 同じ品名が ${dupN[k]} 行（シート側で 1 行にまとめてください）</span>`; };
-  const dupGroups = Object.keys(dupN).filter(k=>dupN[k]>1 && !reN[k]).length;
-  const reAgg = reorderOn(); if (reAgg) SRC.iv = null;
+  // 同名の行が複数あるとき：おかわり・追加仕入れなら正常（在庫は合算）、そうでなければ重複。どちらかは本体では分からない（仕入れ一覧は仕入れアプリに移した。依頼⑯）ので中立に出す
+  const dupTag = name => { const k=normName(name); if (!(dupN[k]>1)) return ""; return `<span class="tag">同じ品名 ${dupN[k]} 行（追加仕入れなら正常・在庫は合算。重複ならシートで 1 行に）</span>`; };
+  const dupGroups = 0;
+  const reAgg = reorderOn(); if (reAgg) SRC.agg = null;
   $("#pzCt").textContent = `${me()} ${rows.length}件` + (sheetOnly.length ? `＋シート${sheetOnly.length}件` : "") + (dupGroups ? `　⚠ 重複 ${dupGroups}組` : "");
   const el=$("#pzList");
   if(!rows.length && !sheetOnly.length){ el.innerHTML=`<div class="empty"><b>🎁</b>景品を登録すると、原価率の自動計算と巡回ログのチップに出てきます。</div>`; return; }
@@ -5665,7 +5142,7 @@ function renderLab(){
   const n1 = v => v===null||v===undefined ? "—" : (v>=10 ? Math.round(v) : v.toFixed(1));
   let html="", note="";
   if (labTab==="turn"){
-    SRC.iv = null;
+    SRC.agg = null;
     const rows=list.filter(P=>P.stock!==null || P.pays>0).map(P=>{
       const stale = P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14));
       const fast = P.weeksLeft!==null && P.weeksLeft<=2 && P.stock>0;
@@ -6092,7 +5569,6 @@ function render(){
   renderPrizeDatalist(); buildRooms(); renderLogList(); renderCollectBox(); renderCollectList(); renderIssues();
   renderPrizeForm(); renderPrizeList(); renderStock(); renderCostForm(); renderCostList();
   renderDash(); renderQuest();
-  if ($("#p-src") && $("#p-src").classList.contains("on")) renderSourcing();
   if ($("#drawer").classList.contains("on")) renderDrawer();
 }
 
@@ -6108,12 +5584,11 @@ function renderStaged(){
     "p-prize":[renderPrizeForm, renderPrizeList, renderStock],
     "p-cost": [renderCostForm, renderCostList],
     "p-dash": [renderDash, renderQuest],
-    "p-src":  [renderSourcing],
   };
   const safe = f => { const t=Date.now(); try { f(); } catch(e){ console.error(f.name, e); if (!NET.uiErr) NET.uiErr = `${f.name}：${String(e && e.message || e).slice(0,120)}`; bootLog("⚠ 描画 "+f.name, e && e.message); } return Date.now()-t; };
   const first = (groups[on] || groups["p-log"]).slice(); if (on!=="p-log") first.push(renderIssues);   // ⚠ 要確認（ヘッダー）はどのタブでも先に
   let ms=0; first.forEach(f=>{ ms+=safe(f); }); bootLog(`描画：開いているタブ ${on}`, `${ms}ms`);
-  const rest = Object.keys(groups).filter(k=>k!==on && k!=="p-src").flatMap(k=>groups[k]).filter(f=>!first.includes(f));   // 仕入れタブは開いたときに描く（従来どおり）
+  const rest = Object.keys(groups).filter(k=>k!==on).flatMap(k=>groups[k]).filter(f=>!first.includes(f));   // 仕入れタブは開いたときに描く（従来どおり）
   let i=0, total=0; const step=()=>{ if (i>=rest.length){ if ($("#drawer").classList.contains("on")) safe(renderDrawer); bootLog("描画：残りのタブ 完了", `${total}ms`); return; } total+=safe(rest[i++]); STAGED_T.push(setTimeout(step, 0)); };
   STAGED_T.push(setTimeout(step, 0));
 }
@@ -6125,10 +5600,8 @@ function wire(){
     $$(".tab").forEach(x=>x.setAttribute("aria-selected", String(x===t)));
     $$(".panel").forEach(p=>p.classList.toggle("on", p.id===t.dataset.p));
     window.scrollTo({top:0,behavior:"smooth"});
-    if (t.dataset.p==="p-src" && Date.now()-SRC.at > 90000){ try{ Promise.resolve(loadSourcing(false)).catch(()=>{}); }catch(e){} }   // 仕入れの一覧は タブを開いたときだけ読む（依頼⑮。起動時には読まない）
   });
-  wireSourcing(); srcLoadCache(); renderSourcing();
-  document.addEventListener("click", e=>{ const b=e.target.closest("[data-reorder-name]"); if (!b) return; b.disabled=true; goReorder(b.dataset.reorderName).finally(()=>{ b.disabled=false; }); });   // 景品・在庫整理・在庫回転の「🔁 おかわり」
+  srcLoadCache();                                       // 仕入れは専用アプリへ（依頼⑯）。旧キャッシュを消すだけ
 
   // 部屋（A/B/C/D）の入力
   $("#roomGrid").addEventListener("input", onRoomInput);
@@ -6315,7 +5788,7 @@ const bootStep = (what, f) => { const t=Date.now(); try { f(); } catch(e){ conso
 Store.init().then(()=>{ if (Store.mode!=="cloud") renderStaged(); }).catch(e=>{ console.error("init", e); bootLog("⚠ Store.init", String(e && e.message || e)); try{ Store.loading=false; Store.syncing=false; if (Store.mode!=="cloud") Store.mode="offline"; NET.lastErr="起動でエラー："+String(e&&e.message||e).slice(0,120); NET.lastErrAt=Date.now(); Store.paintMode(); renderStaged(); }catch(_){} });   // 2026-11-19 依頼⑭：起動の途中で例外が出ても「読み込み中…」のまま止まらない。⑮：オンラインになったときは applyBootstrap が描いているので二度目の全体 render はしない
 PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
 window.addEventListener("online", ()=>pump(true));
-if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit, SRC, srcReorderInfo, srcDecision, stockOf, todayStr, srcNewerMail,
+if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, prizeIntervals, Store, F, validateVisit, startEdit, stockOf, todayStr, 
   get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, NET, BOOT, get PIN(){ return PIN; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
 
 

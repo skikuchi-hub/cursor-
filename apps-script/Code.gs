@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-19b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-19d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -56,6 +56,7 @@ function doPost(e) {
       case "sourcingFix":    requireSourcing(me); return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
       case "sourcingSubmit": requireSourcing(me); return out(withLock(function () { return sourcingSubmit(me, req.keys); }));
       case "sourcingReorder": requireSourcing(me); return out(withLock(function () { return sourcingReorder(me, req.key, req.cases, req.machine, req.note); }));   // おかわり発注（依頼⑫）
+      case "sourcingBoot":   requireSourcing(me); return out(Object.assign({ ok: true }, sourcingBoot(me, !!req.force), { took: Date.now() - t0 }));   // 仕入れ専用アプリ（shiire/）の起動・同期（依頼⑯）
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -1466,6 +1467,53 @@ function sourcingReorder(me, key, cases, machine, note) {
   try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
   var vals = sh.getRange(newRow, 1, 1, ncol).getValues()[0], f = sh.getRange(newRow, EXA.image).getFormula();
   return { ok: true, rec: rec, item: exaRowItem(vals, f, newRow, sheetTz()) };
+}
+
+/* ===================== 仕入れ専用アプリ（shiire/）の起動・同期（2026-11-19 依頼⑯） =====================
+   クレーンログ本体の bootstrap（全記録＋景品マスタ＋過去他社データ＋写真チェック＝約 440KB）を仕入れアプリに読ませないための 1 本。
+   返すもの：me／商品一覧・発注要求・発注履歴・上限（readSourcing と同じ）／判断レコード（_app_db の sourcing）／
+   景品ごとの「ランク判定・おかわり」の材料（prizeStatsCompact_：税込単価・在庫・買った数・按分フラグ・払出の区間）。
+   在庫は stockTable_（在庫整理タブと同じ式。まとめ先 alias も同じ）、払出の区間は prizeStatRows（景品実績タブと同じ式）を使うので、
+   本体のアプリ・スプシと数字が食い違わない。巡回の記録そのもの（部屋・写真・メモ）は返さない。
+   既存の action（sourcing／sourcingSet／sourcingFix／sourcingSubmit／sourcingReorder）はそのまま。本体は変更なし */
+function sourcingBoot(me, force) {
+  var docs = readAllDocs();
+  var src = readSourcing(!!force);
+  if (force) dropCache("prizeStats");
+  var prizes = cachedJson("prizeStats", 300, function () { return prizeStatsCompact_(docs); });   // 5 分キャッシュ（巡回の記録はそう頻繫に増えない）。100KB を超えて置けなくても毎回計算するだけ
+  return { me: me, build: CODE_BUILD, items: src.items, requests: src.requests, history: src.history, limit: src.limit,
+           decisions: docs.sourcing || [], prizes: prizes, time: nowIso() };
+}
+/* 景品ごと：{name, unit（税込）, stock（在庫＝倉庫＋機械。数量未登録なら null）, qty（買った数）, est（単価が数量按分の目安）, vendor, kind,
+   ev: [[訪問日, 店舗, 区間の日数, プレイ数(カウンター差。無ければ null), 払出数(無ければ null)], ...]（景品実績と同じ区間）} */
+function prizeStatsCompact_(docs) {
+  var table = stockTable_(docs);
+  var master = readPrizeMaster().rows, mk = {};
+  master.forEach(function (r) { var k = normKey_(r.name); var m = mk[k] = mk[k] || { vendor: "", memo: "", unit: 0 }; if (!m.vendor) m.vendor = r.vendor || ""; if (/数量按分/.test(r.memo || "")) m.memo = "数量按分"; if (!m.unit && num(r.cost) > 0) m.unit = taxIn_(r.cost); });
+  var ak = {}; (docs.prizes || []).forEach(function (d) { var k = normKey_(d.name); if (!ak[k]) ak[k] = d; });
+  // まとめ先（alias）：記録の景品名 → まとめ先の名前（在庫と同じ名前に寄せる）
+  var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) Object.keys(d.opts).forEach(function (n) { opt[normKey_(n)] = d.opts[n]; }); });
+  var canon = function (name) { var k = normKey_(name); var a = opt[k] && clean(opt[k].alias || ""); return (a && normKey_(a) !== k) ? a : name; };
+  var all = (docs.weekly || []).slice().sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
+  var ev = {}, evName = {}, tz = sheetTz();
+  all.forEach(function (rec, i) {
+    prizeStatRows(rec, all.slice(0, i), {}).forEach(function (row) {   // [日付(Date), 店舗, 機械, 部屋, 景品, 日数, プレイ, 払出, …]
+      var cn = canon(row[4]), k = normKey_(cn); if (!k) return; evName[k] = evName[k] || cn;
+      var d = row[0] instanceof Date ? Utilities.formatDate(row[0], tz, "yyyy-MM-dd") : String(rec.week || "").slice(0, 10);
+      (ev[k] = ev[k] || []).push([d, String(row[1] || ""), num(row[5]) || 1, row[6] === "" ? null : num(row[6]), row[7] === "" ? null : num(row[7])]);
+    });
+  });
+  var out = [], seen = {};
+  table.forEach(function (t) {
+    var k = normKey_(t.name); seen[k] = true;
+    var m = mk[k] || {}, a = ak[k] || null;
+    var unit = m.unit || (a && num(a.cost) > 0 ? taxIn_(a.cost) : 0);
+    var stock = (t.qty || t.adj || t.pays) ? Math.max(0, t.left) : null;
+    out.push({ name: t.name, unit: unit, stock: stock, qty: t.qty, est: !!(m.memo === "数量按分" || (a && /数量按分/.test(a.memo || ""))),
+               vendor: m.vendor || (a && a.vendor) || "", kind: t.kind || (a && (a.use === "both" ? "両方" : a.use)) || "", ev: ev[k] || [] });
+  });
+  Object.keys(ev).forEach(function (k) { if (seen[k]) return; out.push({ name: evName[k] || k, unit: (mk[k] || {}).unit || 0, stock: null, qty: 0, est: false, vendor: (mk[k] || {}).vendor || "", kind: "", ev: ev[k] }); });   // 記録にはあるが在庫表に無い景品（ほぼ無い）
+  return out;
 }
 
 /* 仕入れ連携の初回認可用：エディタで一度 ▶ 実行し、仕入れ想定商品スプシへのアクセスを承認する（以後は不要） */

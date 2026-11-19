@@ -6,6 +6,7 @@
 
 ```
 index.html            アプリ本体（画面・ロジック）
+shiire/index.html     仕入れ専用アプリ「EXAmuse 仕入れ」（2026-11-19 依頼⑯。同じ API・同じ PIN。独自の manifest・アイコン）
 config.js             接続設定（Apps Script ウェブアプリの URL）
 icon-180.png          ホーム画面アイコン
 apps-script/Code.gs   スプレッドシート側 API（Apps Script）
@@ -27,8 +28,8 @@ apps-script/appsscript.json  Apps Script のマニフェスト
   3. 各タブの最終列「アプリID」で行を対応づけ、アプリで削除するとタブの行も消える
 - 景品マスタ・過去他社データは毎回タブから読んでアプリに返す（別途の同期は不要）。
 - 60秒ごと、またはアプリを前面に戻したときに最新を取り直す。
-- 「仕入れ」タブは、仕入れ想定商品スプシ（EXAmuse 発注システム）の「商品一覧」を読んでカード表示し、
-  見送り／保留／発注の判断と「発注要求」タブへの書き込みを行う（Mac 側の発注処理はそのまま）。詳細は HANDOVER.md。
+- 仕入れ（仕入れ想定商品スプシ（EXAmuse 発注システム）の「商品一覧」をカード表示し、見送り／保留／発注の判断と「発注要求」タブへの書き込み）は
+  専用アプリ `shiire/`（https://skikuchi-hub.github.io/cursor-/shiire/ ）で行う。本体の「仕入れ」タブはそのアプリを開くボタンだけ（Mac 側の発注処理はそのまま）。詳細は HANDOVER.md。
 
 ## 初回セットアップ
 
