@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-13c";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-19a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -907,6 +907,9 @@ function maintenanceOnce_() {
   if (pr.getProperty("weeklyCostTaxAt") && pr.getProperty("higashi1112FixAt") && !pr.getProperty("prizeStatsRebuild2At")) {   // 2026-11-13：タイムアウトで 41 行で止まっていた景品実績を一括書き込みで作り直す（上の 2 つのあと）
     try { var m10 = rebuildPrizeStats(); pr.setProperty("prizeStatsRebuild2At", nowIso() + " " + String(m10).slice(0, 200)); } catch (e) { Logger.log("rebuildPrizeStats: " + e); }
   }
+  if (!pr.getProperty("stockAcctTriggerAt")) {      // 2026-11-19（依頼⑬）：在庫会計タブの基準日を変えたときに作り直す onEdit トリガーを一度だけ入れる（タブ自体は 10 分ごとの rebuildStockAcct が作る）
+    try { var m11 = installStockAcctTrigger_(); pr.setProperty("stockAcctTriggerAt", nowIso() + " " + String(m11).slice(0, 200)); } catch (e) { Logger.log("installStockAcctTrigger: " + e); pr.setProperty("stockAcctTriggerErr", nowIso() + " " + String(e).slice(0, 300)); }
+  }
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
@@ -1207,6 +1210,7 @@ function importPhotoChecks() {
   PropertiesService.getScriptProperties().setProperty("photoChecksAt", String(Date.now()));
   if (m > 0) dropCache("photo_checks");
   try { syncStockSheet_(); rebuildStock(); } catch (e) { Logger.log("在庫整理: " + e); }   // 在庫整理タブの手入力を取り込み、在庫を作り直す
+  try { rebuildStockAcct(); } catch (e) { Logger.log("在庫会計: " + e); }                   // 在庫会計タブ（基準日時点の在庫数・単価・棚卸残高）も作り直す（2026-11-19 依頼⑬）
   updateMetricsIfDue();   // 必要指標（在庫）の作り直しも 10 分ごとのトリガーで
   var msg = "チェック結果を取り込みました：" + n + " ファイル / " + m + " 枚";
   Logger.log(msg); return msg;
@@ -2183,13 +2187,220 @@ function selfUpdate_(props) {
   Logger.log(msg); try { SpreadsheetApp.getActive().toast(msg); } catch (e) {}
   return msg;
 }
+/* ===================== 在庫会計（2026-11-19 菊地さん：依頼⑬「何月何日時点での在庫数と仕入単価、棚卸し残高が見れる表」） =====================
+   タブ「在庫会計」：B2 の基準日（空欄＝今日）の「その日の終わり」時点で、景品ごとの 仕入数量・払出数・棚卸の調整・在庫数・仕入単価・棚卸残高 を出す。
+     在庫数 ＝ 基準日までの仕入数量 − 基準日までの払出数 ＋ 基準日までの棚卸の調整（在庫整理タブ・アプリの在庫と同じ定義。基準日＝今日なら同じ数になる）
+       仕入の日付 ＝ 景品マスタ「仕入日」（空ならアプリの登録日・メモの日付）／払出の日付 ＝ 巡回記録の訪問日／調整の日付 ＝ 棚卸の日
+     仕入単価 ＝ 最終仕入原価法（基準日までの最後の仕入の単価・税抜。同じ品名で単価が違う仕入があるときはいちばん新しい仕入の単価）
+       理由：個人・中小の法定評価方法（届出なしの既定）で、景品マスタ D 列（税抜）をそのまま使えて説明しやすい。参考に先入先出法の残高も併記（新しい仕入から順に在庫を割り当てた金額）
+     棚卸残高（税抜）＝ 在庫数 × 仕入単価（税抜）。税込は × 1.1 を四捨五入（会計は税抜を基準に。表示用に税込も）
+   タブ「在庫会計_月末」：月ごとの 月末時点の 在庫数・棚卸残高（期末）、期首残高、仕入高、売上原価（期首＋仕入−期末）。決算・月次用
+   作り直し：基準日（B2）やチェック（E2）を変えたとき（onEdit トリガー onStockAcctEdit）と、10 分ごとのトリガー（importPhotoChecks → rebuildStockAcct）。一括書き込みなので数秒
+   既存のタブ（景品マスタ・在庫整理）と既存の在庫計算（stockTable_）は変えない。ここは読むだけ */
+var ACCT_SHEET = "在庫会計", ACCT_MONTH_SHEET = "在庫会計_月末";
+var ACCT_HEADERS = ["品名", "仕入先", "機械タイプ", "仕入数量（基準日まで）", "払出数（基準日まで）", "棚卸の調整（基準日まで）", "在庫数（基準日時点）",
+  "仕入単価（税抜・最終仕入）", "仕入単価（税込）", "棚卸残高（税抜）", "棚卸残高（税込）", "先入先出法 残高（税抜・参考）", "最終仕入日", "仕入回数", "メモ"];
+var ACCT_MONTH_HEADERS = ["月", "時点", "在庫数（期末）", "①期首残高（税抜）", "②仕入高（税抜）", "③期末棚卸残高（税抜）", "④売上原価（税抜）＝①＋②−③", "①税込", "②税込", "③税込", "④税込", "メモ"];
+var ACCT_HEAD_ROW = 4;   // 見出しの行。データは 5 行目から
+/* 仕入のロット（景品マスタ 1 行＝1 ロット。マスタに無いアプリ登録も）と、日付つきの払出・棚卸調整を、まとめ先（alias）の品名で集める */
+function stockAcctMoves_(docs) {
+  var tz = sheetTz();
+  var pb = prizeBase_(), base = pb.base, order = pb.order.slice();
+  var opt = {}; (docs.settings || []).forEach(function (d) { if (d.id === "prizeOpt" && d.opts) Object.keys(d.opts).forEach(function (n) { opt[normKey_(n)] = d.opts[n]; }); });
+  var appSet = {}; (docs.prizes || []).forEach(function (d) { if (num(d.boxSet) > 1) appSet[normKey_(d.name)] = num(d.boxSet); });
+  var setOf = function (name) { var k = normKey_(name); if (appSet[k]) return appSet[k]; if (opt[k] && num(opt[k].boxSet) > 1) return num(opt[k].boxSet); var b = base[k]; return b && b.boxSet > 1 ? b.boxSet : 1; };
+  var canon = function (name) { var k = normKey_(name); var a = opt[k] && clean(opt[k].alias || ""); return (a && normKey_(a) !== k) ? a : name; };
+  var jst = function (iso) { var d = new Date(String(iso || "")); return isNaN(d.getTime()) ? "" : Utilities.formatDate(d, tz, "yyyy-MM-dd"); };
+  var items = {}, keys = [];
+  var item = function (name) { name = canon(name); var k = normKey_(name); if (!items[k]) { items[k] = { key: k, name: name, kind: "", lots: [], pays: [], adj: [], inMaster: false, merged: [] }; keys.push(k); } return items[k]; };
+  // 仕入ロット：景品マスタ
+  var created = {}; (docs.prizes || []).forEach(function (d) { created[d.id] = /^\d{4}-\d{2}-\d{2}/.test(String(d.buyDate || "")) ? String(d.buyDate).slice(0, 10) : jst(d.createdAt); });
+  var sh = ss().getSheetByName("景品マスタ");
+  if (sh && sh.getLastRow() >= 2) {
+    var m = headerMap_(sh), v = sh.getRange(2, 1, sh.getLastRow() - 1, sh.getLastColumn()).getValues();
+    var c = function (h) { return hcol_(m, h) - 1; };
+    var cN = c("品名"), cV = c("仕入先"), cK = c("機械タイプ"), cC = c("仕入単価（税抜）"), cQ = c("買った数量"), cD = c("仕入日"), cID = c("アプリID"), cM = c("メモ");
+    v.forEach(function (r, i) {
+      var name = clean(r[cN]); if (!name) return;
+      var date = cD >= 0 ? ymdOf_(r[cD], tz) : "";
+      if (!date) date = (cID >= 0 && created[clean(r[cID])]) || (cM >= 0 ? ymdOf_(r[cM], tz) : "");
+      var it = item(name);
+      it.inMaster = true;
+      if (normKey_(name) !== it.key && it.merged.indexOf(name) < 0) it.merged.push(name);
+      if (!it.kind && cK >= 0) it.kind = clean(r[cK]);
+      it.lots.push({ date: date, qty: num(cQ >= 0 ? r[cQ] : 0), cost: num(cC >= 0 ? r[cC] : 0), vendor: cV >= 0 ? clean(r[cV]) : "", row: i + 2 });
+    });
+  }
+  // 景品マスタに行が無いアプリ登録（買った数量あり）
+  (docs.prizes || []).forEach(function (d) {
+    var n = clean(d.name); if (!n || !(num(d.qty) > 0)) return;
+    var k = normKey_(canon(n)); if (items[k] && items[k].inMaster) return;
+    if (base[normKey_(n)]) return;
+    var it = item(n);
+    if (!it.kind) it.kind = d.use === "both" ? "両方" : clean(d.use || "");
+    it.lots.push({ date: created[d.id] || "", qty: num(d.qty), cost: num(d.cost), vendor: clean(d.vendor || ""), row: 0, app: true });
+  });
+  // 払出（日付＝訪問日）：4人機の取られた数 ＋ BOX の出た枠 × 入れたときの個数（stockTable_ と同じ式）
+  (docs.weekly || []).forEach(function (w) {
+    var date = /^\d{4}-\d{2}-\d{2}/.test(String(w.week || "")) ? String(w.week).slice(0, 10) : jst(w.createdAt);
+    (w.rooms || []).forEach(function (x) { var p = clean(x.prize); if (p && x.pays !== null && x.pays !== undefined && x.pays !== "") item(p).pays.push({ date: date, n: num(x.pays) }); });   // 0 でも行を作る（在庫整理タブと同じ景品が並ぶように）
+    (w.slots || []).forEach(function (s) { var p = clean(s.prize); if (p && s.out) item(p).pays.push({ date: date, n: num(s.pset) > 0 ? num(s.pset) : setOf(p) }); });
+  });
+  // 棚卸の調整（日付＝数えた日）
+  stockEntries_(docs).forEach(function (d) { if (d.delta !== 0) item(d.name).adj.push({ date: d.date || jst(d.createdAt), n: d.delta }); });
+  // 並び＝景品マスタの順（まとめた景品はまとめ先の位置）、マスタに無いものは後ろ
+  var ordered = [], seen = {};
+  order.forEach(function (k) { var it = items[normKey_(canon(base[k].name))]; if (it && !seen[it.key]) { seen[it.key] = 1; ordered.push(it); } });
+  keys.forEach(function (k) { if (!seen[k]) { seen[k] = 1; ordered.push(items[k]); } });
+  ordered.forEach(function (it) { it.lots.sort(function (a, b) { return (a.date || "") < (b.date || "") ? -1 : (a.date || "") > (b.date || "") ? 1 : a.row - b.row; }); });
+  return ordered;
+}
+/* 基準日（"YYYY-MM-DD"）の終わり時点の 1 景品分 */
+function stockAcctRow_(it, asOf) {
+  var lots = it.lots.filter(function (l) { return !l.date || l.date <= asOf; });
+  var buy = 0, nBuy = 0, lastDate = "", vendors = [];
+  lots.forEach(function (l) { buy += l.qty; if (l.qty > 0) nBuy++; if (l.date > lastDate) lastDate = l.date; if (l.vendor && vendors.indexOf(l.vendor) < 0) vendors.push(l.vendor); });
+  var pays = 0; it.pays.forEach(function (p) { if (p.date <= asOf) pays += p.n; });
+  var adj = 0; it.adj.forEach(function (a) { if (a.date <= asOf) adj += a.n; });
+  var left = buy - pays + adj;
+  // 最終仕入原価：基準日までの最後の仕入（単価あり）の単価。日付が同じなら景品マスタの下の行
+  var unit = 0; lots.forEach(function (l) { if (l.cost > 0) unit = l.cost; });
+  // 先入先出法（参考）：在庫は新しい仕入から順に残っているとみなす
+  var fifo = 0, rest = Math.max(0, left);
+  for (var i = lots.length - 1; i >= 0 && rest > 0; i--) { var take = Math.min(rest, Math.max(0, lots[i].qty)); fifo += take * lots[i].cost; rest -= take; }
+  fifo += rest * unit;   // 仕入より多く残っている分（棚卸でプラス）は最終仕入単価で
+  var memo = [];
+  if (!it.inMaster) memo.push("景品マスタに行なし（アプリ登録）");
+  if (it.merged.length) memo.push("まとめ：" + it.merged.join("、"));
+  if (left < 0) memo.push("在庫がマイナス（払出が仕入を超えています。記録を確認）");
+  if (left > 0 && !unit) memo.push("単価が未設定（残高 0 で計算）");
+  if (lots.some(function (l) { return !l.date; })) memo.push("仕入日なしの行あり（最初からある在庫として全期間で数えます）");
+  if (lots.some(function (l) { return l.cost > 0 && l.cost !== unit; })) memo.push("単価の違う仕入あり（最終仕入 " + unit + "）");
+  var exBal = Math.max(0, left) * unit;
+  return { name: it.name, vendor: vendors.join("、"), kind: it.kind, buy: buy, pays: pays, adj: adj, left: left, unit: unit, unitIn: taxIn_(unit),
+    exBal: Math.round(exBal), inBal: Math.round(exBal * (1 + TAX_RATE)), fifo: Math.round(fifo), lastDate: lastDate, nBuy: nBuy, memo: memo.join("。") };
+}
+function stockAcctTable_(moves, asOf) { return moves.map(function (it) { return stockAcctRow_(it, asOf); }); }
+/* 在庫会計タブの枠（見出し・基準日の入力欄）。無ければ作る。何度呼んでも同じ */
+function stockAcctSheet_() {
+  var sh = ss().getSheetByName(ACCT_SHEET), isNew = !sh;
+  if (!sh) { sh = ss().insertSheet(ACCT_SHEET); sh.setFrozenRows(ACCT_HEAD_ROW); sh.setColumnWidth(1, 260); sh.setColumnWidth(2, 150); sh.setColumnWidth(15, 320); }
+  sh.getRange(1, 1).setValue("在庫会計：基準日の終わり時点の 在庫数・仕入単価・棚卸残高（在庫 ＝ 仕入数量 − 払出数 ＋ 棚卸の調整。アプリの在庫整理と同じ定義）").setFontWeight("bold");
+  sh.getRange(2, 1).setValue("基準日（空欄＝今日）→").setFontWeight("bold");
+  sh.getRange(2, 2).setNumberFormat("yyyy/mm/dd").setBackground("#fff8dc");
+  sh.getRange(2, 4).setValue("在庫 0 の行を隠す →").setFontWeight("bold");
+  if (isNew || sh.getRange(2, 5).getValue() === "") { try { sh.getRange(2, 5).insertCheckboxes(); } catch (e) {} sh.getRange(2, 5).setValue(false); }
+  sh.getRange(2, 6).setValue("評価方法：最終仕入原価法（基準日までの最後の仕入単価 × 在庫数。税抜が基準、税込は ×1.1 四捨五入）。参考に先入先出法の残高も右に出します").setFontColor("#666666");
+  sh.getRange(3, 1).setValue("使い方：B2 に日付を入れると数秒でその日の終わり時点の表に変わります（10 分ごとにも自動で作り直し）。在庫 0 の行は下にまとめ、E2 にチェックで隠せます。この表は入力しないでください（B2・E2 以外は上書きされます）。月ごとの月末残高はタブ「" + ACCT_MONTH_SHEET + "」").setFontColor("#999999");
+  sh.getRange(ACCT_HEAD_ROW, 1, 1, ACCT_HEADERS.length).setValues([ACCT_HEADERS]).setFontWeight("bold").setWrap(true).setBackground("#eef1f6");
+  try {
+    var prots = sh.getProtections(SpreadsheetApp.ProtectionType.SHEET);
+    var pr = prots.length ? prots[0] : sh.protect();
+    pr.setDescription("在庫会計：基準日（B2）と在庫 0 を隠す（E2）だけ入力");
+    pr.setUnprotectedRanges([sh.getRange("B2"), sh.getRange("E2")]);
+    pr.setWarningOnly(true);
+  } catch (e) {}
+  return sh;
+}
+/* B2 の基準日を "YYYY-MM-DD" で（空欄・読めないときは今日） */
+function stockAcctAsOf_(sh) {
+  var v = sh.getRange(2, 2).getValue(), d = ymdOf_(v, sheetTz());
+  if (!d && v !== "" && v !== null) { var t = new Date(v); if (!isNaN(t.getTime())) d = Utilities.formatDate(t, sheetTz(), "yyyy-MM-dd"); }
+  return d || Utilities.formatDate(new Date(), sheetTz(), "yyyy-MM-dd");
+}
+function rebuildStockAcct() {
+  var docs = readAllDocs(), moves = stockAcctMoves_(docs);
+  var sh = stockAcctSheet_(), asOf = stockAcctAsOf_(sh), hideZero = sh.getRange(2, 5).getValue() === true;
+  var today = Utilities.formatDate(new Date(), sheetTz(), "yyyy-MM-dd");
+  var rows = stockAcctTable_(moves, asOf);
+  var live = rows.filter(function (r) { return r.left !== 0; }), zero = rows.filter(function (r) { return r.left === 0; });
+  var all = live.concat(zero);
+  var vals = all.map(function (r) { return [r.name, r.vendor, r.kind, r.buy, r.pays, r.adj, r.left, r.unit, r.unitIn, r.exBal, r.inBal, r.fifo, r.lastDate ? dateOf(r.lastDate) : "", r.nBuy, r.memo]; });
+  var sum = function (f) { return all.reduce(function (a, r) { return a + (r[f] || 0); }, 0); };
+  var totalRow = ["合計（" + all.length + " 景品・在庫あり " + live.length + "）", "", "", sum("buy"), sum("pays"), sum("adj"), sum("left"), "", "", sum("exBal"), sum("inBal"), sum("fifo"), "", "", asOf === today ? "基準日＝今日。アプリの在庫整理と同じ数" : ""];
+  var top = ACCT_HEAD_ROW + 1, need = top + vals.length + 1;
+  if (sh.getMaxRows() < need + 1) sh.insertRowsAfter(sh.getMaxRows(), need + 1 - sh.getMaxRows());
+  var nClear = Math.max(1, sh.getMaxRows() - top + 1);
+  sh.showRows(top, nClear);
+  sh.getRange(top, 1, nClear, ACCT_HEADERS.length + 1).clearContent().setBackground(null).setFontWeight("normal").setNumberFormat("General");
+  if (vals.length) {
+    sh.getRange(top, 1, vals.length, ACCT_HEADERS.length).setValues(vals);
+    sh.getRange(top, 4, vals.length, 4).setNumberFormat("#,##0");
+    sh.getRange(top, 8, vals.length, 1).setNumberFormat("#,##0.##");
+    sh.getRange(top, 9, vals.length, 4).setNumberFormat("#,##0");
+    sh.getRange(top, 13, vals.length, 1).setNumberFormat("yyyy/mm/dd");
+    sh.getRange(top, 7, vals.length, 1).setFontWeight("bold");
+    if (zero.length) sh.getRange(top + live.length, 1, zero.length, ACCT_HEADERS.length).setFontColor("#999999");
+    if (live.length) sh.getRange(top, 1, live.length, ACCT_HEADERS.length).setFontColor("#000000");
+    if (hideZero && zero.length) sh.hideRows(top + live.length, zero.length);
+  }
+  var tr = top + vals.length;
+  sh.getRange(tr, 1, 1, totalRow.length).setValues([totalRow]).setFontWeight("bold").setBackground("#eef1f6");
+  sh.getRange(tr, 4, 1, 4).setNumberFormat("#,##0"); sh.getRange(tr, 10, 1, 3).setNumberFormat("#,##0");
+  sh.getRange(2, 3).setValue("→ " + asOf.replace(/-/g, "/") + " の終わり時点" + (asOf === today ? "（今日）" : "") + "　更新 " + nowIso().slice(0, 16).replace("T", " ")).setFontColor("#666666");
+  var mm = rebuildStockAcctMonths_(moves, today);
+  var msg = "在庫会計を作り直しました：基準日 " + asOf + "・" + all.length + " 景品（在庫あり " + live.length + "）・在庫 " + sum("left") + " 個・棚卸残高（税抜）" + yen(sum("exBal")) + " 円。月末表 " + mm + " ヶ月";
+  Logger.log(msg); return msg;
+}
+/* 月ごとの月末残高（決算・月次用） */
+function stockAcctMonths_(moves, today) {
+  var first = today.slice(0, 7);
+  moves.forEach(function (it) {
+    it.lots.forEach(function (l) { if (l.date && l.date.slice(0, 7) < first) first = l.date.slice(0, 7); });
+    it.pays.forEach(function (p) { if (p.date && p.date.slice(0, 7) < first) first = p.date.slice(0, 7); });
+  });
+  var months = []; for (var ym = first; ym <= today.slice(0, 7) && months.length < 120; ym = nextYm_(ym)) months.push(ym);
+  var snap = function (end) { var rows = stockAcctTable_(moves, end), o = { qty: 0, ex: 0, inc: 0 }; rows.forEach(function (r) { o.qty += r.left; o.ex += r.exBal; o.inc += r.inBal; }); return o; };
+  var out = [], prev = snap(monthEnd_(prevYm_(months[0])));
+  months.forEach(function (ym) {
+    var cur = ym === today.slice(0, 7), end = cur ? today : monthEnd_(ym), s = snap(end);
+    var buy = 0; moves.forEach(function (it) { it.lots.forEach(function (l) { if (l.date && l.date.slice(0, 7) === ym) buy += l.qty * l.cost; }); });
+    buy = Math.round(buy);
+    var cogs = prev.ex + buy - s.ex, tax = function (x) { return Math.round(x * (1 + TAX_RATE)); };
+    out.push([ym, dateOf(end), s.qty, prev.ex, buy, s.ex, cogs, tax(prev.ex), tax(buy), tax(s.ex), tax(cogs), cur ? "今月は途中（" + end + " 時点）" : ""]);
+    prev = s;
+  });
+  return out;
+}
+function nextYm_(ym) { var y = +ym.slice(0, 4), mo = +ym.slice(5, 7) + 1; if (mo === 13) { y++; mo = 1; } return y + "-" + ("0" + mo).slice(-2); }
+function rebuildStockAcctMonths_(moves, today) {
+  var out = stockAcctMonths_(moves, today);
+  var sh = ss().getSheetByName(ACCT_MONTH_SHEET);
+  if (!sh) { sh = ss().insertSheet(ACCT_MONTH_SHEET); sh.setFrozenRows(2); sh.setColumnWidth(12, 260); }
+  sh.getRange(1, 1).setValue("在庫会計（月末）：各月末の終わり時点の 在庫数・棚卸残高（税抜・税込）。売上原価 ＝ 期首残高 ＋ 仕入高 − 期末残高（払い出した景品の原価＋数え違い）。単価は最終仕入原価法（在庫会計タブと同じ）。仕入高 ＝ その月の仕入日の 数量 × 単価").setFontWeight("bold");
+  sh.getRange(2, 1, 1, ACCT_MONTH_HEADERS.length).setValues([ACCT_MONTH_HEADERS]).setFontWeight("bold").setWrap(true).setBackground("#eef1f6");
+  var nClear = Math.max(1, sh.getMaxRows() - 2);
+  sh.getRange(3, 1, nClear, ACCT_MONTH_HEADERS.length + 1).clearContent().setNumberFormat("General");
+  if (out.length) {
+    sh.getRange(3, 1, out.length, ACCT_MONTH_HEADERS.length).setValues(out);
+    sh.getRange(3, 2, out.length, 1).setNumberFormat("yyyy/mm/dd");
+    sh.getRange(3, 3, out.length, 9).setNumberFormat("#,##0");
+  }
+  sh.getRange(out.length + 4, 1).setValue("在庫会計タブと一緒に自動で作り直します（基準日を変えたとき・10 分ごと）。更新 " + nowIso()).setFontColor("#999999");
+  return out.length;
+}
+/* 基準日（B2）・在庫 0 を隠す（E2）を変えたら作り直す（インストール型の onEdit トリガー。installStockAcctTrigger_ で登録） */
+function onStockAcctEdit(e) {
+  try {
+    var rg = e && e.range; if (!rg) return;
+    if (rg.getSheet().getName() !== ACCT_SHEET || rg.getRow() > 2) return;
+    rebuildStockAcct();
+  } catch (err) { Logger.log("onStockAcctEdit: " + err); }
+}
+function installStockAcctTrigger_() {
+  var has = ScriptApp.getProjectTriggers().some(function (t) { return t.getHandlerFunction() === "onStockAcctEdit"; });
+  if (has) return "onStockAcctEdit のトリガーはあります（変更なし）";
+  ScriptApp.newTrigger("onStockAcctEdit").forSpreadsheet(ss()).onEdit().create();
+  return "在庫会計の基準日を変えたときに作り直す onEdit トリガー（onStockAcctEdit）を入れました";
+}
 /* 取り込み（importPhotoChecks 10 分ごと）と自動更新（selfUpdate 15 分ごと）のトリガー。再実行しても各 1 本だけ */
 function installTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) { var h = t.getHandlerFunction(); if (h === "importPhotoChecks" || h === "selfUpdate") ScriptApp.deleteTrigger(t); });
   ScriptApp.newTrigger("importPhotoChecks").timeBased().everyMinutes(10).create();
   ScriptApp.newTrigger("selfUpdate").timeBased().everyMinutes(15).create();
   PropertiesService.getScriptProperties().setProperty("photoTrigger", "1");
-  return "importPhotoChecks を 10 分ごと、selfUpdate を 15 分ごとに実行するトリガーを入れました";
+  var acct = ""; try { acct = installStockAcctTrigger_(); } catch (e) { acct = "在庫会計の onEdit トリガーは入れられませんでした：" + e; }
+  return "importPhotoChecks を 10 分ごと、selfUpdate を 15 分ごとに実行するトリガーを入れました。" + acct;
 }
 function setup() {            // 初回：スタッフタブと _app_db を作る（再実行しても安全）
   ensureStaffSheet(); dbSheet(); renameDateHeaders(); photoSheet(); photoCheckDir();
