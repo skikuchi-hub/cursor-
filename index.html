@@ -335,6 +335,16 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .sc .acts button:disabled{opacity:.4}
 .sc .recv{background:var(--navy);color:#fff;border:0;border-radius:9px;padding:9px 14px;font-weight:800;font-size:13px}
 .sc .recv.ghost{background:var(--surface);color:var(--ink-2);border:1.5px solid var(--line-2)}
+/* おかわり（再発注）ブロック：受取済・発注済のカードに。soon＝在庫が切れそう */
+.sc .reorder{margin-top:9px;padding:9px 10px;border-radius:12px;background:var(--surface-2);border:1.5px solid var(--line);display:flex;flex-direction:column;gap:7px}
+.sc .reorder.soon{border-color:var(--gold);background:var(--gold-wash)}
+.sc .reorder .rl{font-size:11.5px;color:var(--ink-2);line-height:1.5}
+.sc .reorder .rl b{color:var(--ink)}
+.sc .reorder .rp{font-size:11px;color:var(--ink-3);line-height:1.45}
+.sc .reorder .recv{align-self:flex-start}
+.sc .rebadge{display:inline-block;font-size:11px;font-weight:800;padding:2px 7px;border-radius:999px;background:var(--gold-wash);color:var(--gold-ink);margin-right:6px;vertical-align:1px}
+.sc.flash{box-shadow:0 0 0 3px var(--gold);transition:box-shadow .3s}
+.re-btn{background:var(--gold-wash);border-color:var(--gold);color:var(--gold-ink);font-weight:800}
 .sc .rank{display:flex;gap:10px;align-items:stretch;margin-top:9px;border-radius:12px;border:1.5px solid var(--line);overflow:hidden;background:var(--surface-2)}
 .sc .rank .rk{flex:none;width:58px;min-height:66px;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface-sunk);color:var(--ink-2);padding:4px 0}
 .sc .rank .rk b{font-size:24px;line-height:1.15;font-family:var(--fs-display),-apple-system,sans-serif}
@@ -1962,6 +1972,7 @@ const Store = {
     if (!this.pollT) this.startPolling();
     guard("画面の描画", ()=>render());
     try { refreshRoomsAfterSync(); } catch(e){}
+    try { if (canSource() && Date.now()-SRC.at > 90000) loadSourcing(false); } catch(e){}   // 仕入れできる人は起動時に商品一覧も読む（景品・在庫整理の「🔁 おかわり」を最初から出すため。依頼⑫）
     guard("送信待ちの送信", ()=>pump(true));                        // つながったので、送信待ちがあれば送る
     renderNetBar();
   },
@@ -3121,7 +3132,7 @@ function updateReadouts(){
    品目は api("sourcing") で取る（Apps Script が仕入れ想定商品スプシを読む。90秒キャッシュ）。
    判断（見送り skip／保留 hold／発注 order）は _app_db の sourcing（id＝商品キー）。
    「発注」はスプシの N 発注ケース数・Q 機械タイプにも書かれ、「発注要求を出す」で 発注要求 タブに行が入り Mac が処理する */
-const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", q:"", open:{}, fix:{}, sel:{}, busy:false, agg:null, local:{} };
+const SRC = { items:[], requests:[], history:[], limit:300000, at:0, filter:"todo", q:"", open:{}, fix:{}, sel:{}, busy:false, agg:null, iv:null, local:{} };   // agg／iv＝描画 1 回分のキャッシュ（labAgg／prizeIntervals）
 /* 端末で変えた判断（key → {doc, at, pending}）。bootstrap の応答がその変更より前に取りに行ったものなら、応答で上書きせず端末の値を残す。
    送信中（pending）の間は同じ商品の二重タップを受け付けない */
 function setLocalSourcing(key, doc, pending){
@@ -3167,7 +3178,7 @@ async function loadSourcing(force){
     SRC.items = r.items||[]; SRC.requests = r.requests||[]; SRC.history = r.history||[]; SRC.limit = num(r.limit)||300000; SRC.at = Date.now(); SRC.error = "";
     try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, history:SRC.history, limit:SRC.limit, at:SRC.at})); } catch(e){}
   } catch(e){ SRC.error = e && e.code==="unknown_action" ? "Apps Script がまだ古い版です。「デプロイを管理 → 新バージョン」を行ってください" : errMsg(e); toast(SRC.error); }
-  finally { SRC.busy=false; renderSourcing(); }
+  finally { SRC.busy=false; renderSourcing(); try { renderPrizeList(); renderStock(); } catch(e){} }   // 景品・在庫整理の「🔁 おかわり」も最新の商品一覧で描き直す（依頼⑫）
 }
 function srcLoadCache(){ try { const r=JSON.parse(localStorage.getItem(SRC_KEY)||"null"); if (r){ SRC.items=r.items||[]; SRC.requests=r.requests||[]; SRC.history=r.history||[]; SRC.limit=r.limit||300000; SRC.at=r.at||0; } } catch(e){} }
 
@@ -3236,6 +3247,113 @@ function srcOrderOf(it){
   const pcs = Math.round(num(it.qty)*cases), amount = Math.round(num(it.price)*pcs);
   return {cases, pcs, amount, machine:(d&&d.machine)||it.machine||"", note:(d&&d.note)||it.memo||""};
 }
+/* ===================== おかわり発注（2026-11-19 依頼⑫：一度仕入れて届いた商品をもう一度） =====================
+   受取済（発注済）のカードの「🔁 おかわり」→ 前回と同じ 商品名・品番・入数・単価・機械タイプ・ケース数 で「発注予定」に 1 タップで入る。
+   最新のメールに同じ商品（品番または商品名が同じ）が来ていればその行を発注予定にする（単価・納期の新しい情報を優先）。
+   無ければサーバー（sourcingReorder）が商品一覧に同じ内容の新しい行を足して order にする。元の行は触らない。
+   その先（発注要求を出す → Mac → 発注済 → 受け取った）は従来と同じ。景品マスタには Mac が同名の行を足す（＝追加仕入れの決まり） */
+const srcSameProduct = (a,b) => { const ca=normName(a.code||""), cb=normName(b.code||""); const na=normName(a.name||""); return (ca && cb) ? ca===cb : !!(na && na===normName(b.name||"")); };
+const srcOrderNo = it => { const m=String(it.status||"").match(/EH-\d{8}-\d+/); return m ? m[0] : ""; };
+const srcIsReorder = it => { const d=srcDecision(it.key); return !!((d && d.reorderOf) || /^おかわり/.test(it.raw||"")); };
+const wk1 = v => v>=10 ? String(Math.round(v)) : v.toFixed(1);
+const casesLabel = c => c===0.5 ? "ハーフ" : `${c}ケース`;
+/* おかわりの材料：発注履歴（何回目・前回の発注）、前回の発注日からの払出ペース、在庫とあと何週（景品ラボ「在庫回転」と同じ式） */
+function srcReorderInfo(it){
+  const hist = SRC.history.filter(h=>srcSameProduct(h,it)).sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+  const times = Math.max(/発注済/.test(it.status||"") ? 1 : 0, new Set(hist.map(h=>h.orderNo||h.date)).size);
+  const d = srcDecision(it.key);
+  const dm = String(it.status||"").match(/\d{4}-\d{2}-\d{2}/);
+  const lastDate = dm ? dm[0] : (hist[0] ? hist[0].date : "");
+  const n = normName(it.name);
+  const pz = allPrizes().find(p=>normName(p.name)===n) || null;
+  const stock = pz ? stockOf(pz.name) : null;
+  // 前回の発注日以降の払出 ÷ 暦の日数（部屋ごとの区間を足した日数ではなく、最初の区間の始まりから最後の記録までの実日数。複数の部屋に同時に入っていても週あたりの実消費になる）
+  const iv = pz ? (SRC.iv || (SRC.iv = prizeIntervals())).filter(e=>e.prize===pz.name && (!lastDate || e.date>=lastDate)) : [];
+  const pays = iv.reduce((a,e)=>a+(e.pays||0),0);
+  const span = iv.length ? Math.max(1, daysSince(iv.reduce((m,e)=>{ const st=new Date(e.date+"T00:00:00"); st.setDate(st.getDate()-e.days); const s2=iso_(st); return m && m<s2 ? m : s2; }, "")) - Math.min(...iv.map(e=>daysSince(e.date)))) : 0;
+  let pace = span>0 ? pays/span*7 : null;
+  if (pace===null && pz){ const agg = SRC.agg || (SRC.agg = labAgg()); const P = agg[pz.name]; if (P && P.days>0) pace = P.pacePerWeek; }
+  const weeksLeft = (stock!==null && pace>0) ? stock/pace : null;
+  const prevCases = d && num(d.cases)>0 ? num(d.cases) : (num(it.cases)>0 ? num(it.cases) : (hist[0] && num(hist[0].cases)>0 ? num(hist[0].cases) : 1));
+  const prevMachine = (d && d.machine) || it.machine || (pz && pz.use && pz.use!=="両方" ? pz.use : "");
+  return {times, lastDate, orderNo: srcOrderNo(it), stock, pace, weeksLeft, prevCases, prevMachine, prize: pz ? pz.name : ""};
+}
+/* 発注の目安（在庫回転の「あと○週」から） */
+function reorderHint(info){
+  if (info.stock===null) return "";
+  if (info.stock<=0) return "在庫なし → いま発注";
+  if (info.weeksLeft===null) return `在庫 ${info.stock}こ（前回の発注後の払出がまだ無い）`;
+  const w=info.weeksLeft;
+  return w<=2 ? `あと ${wk1(w)}週で切れる → いま発注` : w<=4 ? `あと ${wk1(w)}週 → 来週には発注` : `あと ${wk1(w)}週 → まだ余裕`;
+}
+const reorderSoon = (stock, weeksLeft) => stock!==null && (stock<=5 || (weeksLeft!==null && weeksLeft<=2));
+/* 同じ商品の、もっと新しいメールの行（まだ発注していないもの）。あればおかわりはこちらを使う */
+function srcNewerMail(it){
+  return SRC.items.filter(x=>x.key!==it.key && srcSameProduct(x,it) && String(x.date)>String(it.date) && !srcMissing(x) && ["todo","hold","skip","order","check"].includes(srcState(x)))
+    .sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0] || null;
+}
+/* 景品名から、おかわりの元になる発注済の商品（商品一覧）を探す */
+function srcItemForPrize(name){
+  const n=normName(name); if (!n) return null;
+  return SRC.items.filter(it=>/発注済/.test(it.status||"") && normName(it.name)===n && !srcMissing(it)).sort((a,b)=>String(b.date).localeCompare(String(a.date)))[0] || null;
+}
+function reorderBlock(it){
+  const info = srcReorderInfo(it), newer = srcNewerMail(it), hint = reorderHint(info);
+  const soon = reorderSoon(info.stock, info.weeksLeft);
+  const lines = [`これまで <b>${info.times}回</b> 発注　前回 ${info.orderNo ? esc(info.orderNo)+" " : ""}${jpDate(info.lastDate)}　<b>${casesLabel(info.prevCases)}</b>${info.prevMachine?`　${esc(info.prevMachine)}`:""}`];
+  if (info.pace!==null) lines.push(`前回の発注から 週 ${wk1(info.pace)}こ 払出${info.stock!==null?`　在庫 ${info.stock}こ`:""}`);
+  else if (info.stock!==null) lines.push(`在庫 ${info.stock}こ`);
+  if (hint) lines.push(soon ? `<b>${esc(hint)}</b>` : esc(hint));
+  const price = newer
+    ? `最新のメール（${jpDate(newer.date)} 受信）の 単価 税込 ${yen(taxIn(newer.price))}円・入数 ${yen(newer.qty)} を使います${newer.price!==it.price?`（前回 ${yen(taxIn(it.price))}円）`:""}。`
+    : `前回の 単価 税込 ${yen(taxIn(it.price))}円（税抜 ${yen(it.price)}円）・入数 ${yen(it.qty)} で発注します。単価・納期が変わっている可能性があります（インフィニティの返信で確認）。`;
+  return `<div class="reorder ${soon?"soon":""}"><div class="rl">${lines.join("<br>")}</div><button type="button" class="recv" data-reorder="1">🔁 おかわり（${casesLabel(info.prevCases)}）</button><div class="rp">${esc(price)}</div></div>`;
+}
+/* 他のタブ（景品・在庫整理・在庫回転）用：在庫が少ない景品に「🔁 おかわり」 */
+function reorderChip(name, bare){
+  if (!canSource()) return "";
+  const it = srcItemForPrize(name); if (!it) return "";
+  const info = srcReorderInfo(it);                      // カードと同じ数字（前回の発注日からの実ペース）
+  if (!reorderSoon(info.stock, info.weeksLeft)) return "";
+  return `<button type="button" class="chip mini re-btn" data-reorder-name="${esc(name)}">🔁 おかわり${bare?"":info.weeksLeft!==null?`（あと ${wk1(info.weeksLeft)}週）`:info.stock<=0?"（在庫なし）":`（残 ${info.stock}）`}</button>`;
+}
+const reorderOn = () => canSource() && (typeof SRC!=="undefined") && (SRC.items||[]).some(it=>/発注済/.test(it.status||""));
+function srcFocus(key){ const el=document.querySelector(`.sc[data-key="${CSS.escape(key)}"]`); if (!el) return; el.scrollIntoView({behavior:"smooth", block:"center"}); el.classList.add("flash"); setTimeout(()=>el.classList.remove("flash"), 2400); }
+async function srcReorder(it){
+  if (!canSource()) return;
+  if (!Store.online()){ toast("いまは保存できません（オフライン）"); return; }
+  const dup = SRC.items.find(x=>x.key!==it.key && srcSameProduct(x,it) && ["order","requested","drafted"].includes(srcState(x)));
+  if (dup){ SRC.filter=srcState(dup); renderSourcing(); srcFocus(dup.key); toast(`「${it.name}」はすでに ${SRC_LABEL[srcState(dup)]} にあります`); return; }
+  const info = srcReorderInfo(it);
+  const note = `おかわり ${info.times+1}回目（前回 ${info.orderNo || jpDate(info.lastDate)}）`;
+  const newer = srcNewerMail(it);
+  let key, msg;
+  if (newer){
+    if (!(await srcSet(newer.key, "order", {cases:info.prevCases, machine:info.prevMachine, note}))) return;
+    key = newer.key;
+    msg = `最新のメール（${jpDate(newer.date)} 受信）の商品を発注予定に入れました（${casesLabel(info.prevCases)}）${newer.price!==it.price?`。単価 税込 ${yen(taxIn(it.price))}円 → ${yen(taxIn(newer.price))}円`:""}`;
+  } else {
+    try {
+      const r = await api("sourcingReorder", {key:it.key, cases:info.prevCases, machine:info.prevMachine, note});
+      SRC.items = SRC.items.filter(x=>x.key!==r.item.key).concat([r.item]);
+      setLocalSourcing(r.item.key, Object.assign({id:r.item.key}, r.rec), false);
+      try { localStorage.setItem(SRC_KEY, JSON.stringify({items:SRC.items, requests:SRC.requests, history:SRC.history, limit:SRC.limit, at:SRC.at})); } catch(e){}
+      key = r.item.key;
+      msg = `前回と同じ内容で発注予定に入れました（${casesLabel(info.prevCases)}）`;
+    } catch(e){ toast(errMsg(e)); return; }
+  }
+  SRC.filter="order"; SRC.q=""; const q=$("#srcQ"); if (q){ q.value=""; $("#srcQx").hidden=true; }
+  renderSourcing(); srcFocus(key);
+  toast(msg + "。数量を変えるなら「発注予定 ✓」", 5000);
+}
+async function goReorder(name){
+  if (!canSource()) return;
+  if (Store.online()) await loadSourcing(true);
+  const it = srcItemForPrize(name);
+  if (!it){ toast("この景品の発注済みの記録（商品一覧）が見つかりません"); return; }
+  const t=document.querySelector('.tab[data-p="p-src"]'); if (t) t.click();
+  await srcReorder(it);
+}
 /* 景品サイズ：商品名・件名・注意・メール原文から「〇cm」「W10×H20×D5cm」「130mm」を拾い、一辺の最大値を返す（取れなければ null） */
 function srcSizeCm(it){
   const t = [it.name, it.subject, it.caution, it.memo, it.variety, it.raw].filter(Boolean).join(" ").replace(/[０-９．]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0)).replace(/，/g,",");
@@ -3271,8 +3389,10 @@ function srcCard(it){
   else if (st==="received") state=`<div class="state done"><b>受取済 ${jpDate(d.receivedAt)}</b>${d.receivedBy?`　${esc(d.receivedBy)}`:""}　<span style="color:var(--ink-3)">${esc(it.status)}</span><div style="margin-top:6px"><button type="button" class="fix" style="margin:0" data-unrecv="1">発注済に戻す</button></div></div>`;
   else if (st==="drafted") state=`<div class="state done"><b>Mail の下書き作成済み</b>　${esc(it.status)}<br>Mac で送信したら、スプシのメニュー「手動で送った→発注済みにして景品マスタへ登録」を実行。</div>`;
   else if (st==="requested") state=`<div class="state ${req&&req.state==="失敗"?"bad":""}"><b>発注要求 ${esc(d.requestId)}</b>　${req ? esc(req.state) : "確認中"}${req&&req.result?`<br>${esc(req.result)}`:""}${!req||req.state==="待機中"||req.state==="処理中(Mac)" ? "<br>Mac が 2 分以内に発注書と Mail の下書きを作ります。" : ""}</div>`;
-  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(taxIn(o.amount))}円</b><span class="ex">税抜 ${yen(o.amount)}円</span>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}</div>`;
+  else if (st==="order") state=`<div class="state"><b>発注予定</b>　${o.cases===0.5?"ハーフ":`${o.cases}ケース`}（${o.pcs}こ）＝ <b>${yen(taxIn(o.amount))}円</b><span class="ex">税抜 ${yen(o.amount)}円</span>${o.machine?`　${esc(o.machine)}`:`　<span style="color:var(--critical-ink)">機械タイプ未選択</span>`}${o.note?`<br>備考：${esc(o.note)}`:""}${srcIsReorder(it)?`<br><span style="font-size:11px;color:var(--ink-3)">前回と同じ単価・入数です。インフィニティの返信で単価が変わっていたら${ME&&ME.role==="admin"?"「編集する」で直してください":"菊地さんに伝えてください"}。</span>`:""}</div>`;
   else if (st==="check") state=`<div class="state bad"><b>メールから読み取れていません</b>　${[!it.name&&"商品名", !(it.qty>0)&&"入数", !(it.price>0)&&"単価"].filter(Boolean).join("・")} が空です。${ME&&ME.role==="admin" ? "「直す」でメールを見て入力するか、見送りにしてください。" : "菊地さんに確認してください（単価・入数は管理者だけが直せます）。"}${it.raw?`<br><span style="font-size:11px">メールの原文：${esc(it.raw)}</span>`:""}${it.subject?`<br><span style="font-size:11px;color:var(--ink-3)">件名：${esc(it.subject)}</span>`:""}</div>`;
+  const reBlock = (st==="received" || st==="done") && canSource() ? reorderBlock(it) : "";
+  const reBadge = srcIsReorder(it) ? (()=>{ const d2=srcDecision(it.key); const m=(it.raw||"").match(/EH-\d{8}-\d+/) || (it.raw||"").match(/前回 (\S+)/); const no=(d2&&d2.prevNo)||(m?(m[1]||m[0]):""); const info=srcReorderInfo(it); const nth = /発注済|下書き作成/.test(it.status||"") ? info.times : info.times+1; return `<span class="rebadge">🔁 おかわり ${Math.max(2, nth)}回目${no?`（前回 ${esc(no)}）`:""}</span>`; })() : "";   // 発注済なら自分の分が履歴に入っているので +1 しない
   const openOrder = SRC.open[it.key]==="order", openFix = SRC.open[it.key]==="fix";
   const canAct = st==="todo"||st==="order"||st==="hold"||st==="skip"||st==="check";
   const canOrder = canAct && !miss;
@@ -3305,12 +3425,12 @@ function srcCard(it){
     ${it.img ? `<img class="pic" src="${esc(thumbSrc(it.img))}" alt="" loading="lazy" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'pic none',textContent:'画像を表示できません'}))">` : `<div class="pic none">画像なし</div>`}
     <div class="bd">
       <div class="nm ${it.name?"":"miss"}">${esc(it.name||"（商品名が読み取れていません）")}</div>
-      <div class="sub">${SRC.q.trim() ? `<span class="stb">${esc(SRC_LABEL[st]||st)}</span>` : ""}${jpDate(it.date)} 受信${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
+      <div class="sub">${SRC.q.trim() ? `<span class="stb">${esc(SRC_LABEL[st]||st)}</span>` : ""}${reBadge}${srcIsReorder(it) ? `${jpDate(it.date)} 作成` : `${jpDate(it.date)} 受信`}${it.code?`　品番 ${esc(it.code)}`:""}${it.maker?`　${esc(it.maker)}`:""}</div>
       <div class="price">${it.price>0?`<b>${yen(taxIn(it.price))}</b><span class="per">円（税込）<span class="ex">税抜 ${yen(it.price)}円 × 入数 ${it.qty>0?yen(it.qty):"?"}${caseAmt!==null?` ＝ ${yen(caseAmt)}円/ケース`:""}</span></span>`:`<span class="per" style="color:var(--critical-ink)">単価が読み取れていません</span>`}</div>
       ${meta.length?`<div class="meta">${meta.join("")}</div>`:""}
       ${big ? `<div class="sizeng">📏 一辺 ${big}cm（${SIZE_LIMIT_CM}cm 超）→ <b>見送り候補</b></div>` : ""}
       ${it.name ? rankBlock(it) : ""}
-      ${state}
+      ${state}${reBlock}
       ${canAct ? `<div class="acts">
         <button type="button" class="${st==="skip"?"on":""}" data-sd="skip">見送り</button>
         <button type="button" class="${st==="hold"?"on":""}" data-sd="hold">保留</button>
@@ -3330,7 +3450,7 @@ function srcMatch(it, words){
 }
 function renderSourcing(){
   const list=$("#srcList"); if (!list) return;
-  SRC.agg = null;
+  SRC.agg = null; SRC.iv = null;
   const items = SRC.items.slice().sort((a,b)=>String(b.date).localeCompare(String(a.date)) || String(b.key).localeCompare(String(a.key)));
   const words = String(SRC.q||"").split(/[\s\u3000]+/).map(srcFold).filter(Boolean);
   const cnt = {}; items.forEach(it=>{ const st=srcState(it); cnt[st]=(cnt[st]||0)+1; });
@@ -3424,6 +3544,7 @@ function wireSourcing(){
       if (await srcSet(key, dec)) toast(dec==="received" ? "受取済みにしました" : dec==="cancelled" ? "キャンセルにしました" : "発注済に戻しました");
       renderSourcing(); return;
     }
+    if (b.dataset.reorder){ b.disabled=true; await srcReorder(it); return; }
     if (b.dataset.sfix){ SRC.open[key]="fix"; SRC.fix[key]={name:it.name, code:it.code, qty:it.qty??"", price:it.price??""}; renderSourcing(); return; }
     if (b.dataset.scancel){ SRC.open[key]=null; renderSourcing(); return; }
     const keepPanel = () => { const mb=card.querySelector('[data-sm][aria-pressed="true"]'); const nt=card.querySelector("[data-snote]"); SRC.keep = {machine: mb?mb.dataset.sm:"", note: nt?nt.value:""}; };
@@ -4540,6 +4661,7 @@ function renderStock(){
   const typed = Object.keys(STK.v).filter(k=>STK.v[k]!=="").length;
   const ct=$("#stkCt"); if (ct) ct.textContent = typed ? `${typed}件 入力中` : `${rows.length}景品`;
   const dif = r => { const v=STK.v[r.name]; if (v===undefined||v==="") return ""; const d = num(v) - (r.calc===null?0:r.calc); return d===0 ? `<span class="stk-dif ok">計算どおり</span>` : `<span class="stk-dif ${d<0?"minus":"plus"}">差 ${d>0?"+":""}${d}（${d<0?"計算より少ない":"計算より多い"}）</span>`; };
+  const reAgg = reorderOn(); if (reAgg) SRC.iv = null;   // 在庫が少ない景品に「🔁 おかわり」（依頼⑫）
   el.innerHTML = `
     <div class="stk-top">
       <p class="hint" style="margin:0">スプレッドシートの「在庫整理」タブと同じ内容です。<b>倉庫の分と機械の中に入っている分を合わせた全部</b>を数えて「数えた数」に入れ、下の保存を押してください。計算上の在庫 ＝ 買った数 − 累計払出数 ± 調整 です。計算と違っても、数えた数が正になります。3 個セットは個数で数えます。</p>
@@ -4550,7 +4672,7 @@ function renderStock(){
       <div class="stk" data-stk="${esc(r.name)}">
         <div class="stk-nm">${esc(r.name)}<small>${esc(r.kind||"機械タイプ未設定")}${r.set>1?`　・BOX 1枠 ${r.set} こ`:""}</small>${r.merged.length?`<small class="stk-merged">まとめ：${r.merged.map(m=>`${esc(m)}（買った ${stockBreakdownRaw(m).qty}）${ME&&ME.role==="admin"?` <button type="button" class="chip mini stk-split" data-split="${esc(m)}">分ける</button>`:""}`).join("　")}</small>`:""}</div>
         <div class="stk-bd">買った <b>${r.bd.qty}</b>　払出 <b>${r.bd.pays}</b>${r.bd.adj?`　調整 <b>${r.bd.adj>0?"+":""}${r.bd.adj}</b>`:""}　うち機械の中（目安） <b>${r.bd.inMach}</b></div>
-        <div class="stk-calc">計算上の在庫（倉庫＋機械） <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}</div>
+        <div class="stk-calc">計算上の在庫（倉庫＋機械） <b>${r.calc===null?"—":r.calc}</b>${r.last?`<small>前回 ${jpDate(String(r.last.createdAt).slice(0,10))} に ${r.last.counted} と数えた</small>`:""}${reAgg?reorderChip(r.name):""}</div>
         <input class="numin stk-in" type="text" inputmode="numeric" maxlength="4" placeholder="数えた数" aria-label="${esc(r.name)} の数えた数" value="${esc(STK.v[r.name]||"")}">
         ${dif(r)}
         <div class="stk-opt">${ME&&ME.role==="admin"&&!r.merged.length?`<label>同じ景品にまとめる <select class="stk-alias" aria-label="${esc(r.name)} をまとめる先"><option value="">（まとめない）</option>${rows.filter(x=>x.name!==r.name&&!x.merged.includes(r.name)).map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join("")}</select></label>`:""}${r.mine?`<label>機械タイプ <select class="stk-use" aria-label="${esc(r.name)} の機械タイプ">${["カリーノ用","4人機用"].map(u=>`<option value="${u}" ${r.rawUse===u?"selected":""}>${u}</option>`).join("")}</select></label>`:""}<label>BOX 1枠 <input class="stk-set" type="text" inputmode="numeric" maxlength="2" value="${r.set}" aria-label="${esc(r.name)} の BOX 1枠の個数"> こ</label><label><input class="stk-both" type="checkbox" ${r.kind==="両方"?"checked":""}> 両方の機械で使う</label></div>
@@ -4596,7 +4718,11 @@ function renderPrizeList(){
   const sheetOnly = allPrizes().filter(p=>p._sheet);
   // 同じ品名の行がシートに複数あるとき（発注送信時の自動追加が重なった等）は「重複？」を出す
   const dupN = {}; sheetOnly.forEach(p=>{ const k=normName(p.name); dupN[k]=(dupN[k]||0)+1; });
-  const dupGroups = Object.keys(dupN).filter(k=>dupN[k]>1).length;
+  // おかわり・追加仕入れで同名の行が増えるのは正しい（2026-11-12 の決まり：同じ品名の行の合計＝在庫）。その景品は「追加仕入れ」と出す（2026-11-19 依頼⑫）
+  const reN = {}; (SRC.items||[]).forEach(it=>{ if (srcIsReorder(it) && /発注済|下書き作成/.test(it.status||"")) { const k=normName(it.name); reN[k]=(reN[k]||0)+1; } });
+  const dupTag = name => { const k=normName(name); if (!(dupN[k]>1)) return ""; return reN[k] ? `<span class="tag">追加仕入れ ${dupN[k]} 行（在庫は合算）</span>` : `<span class="tag dup">⚠ 重複？ 同じ品名が ${dupN[k]} 行（シート側で 1 行にまとめてください）</span>`; };
+  const dupGroups = Object.keys(dupN).filter(k=>dupN[k]>1 && !reN[k]).length;
+  const reAgg = reorderOn(); if (reAgg) SRC.iv = null;
   $("#pzCt").textContent = `${me()} ${rows.length}件` + (sheetOnly.length ? `＋シート${sheetOnly.length}件` : "") + (dupGroups ? `　⚠ 重複 ${dupGroups}組` : "");
   const el=$("#pzList");
   if(!rows.length && !sheetOnly.length){ el.innerHTML=`<div class="empty"><b>🎁</b>景品を登録すると、原価率の自動計算と巡回ログのチップに出てきます。</div>`; return; }
@@ -4612,7 +4738,7 @@ function renderPrizeList(){
           ${r.stock!==null&&r.stock!==undefined&&r.stock!==""?`<span class="pill ${num(r.stock)>0?"flat":"bad"}">残り ${num(r.stock)}${num(r.qty)>0?`／${num(r.qty)}個`:"個"}</span>`:""}
           ${r.memo?`<span class="tag">${esc(r.memo).slice(0,40)}</span>`:""}
           <span class="tag sent">📗 シート</span>
-          ${dupN[normName(r.name)]>1?`<span class="tag dup">⚠ 重複？ 同じ品名が ${dupN[normName(r.name)]} 行（シート側で 1 行にまとめてください）</span>`:""}
+          ${dupTag(r.name)}${reAgg?reorderChip(r.name):""}
         </div>
       </div>
     </div>`).join("")}` : "";
@@ -4635,7 +4761,7 @@ function renderPrizeList(){
           <span class="pill ${exp===null?"flat":stt}">原価率 ${rate}${r.rateN?`＝1／${r.rateN}`:""}</span>
           ${num(r.qty)>0?`<span class="pill ${Math.max(0,num(r.qty)-(refill[r.name]||0))>0?"flat":"bad"}">残り ${Math.max(0,num(r.qty)-(refill[r.name]||0))}／${num(r.qty)}個</span>`:""}
           ${used[r.name]?`<span class="tag">払出 ${used[r.name]}個</span>`:""}
-          <span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>
+          <span class="tag ${r.sentAt?"sent":"todo"}">${r.sentAt?"転記済":"未転記"}</span>${reAgg?reorderChip(r.name):""}
         </div>
       </div>
       ${delBtn("prizes",r)}
@@ -5447,6 +5573,7 @@ function renderLab(){
   const n1 = v => v===null||v===undefined ? "—" : (v>=10 ? Math.round(v) : v.toFixed(1));
   let html="", note="";
   if (labTab==="turn"){
+    SRC.iv = null;
     const rows=list.filter(P=>P.stock!==null || P.pays>0).map(P=>{
       const stale = P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14));
       const fast = P.weeksLeft!==null && P.weeksLeft<=2 && P.stock>0;
@@ -5459,7 +5586,7 @@ function renderLab(){
     }).sort((a,b)=>a.sort-b.sort || (b.P.stock||0)-(a.P.stock||0));
     // 見せるのは 景品名・判定・在庫・あと何週 だけ（2026-11-07 菊地さん「余計な情報を削って見やすく」）
     html = rows.map(({P,cls,tag})=>`<div class="gq-labi ${cls}"><div class="hd"><b>${esc(P.prize)}</b><span class="tag">${tag}</span></div>
-      <div class="kv"><span>在庫 <b>${P.stock===null?"—":P.stock}</b></span><span>あと <b>${P.weeksLeft!==null ? n1(P.weeksLeft) : "—"}</b>週</span></div></div>`).join("");
+      <div class="kv"><span>在庫 <b>${P.stock===null?"—":P.stock}</b></span><span>あと <b>${P.weeksLeft!==null ? n1(P.weeksLeft) : "—"}</b>週</span>${reorderOn()?reorderChip(P.prize, true):""}</div></div>`).join("");   // 行に「あと○週」があるので数字は重ねない
     const stale=rows.filter(r=>r.cls==="bad").length;
     $("#gqLabSub").textContent = rows.length ? (stale?`滞留 ${stale}`:`滞留なし`) : "";
     note = `「あと○週」＝今のペースで在庫がなくなるまで。<b style="color:#f5c542">滞留</b>＝在庫が 5 以上あるのに出ていない景品（出る店へ移すか、獲得率をゆるめる）。`;
@@ -5881,6 +6008,7 @@ function wire(){
     if (t.dataset.p==="p-src" && Date.now()-SRC.at > 90000) loadSourcing(false);
   });
   wireSourcing(); srcLoadCache(); renderSourcing();
+  document.addEventListener("click", e=>{ const b=e.target.closest("[data-reorder-name]"); if (!b) return; b.disabled=true; goReorder(b.dataset.reorderName).finally(()=>{ b.disabled=false; }); });   // 景品・在庫整理・在庫回転の「🔁 おかわり」
 
   // 部屋（A/B/C/D）の入力
   $("#roomGrid").addEventListener("input", onRoomInput);
@@ -6068,7 +6196,7 @@ loadOutbox();
 Store.init().then(render);
 PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
 window.addEventListener("online", ()=>pump(true));
-if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit,
+if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, srcRank, nameTokens, prizeIntervals, Store, F, validateVisit, startEdit, SRC, srcReorderInfo, srcDecision, stockOf, todayStr, srcNewerMail,
   get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, NET, get PIN(){ return PIN; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
 
 

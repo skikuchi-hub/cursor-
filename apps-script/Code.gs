@@ -55,6 +55,7 @@ function doPost(e) {
       case "sourcingSet":    requireSourcing(me); return out(withLock(function () { return sourcingSet(me, req.key, req.decision, req.cases, req.machine, req.note); }));
       case "sourcingFix":    requireSourcing(me); return out(withLock(function () { return sourcingFix(me, req.key, req.fields); }));
       case "sourcingSubmit": requireSourcing(me); return out(withLock(function () { return sourcingSubmit(me, req.keys); }));
+      case "sourcingReorder": requireSourcing(me); return out(withLock(function () { return sourcingReorder(me, req.key, req.cases, req.machine, req.note); }));   // おかわり発注（依頼⑫）
       default: return out({ ok: false, error: "unknown_action", message: "不明な操作: " + req.action });
     }
   } catch (err) {
@@ -1266,21 +1267,28 @@ function exaItems() {
   var v = sh.getRange(2, 1, last - 1, ncol).getValues();
   var f = sh.getRange(2, EXA.image, last - 1, 1).getFormulas();
   var tz = sheetTz(), out = [];
-  var since = new Date(Date.now() - SOURCING_DAYS * 864e5);
+  var since = new Date(Date.now() - SOURCING_DAYS * 864e5), sinceOrdered = new Date(Date.now() - SOURCING_ORDERED_DAYS * 864e5);
   for (var i = 0; i < v.length; i++) {
-    var r = v[i]; var key = clean(r[EXA.key - 1]); if (!key) continue;
-    var d = r[EXA.date - 1]; var date = d instanceof Date ? Utilities.formatDate(d, tz, "yyyy-MM-dd") : String(d || "").slice(0, 10);
-    if (d instanceof Date && d < since) continue;
-    var m = String(f[i][0] || "").match(/IMAGE\("([^"]+)"/);
-    out.push({
-      row: i + 2, key: key, date: date, name: clean(r[EXA.name - 1]), code: clean(r[EXA.code - 1]), maker: clean(r[EXA.maker - 1]),
-      qty: numOrNull(r[EXA.qty - 1]), price: numOrNull(r[EXA.price - 1]), retail: numOrNull(r[EXA.retail - 1]),
-      variety: clean(r[EXA.variety - 1]), lead: clean(r[EXA.lead - 1]), half: clean(r[EXA.half - 1]), ship: clean(r[EXA.ship - 1]), caution: clean(r[EXA.caution - 1]),
-      cases: numOrNull(r[EXA.cases - 1]), machine: clean(r[EXA.machine - 1]), memo: clean(r[EXA.memo - 1]), status: clean(r[EXA.status - 1]), check: clean(r[EXA.check - 1]),
-      img: m ? m[1] : "", subject: clean(r[EXA.subject - 1]), mailId: String(r[EXA.mailId - 1] || "").replace(/\.0$/, ""), raw: clean(r[EXA.raw - 1])
-    });
+    var r = v[i]; if (!clean(r[EXA.key - 1])) continue;
+    var d = r[EXA.date - 1];
+    // 直近 60 日の商品だけ返す。ただし発注済（＝おかわりの元になる）は 1 年まで残す（依頼⑫。受取済の商品が 60 日で消えると「🔁 おかわり」が押せない）
+    if (d instanceof Date && d < since && !(/発注済/.test(clean(r[EXA.status - 1])) && d >= sinceOrdered)) continue;
+    out.push(exaRowItem(r, f[i][0], i + 2, tz));
   }
   return out;
+}
+var SOURCING_ORDERED_DAYS = 365;
+/* 商品一覧の 1 行 → アプリのカード用オブジェクト */
+function exaRowItem(r, imgFormula, rowNo, tz) {
+  var d = r[EXA.date - 1]; var date = d instanceof Date ? Utilities.formatDate(d, tz || sheetTz(), "yyyy-MM-dd") : String(d || "").slice(0, 10);
+  var m = String(imgFormula || "").match(/IMAGE\("([^"]+)"/);
+  return {
+    row: rowNo, key: clean(r[EXA.key - 1]), date: date, name: clean(r[EXA.name - 1]), code: clean(r[EXA.code - 1]), maker: clean(r[EXA.maker - 1]),
+    qty: numOrNull(r[EXA.qty - 1]), price: numOrNull(r[EXA.price - 1]), retail: numOrNull(r[EXA.retail - 1]),
+    variety: clean(r[EXA.variety - 1]), lead: clean(r[EXA.lead - 1]), half: clean(r[EXA.half - 1]), ship: clean(r[EXA.ship - 1]), caution: clean(r[EXA.caution - 1]),
+    cases: numOrNull(r[EXA.cases - 1]), machine: clean(r[EXA.machine - 1]), memo: clean(r[EXA.memo - 1]), status: clean(r[EXA.status - 1]), check: clean(r[EXA.check - 1]),
+    img: m ? m[1] : "", subject: clean(r[EXA.subject - 1]), mailId: String(r[EXA.mailId - 1] || "").replace(/\.0$/, ""), raw: clean(r[EXA.raw - 1])
+  };
 }
 function numOrNull(x) { if (x === "" || x === null || x === undefined) return null; var n = parseFloat(x); return isFinite(n) ? n : null; }
 function exaRequests(n) {
@@ -1415,6 +1423,49 @@ function sourcingSubmit(me, keys) {
   });
   try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
   return { ok: true, requestId: reqId, n: items.length, total: total, warn: total > (num(exaSetting("発注金額の上限警告")) || 300000) ? "合計が上限警告額を超えています" : "" };
+}
+
+/* おかわり発注（2026-11-19 依頼⑫）：一度発注して届いた商品を、前回と同じ内容（商品名・品番・入数・単価・機械タイプ・ケース数）で
+   もう一度「発注予定」に入れる。商品一覧の元の行（発注済 … (EH-…)）は触らず、同じ内容の新しい行を末尾に足して（商品キー R＋日時＋元キー）
+   その行を order にする。あとは既存の「発注要求を出す」→ Mac の examuse_sync → 発注済 → 📦 受け取った、と同じ道を通る。
+   Mac は要求 JSON の key で商品一覧の行を探して発注状況を書き、景品マスタには同名の行を追加する（＝11/12 に決めた「追加仕入れは同名の行」）。
+   最新のメールに同じ商品があるときはアプリ側がそちらの行を order にするので、ここには来ない（単価・納期の新しい情報を優先） */
+function sourcingReorder(me, key, cases, machine, note) {
+  key = clean(key); if (!key) throw new Error("商品キーがありません");
+  cases = num(cases); if (!(cases > 0)) throw new Error("数量を選んでください");
+  if (!(cases === 0.5 || cases === Math.floor(cases))) throw new Error("数量は ハーフ（0.5）か 1 ケース単位です");
+  machine = clean(machine); if (["4人機用", "カリーノ用", ""].indexOf(machine) < 0) throw new Error("機械タイプの値が不正です");
+  var sh = exaSs().getSheetByName("商品一覧"); var row = exaRowByKey(sh, key);
+  if (!row) throw new Error("商品一覧にこの商品が見つかりません");
+  var ncol = Math.max(sh.getLastColumn(), EXA.raw);
+  var src = sh.getRange(row, 1, 1, ncol).getValues()[0];
+  var status = clean(src[EXA.status - 1]);
+  if (!/発注済/.test(status)) throw new Error("おかわりは発注済み（受取済）の商品だけです");
+  if (!clean(src[EXA.name - 1]) || !(num(src[EXA.qty - 1]) > 0) || !(num(src[EXA.price - 1]) > 0)) throw new Error("商品名・入数・単価がそろっていないので、おかわりできません");
+  var m = status.match(/EH-\d{8}-\d+/); var prevNo = m ? m[0] : "";
+  var tz = "Asia/Tokyo", now = new Date();
+  var newKey = "R" + Utilities.formatDate(now, tz, "yyyyMMddHHmmss") + "-" + key;
+  var newRow = sh.getLastRow() + 1;
+  sh.getRange(row, 1, 1, ncol).copyTo(sh.getRange(newRow, 1, 1, ncol));          // 書式・IMAGE 式ごと複製（相対参照は行に合わせて動く）
+  sh.getRange(newRow, EXA.date).setValue(now);
+  sh.getRange(newRow, EXA.cases).setValue(cases);
+  if (machine) sh.getRange(newRow, EXA.machine).setValue(machine);
+  sh.getRange(newRow, EXA.memo).setValue(clean(note || ""));
+  sh.getRange(newRow, EXA.status).setValue(""); sh.getRange(newRow, EXA.check).setValue("");
+  var subj = clean(src[EXA.subject - 1]); sh.getRange(newRow, EXA.subject).setValue("おかわり：" + subj);
+  sh.getRange(newRow, EXA.key).setValue(newKey);
+  var stamp = status.replace(/^発注済\s*/, "");
+  sh.getRange(newRow, EXA.raw).setValue("おかわり（前回 " + stamp + "・" + me.name + " " + Utilities.formatDate(now, tz, "yyyy-MM-dd") + "）");
+  // 判断レコード（order）。前回の情報を reorderOf／prevNo に残す（カードの「n回目・前回 …」表示に使う）
+  var dbs = dbSheet(), nowS = nowIso();
+  var rec = { key: newKey, decision: "order", cases: cases, machine: machine, note: clean(note || ""), by: me.name, at: nowS, reorderOf: key, prevNo: prevNo };
+  var r = findDbRow("sourcing", newKey);
+  if (r) dbs.getRange(r, 4, 1, 3).setValues([[nowS, me.name, JSON.stringify(rec)]]);
+  else dbs.appendRow(["sourcing", newKey, nowS, nowS, me.name, JSON.stringify(rec)]);
+  rec.id = newKey;
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  var vals = sh.getRange(newRow, 1, 1, ncol).getValues()[0], f = sh.getRange(newRow, EXA.image).getFormula();
+  return { ok: true, rec: rec, item: exaRowItem(vals, f, newRow, sheetTz()) };
 }
 
 /* 仕入れ連携の初回認可用：エディタで一度 ▶ 実行し、仕入れ想定商品スプシへのアクセスを承認する（以後は不要） */
