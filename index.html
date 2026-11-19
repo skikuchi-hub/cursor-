@@ -5742,7 +5742,7 @@ function renderQuest(){
 
   // バッジ
   drawBadges(badges);
-  drawGyms(W, mon);                                                     // ジムランクも見ている人の売上で
+  drawGyms(W, mon);                                                     // ジムは店舗合計（全員分）のランク。見ている人が今月回った店に印
   drawRanking(mon);
 }
 
@@ -5804,10 +5804,17 @@ function drawDayLog(day, daily){
 const GYM_TIERS = [50000,100000,150000,200000,250000,300000];
 const gymTier = best => GYM_TIERS.filter(t=>best>=t).length;        // 0〜6
 const GYM_EXP = 100;                                                  // ジムランク 1ランクにつき +100 EXP（月ごと・店ごとに積み上がる）
-function gymRankTotal(W){
+/* ジムは「店のランク」：店舗ごとの月売上は担当に関係なく全員分の合計で決める（2026-11-19 菊地さん「A 店舗合計」）。
+   EXP（1 ランク +100）は、その月にその店を回った（記録を 1 件でも付けた）人の全員に付く */
+function gymStoreSales(){
   const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
-  const bySM={}; W.forEach(r=>{ const m=monthOf(r.week); if(m){ const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r); } });
-  return Object.values(bySM).reduce((a,v)=>a+gymTier(v),0);
+  const bySM={}; (Store.data.weekly||[]).forEach(r=>{ const m=monthOf(r.week); if(m && r.store){ const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r); } });
+  return bySM;
+}
+function gymRankTotal(W){                                             // W＝見ている人の記録。その人が回った 店×月 のランクを合計
+  const all = gymStoreSales(), seen = {};
+  W.forEach(r=>{ const m=monthOf(r.week); if(m && r.store) seen[r.store+"|"+m]=1; });
+  return Object.keys(seen).reduce((a,k)=>a+gymTier(all[k]||0),0);
 }
 function gymIcon(color, t){
   const got = t>=1, ink="#14203a";
@@ -5830,8 +5837,8 @@ function gymIcon(color, t){
 }
 function drawGyms(W, mon){
   const el=$("#gqGyms"); if(!el) return;
-  const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
-  const bySM={}; W.forEach(r=>{ const m=monthOf(r.week); if(m){ const k=r.store+"|"+m; bySM[k]=(bySM[k]||0)+salesOf(r); } });
+  const bySM = gymStoreSales();                                                    // 店舗合計（全員分）
+  const visited = {}; W.forEach(r=>{ if(monthOf(r.week)===mon && r.store) visited[r.store]=1; });   // 見ている人が今月回った店
   const man = v => (Math.floor(v/1000)/10).toLocaleString("ja-JP",{maximumFractionDigits:1});   // 千円単位で切り捨て（19,500円 → 1.9万）
   let got=0, maxed=0;
   el.innerHTML = STORES.map((s,i)=>{
@@ -5839,7 +5846,7 @@ function drawGyms(W, mon){
     const t = gymTier(now); if (t>=1) got++; if (t>=6) maxed++;
     const nextT = GYM_TIERS[Math.min(t, GYM_TIERS.length-1)];                       // 次のランクの金額（MAX なら 30万）
     const pct = Math.min(100, now/nextT*100);
-    const rank = t>=6 ? "MAX（30万）" : t>=1 ? `ランク ${t}（${man(GYM_TIERS[t-1])}万）` : "5万で 獲得";
+    const rank = (t>=6 ? "MAX（30万）" : t>=1 ? `ランク ${t}（${man(GYM_TIERS[t-1])}万）` : "5万で 獲得") + (t>=1 && !visited[s.n] ? "・今月まだ行っていない" : "");
     return `<div class="gq-gym ${t>=1?"got":""} ${t>=6?"max":""}">
       ${gymIcon(`var(${SERIES[i%SERIES.length]})`, t)}
       <div class="nm"><b>${esc(s.n)}</b><span>${esc(s.biz)}・${rank}</span></div>
@@ -5848,7 +5855,7 @@ function drawGyms(W, mon){
   }).join("") + (maxed>=STORES.length ? `<div class="gq-hall">👑 グランド でんどういり！ 5店 すべて MAX！</div>`
                 : got>=STORES.length ? `<div class="gq-hall">👑 でんどういり！ 5店 すべて ジムランク 獲得！</div>` : "");
   $("#gqGymSub").textContent = `獲得 ${got}／${STORES.length}・MAX ${maxed}／${STORES.length}`;
-  $("#gqGymNote").textContent = `月売上 5万円で 獲得、5万円ごとに ランクアップ（30万円で MAX）`;
+  $("#gqGymNote").textContent = `店の月売上（全員分の合計）5万円で 獲得、5万円ごとに ランクアップ（30万円で MAX）。EXP はその月にその店を回った人に +100／ランク`;
 }
 
 /* ===== ランキング：担当ごとの「こんげつの EXP」で順位。見ている人（gqWho）を一時的に切り替えて同じ計算を使う ===== */
@@ -5857,11 +5864,10 @@ function monthExpFor(who, mon){                                       // その�
   const keep = gqWho; gqWho = who;
   try {
     const W=mine(Store.data.weekly);
-    const salesOf = r => num(r.sales) || num(r.plays)*PLAY_PRICE;
     const ex = expByDay();
     const dayExp = Object.keys(ex).filter(d=>d.startsWith(mon)).reduce((a,d)=>a+ex[d],0);
-    const bySM={}; W.forEach(r=>{ if(monthOf(r.week)===mon){ bySM[r.store]=(bySM[r.store]||0)+salesOf(r); } });
-    return dayExp + Object.values(bySM).reduce((a,v)=>a+gymTier(v),0)*GYM_EXP;
+    const all = gymStoreSales(), seen = {}; W.forEach(r=>{ if(monthOf(r.week)===mon && r.store) seen[r.store]=1; });   // 店舗合計のランク × その月に回った店
+    return dayExp + Object.keys(seen).reduce((a,st)=>a+gymTier(all[st+"|"+mon]||0),0)*GYM_EXP;
   } finally { gqWho = keep; }
 }
 function monthStanding(mon){                                          // その月の順位表（EXP が 0 以下の人は順位なし）
