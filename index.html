@@ -284,7 +284,7 @@ input[type="date"],input[type="time"]{min-width:0;max-width:100%;-webkit-appeara
 .save-note{text-align:center;font-size:11.5px;color:var(--ink-3);margin:8px 0 0}
 .save-cancel{width:100%;margin-top:8px;padding:13px;border-radius:var(--r-m);border:2px solid var(--line-2);background:var(--surface);color:var(--ink-2);font-weight:700;font-size:14px}
 .save-cancel:active{background:var(--surface-sunk)}
-/* 仕入れのカードは専用アプリ shiire/ に移した（2026-11-19 依頼⑯）。残すのは「🔁 おかわり」のリンクだけ */
+/* 仕入れのカードは専用アプリ shiire/ に移した（2026-11-19 依頼⑯）。仕入れタブ自体も 2026-11-20 依頼⑰で削除。残すのは「🔁 おかわり」のリンク（.re-btn）だけ */
 .tag.dup{background:var(--danger-wash);color:var(--danger-ink);font-weight:800}
 .re-btn{text-decoration:none;display:inline-flex;align-items:center;background:var(--gold-wash);border-color:var(--gold);color:var(--gold-ink);font-weight:800}
 /* 一覧の折り畳み見出し */
@@ -1486,14 +1486,6 @@ body{font-variant-numeric:tabular-nums}
         </details>
       </div>
     </section>
-    <section class="panel" id="p-src" role="tabpanel" aria-label="仕入れ">
-      <div class="card" style="text-align:center;padding:22px 16px">
-        <h2 style="font-family:var(--fs-display);font-size:17px;font-weight:900;margin:0 0 6px">📦 仕入れは専用アプリに移りました</h2>
-        <p class="hint" style="margin:0 0 14px">とどいた商品の判断・発注要求・🔁 おかわりは「EXAmuse 仕入れ」アプリで行います（PIN はクレーンログと同じ）。iPhone で固まらないように、商品の一覧はクレーンログでは読み込みません。</p>
-        <a class="btn pri link" href="shiire/" style="font-size:15px;padding:14px;color:#fff">📦 EXAmuse 仕入れアプリを開く</a>
-        <p class="hint" style="margin-top:14px;text-align:left">ホーム画面に別のアイコンで追加するには：Safari で <b>skikuchi-hub.github.io/cursor-/shiire/</b> を開く → 共有ボタン → 「ホーム画面に追加」。</p>
-      </div>
-    </section>
   </main>
 
 
@@ -1502,7 +1494,6 @@ body{font-variant-numeric:tabular-nums}
     <button class="tab" role="tab" aria-selected="false" data-p="p-prize"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="7"/><circle cx="6.5" cy="7.5" r="2.5"/><circle cx="17.5" cy="7.5" r="2.5"/><circle cx="9.5" cy="12" r=".6" fill="currentColor"/><circle cx="14.5" cy="12" r=".6" fill="currentColor"/><path d="M10.6 15.2c.8.9 2 .9 2.8 0"/><path d="M12 14v1.2"/></svg></i>景品</button>
     <button class="tab" role="tab" aria-selected="false" data-p="p-cost"><i><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M8.8 7.5 12 12.2l3.2-4.7M12 12.2V17M9.3 13.3h5.4M9.3 15.4h5.4"/></svg></i>経費</button>
     <button class="tab" role="tab" aria-selected="false" data-p="p-dash"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><rect x="5.5" y="12" width="3.4" height="8" rx=".8"/><rect x="10.3" y="7" width="3.4" height="13" rx=".8"/><rect x="15.1" y="9.5" width="3.4" height="10.5" rx=".8"/></svg></i>成績</button>
-    <button class="tab" role="tab" aria-selected="false" data-p="p-src"><i><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 8.5 12 4l8.5 4.5v8L12 21l-8.5-4.5z"/><path d="M3.5 8.5 12 13l8.5-4.5M12 13v8"/><path d="M7.8 6.3l8.5 4.5"/></svg></i>仕入れ</button>
   </nav>
 </div>
 
@@ -1620,13 +1611,11 @@ let gqWho = me();                                                      // 成果
 /* 本人確認（PIN）。スタッフごとの PIN はスプレッドシート「スタッフ」タブで管理。
    PIN で入ると担当が固定される（管理者だけ切り替え可）。 */
 let ME = null;                                   // {name, role:"admin"|"staff"}
-/* 仕入れタブは 管理者か、スタッフタブ「仕入れ」にチェックのある人だけ */
+/* 仕入れできる人＝管理者か、スタッフタブ「仕入れ」にチェックのある人。本体では「🔁 おかわり」のリンク（仕入れアプリへ）を出す条件にだけ使う
+   （仕入れタブは 2026-11-20 依頼⑰で削除。仕入れは専用アプリ shiire/ で行う） */
 const canSource = () => !!(ME && (ME.role==="admin" || ME.sourcing));
 function applyPerms(){
   { const x=$("#openX"); if (x) x.hidden = !(ME && ME.role==="admin"); }   // 右上の「📗 シート」は管理者だけ（2026-11-07 菊地さん）
-  const t=document.querySelector('.tab[data-p="p-src"]'); if (!t) return;
-  const ok=canSource(); t.hidden=!ok;
-  if (!ok && $("#p-src").classList.contains("on")){ document.querySelector('.tab[data-p="p-log"]').click(); }
 }
 function lockStaff(on){
   $$("#staffIn, .staff-sel").forEach(s=>s.disabled = on);
@@ -1733,7 +1722,7 @@ const NET = { lastErr:"", lastErrAt:0, lastOkAt:0, fails:0, retryT:null, tickT:n
   note(action, t0, bytes, err){ const e={action, ms:Date.now()-t0, bytes, err, at:new Date().toISOString()}; this.log.push(e); if (this.log.length>20) this.log.shift(); if (action==="bootstrap" && !err){ this.bootMs=e.ms; this.bootBytes=bytes; } } };
 /* 起動の記録（2026-11-19 依頼⑮）：各段階の時刻（ページを開いてからの ms）と例外を残す。URL に ?debug=1（または #debug）を付けると画面下に
    そのまま出す（iPhone で「読み込み中…」が終わらないとき、菊地さんがスクショを送れるように）。window.__dbg.BOOT でも見える */
-const APP_BUILD = "2026-11-19d";
+const APP_BUILD = "2026-11-20a";
 const BOOT = { rows:[], on: /[?&#]debug/.test(location.search+location.hash) };
 function bootLog(stage, extra){
   try {
@@ -3110,8 +3099,8 @@ function updateReadouts(){
   renderGuide();
 }
 
-/* ===================== 仕入れ（2026-11-19 依頼⑯：専用アプリ shiire/ に移した） =====================
-   仕入れタブの一覧・判断・発注要求・🔁 おかわりは EXAmuse 仕入れアプリ（shiire/index.html。同じ Apps Script・同じ PIN）で行う。
+/* ===================== 仕入れ（2026-11-19 依頼⑯：専用アプリ shiire/ に移した。2026-11-20 依頼⑰：本体の仕入れタブも削除） =====================
+   仕入れの一覧・判断・発注要求・🔁 おかわりは EXAmuse 仕入れアプリ（shiire/index.html。同じ Apps Script・同じ PIN）で行う。下部メニューは 巡回／景品／経費／成績 の 4 つ。
    本体は仕入れの一覧（action sourcing）を読まない・描かない（iPhone で仕入れタブを押すと固まった原因＝商品カード 300 件超の一括描画）。
    残っているのは「🔁 おかわり」のリンク（景品・在庫整理・在庫回転）だけ：在庫が少ない景品に shiire/?reorder=<景品名> へのリンクを出す */
 const SHIIRE_URL = "shiire/";
@@ -5588,9 +5577,21 @@ function renderStaged(){
   const safe = f => { const t=Date.now(); try { f(); } catch(e){ console.error(f.name, e); if (!NET.uiErr) NET.uiErr = `${f.name}：${String(e && e.message || e).slice(0,120)}`; bootLog("⚠ 描画 "+f.name, e && e.message); } return Date.now()-t; };
   const first = (groups[on] || groups["p-log"]).slice(); if (on!=="p-log") first.push(renderIssues);   // ⚠ 要確認（ヘッダー）はどのタブでも先に
   let ms=0; first.forEach(f=>{ ms+=safe(f); }); bootLog(`描画：開いているタブ ${on}`, `${ms}ms`);
-  const rest = Object.keys(groups).filter(k=>k!==on).flatMap(k=>groups[k]).filter(f=>!first.includes(f));   // 仕入れタブは開いたときに描く（従来どおり）
+  const rest = Object.keys(groups).filter(k=>k!==on).flatMap(k=>groups[k]).filter(f=>!first.includes(f));
   let i=0, total=0; const step=()=>{ if (i>=rest.length){ if ($("#drawer").classList.contains("on")) safe(renderDrawer); bootLog("描画：残りのタブ 完了", `${total}ms`); return; } total+=safe(rest[i++]); STAGED_T.push(setTimeout(step, 0)); };
   STAGED_T.push(setTimeout(step, 0));
+}
+
+/* 開いているタブを下部メニューと合わせる。選択中のパネルが無い／そのタブがメニューに無い（iOS が復元した古い画面・#p-src などの URL）ときは巡回タブへ。
+   タブの位置は端末に保存していないので、ふだんは起動＝巡回タブ（2026-11-20 依頼⑰：仕入れタブを削除したときの保険） */
+function ensureTab(){
+  const tabs = $$(".tab"); if (!tabs.length) return;
+  const on = document.querySelector(".panel.on");
+  const ok = on && tabs.some(t=>t.dataset.p===on.id && !t.hidden);
+  if (ok) return;
+  const home = tabs.find(t=>t.dataset.p==="p-log") || tabs[0];
+  tabs.forEach(x=>x.setAttribute("aria-selected", String(x===home)));
+  $$(".panel").forEach(p=>p.classList.toggle("on", p.id===home.dataset.p));
 }
 
 /* ===================== イベント配線 ===================== */
@@ -5601,6 +5602,7 @@ function wire(){
     $$(".panel").forEach(p=>p.classList.toggle("on", p.id===t.dataset.p));
     window.scrollTo({top:0,behavior:"smooth"});
   });
+  ensureTab();                                          // 開いているタブが下部メニューに無い（旧「仕入れ」タブなど）なら巡回へ（2026-11-20 依頼⑰）
   srcLoadCache();                                       // 仕入れは専用アプリへ（依頼⑯）。旧キャッシュを消すだけ
 
   // 部屋（A/B/C/D）の入力
@@ -5789,7 +5791,7 @@ Store.init().then(()=>{ if (Store.mode!=="cloud") renderStaged(); }).catch(e=>{ 
 PQ.init().then(()=>{ renderSendBar(); renderLogList(); pump(true); });
 window.addEventListener("online", ()=>pump(true));
 if (/^(127\.0\.0\.1|localhost)$/.test(location.hostname)) window.__dbg = {labAgg, prizeIntervals, Store, F, validateVisit, startEdit, stockOf, todayStr, 
-  get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, NET, BOOT, get PIN(){ return PIN; }, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
+  get PHOTOS(){ return PHOTOS; }, get PHOTO_BUSY(){ return PQ.inflight; }, get EDIT(){ return EDIT; }, NET, BOOT, get PIN(){ return PIN; }, get ME(){ return ME; }, canSource, ensureTab, PQ:()=>PQ.items.map(i=>({id:i.recId,kind:i.kind,tries:i.tries,h:(i.h||"").slice(0,6)})), OUTBOX:()=>OUTBOX.map(o=>({cid:o.cid,m:o.rec.machine,tries:o.tries,err:o.err})), pump};   // ローカル検証用（Playwright から中身を見る）
 
 
 })();
