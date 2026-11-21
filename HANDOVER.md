@@ -774,3 +774,4 @@ HANDOVER.md                  この文書
 - **再発防止**：ルーティン（docs/PHOTO_CHECK_ROUTINE_PROMPT.md）に 手順 0「`docs/PHOTO_CHECK_LESSONS.md` を先に読む」と 手順 7「pcFeedback を読み、写真と記録を見直して原因を A〜G に分類、LESSONS に事例とルールを追記して git push」を追加。LESSONS のルールは手順書の判定ルールより優先。本当は入力ミスなのに「合っている」と押された（F）ものは報告で菊地さんに伝える。
 - Apps Script：`PHOTO_HEADERS` に R・S を追加、`ensurePhotoHeaders_` が既存の写真タブに見出しを足す、`importPhotoChecks` は I〜S の 11 列を書く、`readPhotoChecks` は `issue`（はい→true／いいえ→false／空→null）と `ask` を返す。CODE_BUILD 2026-11-21a。
 - 検証：モック（下山門 カリーノIII 11/20 の補充前に issue:true・補充後に issue:false・古い形式の不一致 1 枚）で、通知は補充前の 1 件だけ。「入力は合っている」1 回で pcFeedback と issueDone-石原里基 が保存され通知が消えた。
+- **通知は巡回報告を止めない**（2026-11-21 菊地さん）：要確認はヘッダーのボタンと帯に出るだけで、保存前の検査（`validateVisit`）には入れない。何件残っていても新しい巡回報告・修正はそのままできる。今後もこの方針を変えない。
