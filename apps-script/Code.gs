@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-19d";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-21a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -801,7 +801,8 @@ var PHOTO_SHEET = "写真";
 var PHOTO_ROOT = "クレーンログ写真";
 var PHOTO_CHECK_DIR = "_チェック結果";
 var PHOTO_HEADERS = ["訪問日", "店舗", "機械", "担当", "種別", "写真URL", "ファイルID", "登録日時",
-  "チェック日時", "空き部屋", "空き数", "報告の払出", "照合", "POP数", "陳列スコア", "所見", "競合メモ"];
+  "チェック日時", "空き部屋", "空き数", "報告の払出", "照合", "POP数", "陳列スコア", "所見", "競合メモ",
+  "入力ミス疑い", "確認してほしいこと"];   // R・S（2026-11-21）：入力ミスの疑いがあるときだけ「はい」。アプリはこれが「はい」のときだけ本人に通知する
 var PHOTO_KINDS = { before: "補充前", after: "補充後" };
 var PHOTO_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -814,6 +815,15 @@ function photoSheet() {
     sh.setFrozenRows(1); sh.setColumnWidth(6, 220); sh.setColumnWidth(16, 320);
   }
   return sh;
+}
+/* 写真タブの見出しが古い（R・S が無い）ときだけ足す（2026-11-21：入力ミス疑い／確認してほしいこと） */
+function ensurePhotoHeaders_(sh) {
+  var n = PHOTO_HEADERS.length, cur = sh.getRange(1, 1, 1, n).getValues()[0];
+  var miss = false; for (var i = 0; i < n; i++) if (String(cur[i] || "") !== PHOTO_HEADERS[i]) miss = true;
+  if (!miss) return;
+  sh.getRange(1, 1, 1, n).setValues([PHOTO_HEADERS]).setFontWeight("bold");
+  sh.getRange(1, n + 1).setValue("A〜H はアプリが書く（種別＝補充前／補充後）。I〜S は毎日の自動チェック（Drive の _チェック結果 から取り込み）。R＝入力ミスの疑い（はい／いいえ）、S＝本人に確認してほしいこと。");
+  sh.setColumnWidth(19, 320);
 }
 function folderUnder(parent, name) {
   var it = parent.getFoldersByName(name);
@@ -1195,6 +1205,7 @@ function importPhotoChecks() {
   var dir = photoCheckDir();
   var files = dir.getFiles(), n = 0, m = 0;
   var ps = photoSheet();
+  try { ensurePhotoHeaders_(ps); } catch (e) { Logger.log("写真タブ見出し: " + e); }
   var last = ps.getLastRow();
   var fids = last >= 2 ? ps.getRange(2, 7, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
   while (files.hasNext()) {
@@ -1206,8 +1217,10 @@ function importPhotoChecks() {
     (data.items || []).forEach(function (it) {
       var i = fids.indexOf(String(it.fid || "")); if (i < 0) return;
       var rooms = Array.isArray(it.emptyRooms) ? it.emptyRooms.join(",") : String(it.emptyRooms || "");
-      ps.getRange(i + 2, 9, 1, 9).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
-        it.match || "", it.popCount == null ? "" : num(it.popCount), it.score == null ? "" : num(it.score), clean(it.note || ""), clean(it.competitor || "")]]);
+      var issue = (it.inputIssue === true || it.inputIssue === false) ? (it.inputIssue ? "はい" : "いいえ") : "";   // 無い（古い形式）なら空
+      ps.getRange(i + 2, 9, 1, 11).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
+        it.match || "", it.popCount == null ? "" : num(it.popCount), it.score == null ? "" : num(it.score), clean(it.note || ""), clean(it.competitor || ""),
+        issue, clean(it.ask || "")]]);
       m++;
     });
     f.setName("done_" + name); n++;
@@ -1228,7 +1241,8 @@ function readPhotoChecks() {
   v.forEach(function (r) {
     if (!r[6] || !r[8]) return;
     out[String(r[6])] = { at: r[8] instanceof Date ? r[8].toISOString() : String(r[8]), rooms: String(r[9] || ""), empty: r[10] === "" ? null : num(r[10]), pays: r[11] === "" ? null : num(r[11]),
-      match: String(r[12] || ""), pop: r[13] === "" ? null : num(r[13]), score: r[14] === "" ? null : num(r[14]), note: String(r[15] || ""), comp: String(r[16] || "") };
+      match: String(r[12] || ""), pop: r[13] === "" ? null : num(r[13]), score: r[14] === "" ? null : num(r[14]), note: String(r[15] || ""), comp: String(r[16] || ""),
+      issue: (r[17] === "" || r[17] === undefined) ? null : String(r[17]) === "はい", ask: String(r[18] || "") };   // issue：null＝古い形式（アプリ側で所見から判断）
   });
   return out;
 }

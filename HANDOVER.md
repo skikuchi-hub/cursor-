@@ -766,3 +766,11 @@ HANDOVER.md                  この文書
   `#p-src` の URL で開いても巡回タブ。選択中のパネルを全部外した状態から `ensureTab()` で巡回タブに戻る。
   ハーネス：`/tmp/claude-0/-home-user-cursor-/40d2fe1b-b284-54b1-8c7c-f67a5c38273f/scratchpad/h/`（`mock.js`＝模擬 API＋静的配信、`harness.js`。セッション限り）。
 - **菊地さんの作業**：なし。クレーンログ本体を開き直す（更新バーが出たら「更新する」）だけ。仕入れはホーム画面の「仕入れ」アイコン（https://skikuchi-hub.github.io/cursor-/shiire/ ）から。
+
+### 写真チェックの通知は「入力ミスの疑い」だけ。本人が「入力は合っている」を 1 回押せば消え、AI が見間違いを学ぶ（2026-11-21 菊地さん）
+- **通知の条件**：結果 JSON に `inputIssue`（true/false）と `ask`（本人に確認してほしいこと 1 文）が増えた。写真タブは R「入力ミス疑い」（はい／いいえ）・S「確認してほしいこと」。アプリ `photoCheckIsIssue` は `issue` が true のときだけ「⚠ 要確認」に出す（古い結果で issue が無いものは「不明」か所見に「記録と合わない」系の文言があるときだけ）。空き枠が残っている・陳列スコアが低い・POP なし は所見だけで通知しない。
+- **要確認カードのボタン**（写真チェック由来の項目）：`✅ 入力は合っている（AI の見間違い）`（緑・1 回で消える）／`開いて直す`／`修正完了`（直したあと。ルーティンが確認）／`削除（何もしない）`。理由は任意で 1 つタップ（`PC_REASONS`：写真の見間違い／景品名が違うだけ／前回の写真との比べ間違い／数え間違い／その他）。
+- **記録先**：「入力は合っている」は `settings/pcFeedback.items[]`＝{col,id,who,at,when,store,machine,week,msgs,kinds,checks[{fid,kind,match,note,ask,at}],reason,verdict:"correct"}（`markCorrect`）。「修正完了」は従来どおり `settings/issueFixed`。
+- **再発防止**：ルーティン（docs/PHOTO_CHECK_ROUTINE_PROMPT.md）に 手順 0「`docs/PHOTO_CHECK_LESSONS.md` を先に読む」と 手順 7「pcFeedback を読み、写真と記録を見直して原因を A〜G に分類、LESSONS に事例とルールを追記して git push」を追加。LESSONS のルールは手順書の判定ルールより優先。本当は入力ミスなのに「合っている」と押された（F）ものは報告で菊地さんに伝える。
+- Apps Script：`PHOTO_HEADERS` に R・S を追加、`ensurePhotoHeaders_` が既存の写真タブに見出しを足す、`importPhotoChecks` は I〜S の 11 列を書く、`readPhotoChecks` は `issue`（はい→true／いいえ→false／空→null）と `ask` を返す。CODE_BUILD 2026-11-21a。
+- 検証：モック（下山門 カリーノIII 11/20 の補充前に issue:true・補充後に issue:false・古い形式の不一致 1 枚）で、通知は補充前の 1 件だけ。「入力は合っている」1 回で pcFeedback と issueDone-石原里基 が保存され通知が消えた。
