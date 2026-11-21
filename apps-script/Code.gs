@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-21a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-21b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -801,8 +801,9 @@ var PHOTO_SHEET = "写真";
 var PHOTO_ROOT = "クレーンログ写真";
 var PHOTO_CHECK_DIR = "_チェック結果";
 var PHOTO_HEADERS = ["訪問日", "店舗", "機械", "担当", "種別", "写真URL", "ファイルID", "登録日時",
-  "チェック日時", "空き部屋", "空き数", "報告の払出", "照合", "POP数", "陳列スコア", "所見", "競合メモ",
-  "入力ミス疑い", "確認してほしいこと"];   // R・S（2026-11-21）：入力ミスの疑いがあるときだけ「はい」。アプリはこれが「はい」のときだけ本人に通知する
+  "チェック日時", "空き部屋", "空き数", "報告の払出", "照合", "POP数", "陳列スコア", "所見", "競合メモ"];
+var PHOTO_NOTE = "A〜H はアプリが書く（種別＝補充前／補充後）。I〜Q は毎日の自動チェック（Drive の _チェック結果 から取り込み）。アプリID の右の 2 列＝入力ミスの疑い（はい／いいえ）と本人に確認してほしいこと。";
+var PHOTO_EXTRA = ["入力ミス疑い", "確認してほしいこと"];   // アプリID 列の右に置く（2026-11-21）。R＝注記、S＝アプリID は従来のまま
 var PHOTO_KINDS = { before: "補充前", after: "補充後" };
 var PHOTO_MAX_BYTES = 6 * 1024 * 1024;
 
@@ -811,19 +812,37 @@ function photoSheet() {
   if (!sh) {
     sh = ss().insertSheet(PHOTO_SHEET);
     sh.getRange(1, 1, 1, PHOTO_HEADERS.length).setValues([PHOTO_HEADERS]).setFontWeight("bold");
-    sh.getRange(1, PHOTO_HEADERS.length + 1).setValue("A〜H はアプリが書く（種別＝補充前／補充後）。I〜Q は毎日の自動チェック（Drive の _チェック結果 から取り込み）。");
+    sh.getRange(1, PHOTO_HEADERS.length + 1).setValue(PHOTO_NOTE);
     sh.setFrozenRows(1); sh.setColumnWidth(6, 220); sh.setColumnWidth(16, 320);
   }
   return sh;
 }
-/* 写真タブの見出しが古い（R・S が無い）ときだけ足す（2026-11-21：入力ミス疑い／確認してほしいこと） */
-function ensurePhotoHeaders_(sh) {
-  var n = PHOTO_HEADERS.length, cur = sh.getRange(1, 1, 1, n).getValues()[0];
-  var miss = false; for (var i = 0; i < n; i++) if (String(cur[i] || "") !== PHOTO_HEADERS[i]) miss = true;
-  if (!miss) return;
-  sh.getRange(1, 1, 1, n).setValues([PHOTO_HEADERS]).setFontWeight("bold");
-  sh.getRange(1, n + 1).setValue("A〜H はアプリが書く（種別＝補充前／補充後）。I〜S は毎日の自動チェック（Drive の _チェック結果 から取り込み）。R＝入力ミスの疑い（はい／いいえ）、S＝本人に確認してほしいこと。");
-  sh.setColumnWidth(19, 320);
+/* 写真タブの追加 2 列（入力ミス疑い／確認してほしいこと）は アプリID 列の右。見出しが無ければ足し、
+   2026-11-21a が R（注記）・S（アプリID）の見出しを上書きしてしまった分も元に戻す。返り値＝「入力ミス疑い」の列番号（1 始まり） */
+function photoExtraCol_(sh) {
+  var n = PHOTO_HEADERS.length;
+  var lastc = Math.max(sh.getLastColumn(), n + 2);
+  var hdr = sh.getRange(1, 1, 1, lastc).getValues()[0].map(function (x) { return String(x || "").trim(); });
+  // 1) 2026-11-21a の上書きを戻す（R＝注記、S＝アプリID）。idColumn を呼ぶ前にやる（呼ぶと新しい アプリID 列を作ってしまう）
+  if (hdr[n] === PHOTO_EXTRA[0]) { sh.getRange(1, n + 1).setValue(PHOTO_NOTE); hdr[n] = PHOTO_NOTE; }
+  if (hdr[n + 1] === PHOTO_EXTRA[1]) { sh.getRange(1, n + 2).setValue(ID_HEADER).setFontColor("#999999").setFontSize(9); hdr[n + 1] = ID_HEADER; }
+  // 2) 上書き中に addPhoto が別の アプリID 列を作っていたら、その値を S に寄せて見出しを消す
+  for (var c = n + 2; c < hdr.length; c++) if (hdr[c] === ID_HEADER && hdr[n + 1] === ID_HEADER) {
+    var last = sh.getLastRow();
+    if (last >= 2) { var a = sh.getRange(2, n + 2, last - 1, 1).getValues(), b = sh.getRange(2, c + 1, last - 1, 1).getValues(), ch = false;
+      for (var i = 0; i < a.length; i++) if (!a[i][0] && b[i][0]) { a[i][0] = b[i][0]; ch = true; }
+      if (ch) sh.getRange(2, n + 2, last - 1, 1).setValues(a); sh.getRange(1, c + 1, last, 1).clearContent(); }
+    else sh.getRange(1, c + 1).clearContent();
+    hdr[c] = "";
+  }
+  var idc = idColumn(sh, true);
+  // 3) アプリID の右の 2 列に見出し。T 以降に逃げていた注記は消す
+  if (hdr[idc] !== PHOTO_EXTRA[0] || hdr[idc + 1] !== PHOTO_EXTRA[1]) {
+    sh.getRange(1, idc + 1, 1, 2).setValues([PHOTO_EXTRA]).setFontWeight("bold");
+    sh.setColumnWidth(idc + 2, 320);
+  }
+  for (var c2 = idc + 2; c2 < hdr.length; c2++) if (hdr[c2].indexOf("A〜H") === 0) sh.getRange(1, c2 + 1).clearContent();
+  return idc + 1;
 }
 function folderUnder(parent, name) {
   var it = parent.getFoldersByName(name);
@@ -1205,7 +1224,7 @@ function importPhotoChecks() {
   var dir = photoCheckDir();
   var files = dir.getFiles(), n = 0, m = 0;
   var ps = photoSheet();
-  try { ensurePhotoHeaders_(ps); } catch (e) { Logger.log("写真タブ見出し: " + e); }
+  var xc = 0; try { xc = photoExtraCol_(ps); } catch (e) { Logger.log("写真タブ見出し: " + e); }
   var last = ps.getLastRow();
   var fids = last >= 2 ? ps.getRange(2, 7, last - 1, 1).getValues().map(function (r) { return String(r[0]); }) : [];
   while (files.hasNext()) {
@@ -1218,9 +1237,9 @@ function importPhotoChecks() {
       var i = fids.indexOf(String(it.fid || "")); if (i < 0) return;
       var rooms = Array.isArray(it.emptyRooms) ? it.emptyRooms.join(",") : String(it.emptyRooms || "");
       var issue = (it.inputIssue === true || it.inputIssue === false) ? (it.inputIssue ? "はい" : "いいえ") : "";   // 無い（古い形式）なら空
-      ps.getRange(i + 2, 9, 1, 11).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
-        it.match || "", it.popCount == null ? "" : num(it.popCount), it.score == null ? "" : num(it.score), clean(it.note || ""), clean(it.competitor || ""),
-        issue, clean(it.ask || "")]]);
+      ps.getRange(i + 2, 9, 1, 9).setValues([[at, rooms, it.emptyCount == null ? "" : num(it.emptyCount), it.reportedPays == null ? "" : num(it.reportedPays),
+        it.match || "", it.popCount == null ? "" : num(it.popCount), it.score == null ? "" : num(it.score), clean(it.note || ""), clean(it.competitor || "")]]);
+      if (xc) ps.getRange(i + 2, xc, 1, 2).setValues([[issue, clean(it.ask || "")]]);   // アプリID の右：入力ミス疑い／確認してほしいこと
       m++;
     });
     f.setName("done_" + name); n++;
@@ -1237,12 +1256,15 @@ function importPhotoChecks() {
 function readPhotoChecks() {
   var ps = ss().getSheetByName(PHOTO_SHEET); if (!ps) return {};
   var last = ps.getLastRow(); if (last < 2) return {};
-  var v = ps.getRange(2, 1, last - 1, PHOTO_HEADERS.length).getValues(), out = {};
+  var xc = 0; try { xc = photoExtraCol_(ps); } catch (e) { Logger.log("写真タブ見出し: " + e); }
+  var w = Math.max(PHOTO_HEADERS.length, xc ? xc + 1 : 0);
+  var v = ps.getRange(2, 1, last - 1, w).getValues(), out = {};
   v.forEach(function (r) {
     if (!r[6] || !r[8]) return;
+    var iss = xc ? r[xc - 1] : "", ask = xc ? r[xc] : "";
     out[String(r[6])] = { at: r[8] instanceof Date ? r[8].toISOString() : String(r[8]), rooms: String(r[9] || ""), empty: r[10] === "" ? null : num(r[10]), pays: r[11] === "" ? null : num(r[11]),
       match: String(r[12] || ""), pop: r[13] === "" ? null : num(r[13]), score: r[14] === "" ? null : num(r[14]), note: String(r[15] || ""), comp: String(r[16] || ""),
-      issue: (r[17] === "" || r[17] === undefined) ? null : String(r[17]) === "はい", ask: String(r[18] || "") };   // issue：null＝古い形式（アプリ側で所見から判断）
+      issue: (iss === "" || iss === undefined) ? null : String(iss) === "はい", ask: String(ask || "") };   // issue：null＝古い形式（アプリ側で所見から判断）
   });
   return out;
 }
