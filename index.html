@@ -792,6 +792,33 @@ body{font-variant-numeric:tabular-nums}
 }
 .gq-goalcalc{font-size:12.5px;margin-top:8px;color:#eef3fb}
 .gq-goalcalc b{color:#f5c542;font-size:16px}
+.gq-morning .mo-box{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:10px 11px;margin-top:8px}
+.gq-morning .mo-box:first-of-type{margin-top:0}
+.gq-morning .mo-k{font-size:11px;color:#a8b8d4;letter-spacing:.08em;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.gq-morning .mo-k>span:last-child:not(:first-child){flex:none;color:#f5c542;font-weight:700}
+.gq-morning .mo-k button{border:1px solid #2a4a8c;background:#0f1b3d;color:#a8b8d4;border-radius:999px;font-size:10.5px;padding:2px 8px}
+.gq-morning .mo-big{display:flex;justify-content:space-between;align-items:baseline;font-size:12.5px;gap:8px;flex-wrap:wrap}
+.gq-morning .mo-big b{font-family:var(--fs-mono);font-size:24px;color:#f5c542;font-variant-numeric:tabular-nums}
+.gq-morning .mo-big .pj{font-size:12px;color:#eef3fb}
+.gq-morning .mo-big .pj b{font-size:15px}
+.gq-morning .mo-line{font-size:11.5px;color:#a8b8d4;margin-top:6px;line-height:1.5}
+.gq-morning .mo-line b{color:#eef3fb}
+.gq-morning .mo-item{padding:8px 0;border-top:1px solid #2a4a8c;font-size:13px;line-height:1.5;color:#eef3fb}
+.gq-morning .mo-item:first-child{border-top:0;padding-top:2px}
+.gq-morning .mo-item .t{display:block}
+.gq-morning .mo-item .t b{color:#f5c542}
+.gq-morning .mo-item .d{display:block;font-size:11px;color:#a8b8d4;margin-top:2px}
+.gq-morning .mo-item .d a{color:#7fb8ea}
+.gq-morning .mo-acts{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap}
+.gq-morning .mo-acts button{border:1px solid #2a4a8c;background:#1b2d5b;color:#eef3fb;border-radius:8px;font-size:12px;font-weight:700;padding:6px 12px}
+.gq-morning .mo-acts button.go{background:#f5c542;color:#14203a;border-color:#f5c542}
+.gq-morning .mo-res{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid #2a4a8c;font-size:12px;line-height:1.5}
+.gq-morning .mo-res:first-child{border-top:0;padding-top:0}
+.gq-morning .mo-res .mk{flex:none;width:22px;font-size:16px;text-align:center}
+.gq-morning .mo-res .tx{flex:1;min-width:0;color:#eef3fb}
+.gq-morning .mo-res .tx small{display:block;color:#a8b8d4;font-size:10.5px}
+.gq-morning .mo-res.hit .mk{color:#9ccf6b}.gq-morning .mo-res.miss .mk{color:#ff8e8e}
+.gq-morning .mo-empty{font-size:12px;color:#a8b8d4;line-height:1.5}
 .gq-pay{background:#14203a;border:2px solid #2a4a8c;border-radius:6px;padding:10px 11px}
 .gq-pay .big{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
 .gq-pay .big b{font-family:var(--fs-mono);font-size:24px;color:#f5c542;font-variant-numeric:tabular-nums}
@@ -1295,6 +1322,9 @@ body{font-variant-numeric:tabular-nums}
           <div class="gq-h" style="margin-bottom:6px">▶ トレーナー</div>
           <div class="chips scroll gq-datechips" id="gqWhoRow" style="margin-bottom:4px"></div>
         </div>
+
+        <!-- けさの 1 画面（管理者＝菊地さん。トレーナーカードの代わりに出す。2026-11-24） -->
+        <div class="gq-screen gq-morning" id="gqMorning" hidden></div>
 
         <!-- トレーナーカード -->
         <div class="gq-screen gq-card">
@@ -5232,9 +5262,128 @@ function renderLab(){
 }
 function dailyTarget(){ const g=Store.goal(gqWho); return (g.monthly>0 && g.days>0) ? Math.ceil(g.monthly/g.days) : 0; }
 
+/* ===================== けさの 1 画面（管理者＝菊地さん専用） =====================
+   2026-11-24 菊地さん「毎日開きたくなる仕組みは、経営者が毎日見たくなる理由で。おれの成績の 1 番に出して、キャラのレベルは要らないので差し替え」。
+   ① ペース：今月の粗利（全員分・経費と人件費を引いたもの）と利益目標、このペースでの月末見込み
+   ② 今日決めること（最大 3 件）：空き枠・滞留在庫・在庫切れ間近・行っていない店・置いていない在庫 を円に換算して並べ、やる／やらない／保留 を 1 タップ
+   ③ 答え合わせ：7 日以上前に「やる」と決めたことが実際どうなったか（自動判定）と、決断の勝率
+   決断は settings/decisions（{items:[{key,kind,text,at,choice,by,meta}]}）。スタッフの画面には出ない */
+const isBossView = () => !!(ME && ME.role==="admin" && gqWho===ME.name);
+function bizGoal(){ const d = Store.rows("settings").find(r=>r.id==="bizGoal"); return {profit: num(d && d.profit)}; }
+function monthProfitAll(mon){                        // 全員分の粗利（売上 − 景品原価 − 場所代 − 経費 − 人件費）。月次サマリーと同じ式
+  const rows = (Store.data.weekly||[]).filter(r=>monthOf(r.week)===mon);
+  const a = agg(rows);
+  const ex = expCountedRows(Store.data.expenses||[]).filter(x=>(x.date||"").slice(0,7)===mon).reduce((s,x)=>s+num(x.net),0);
+  const labor = laborOf(rows);
+  return {sales:a.sales, profit:a.gross-ex-labor, n:rows.length};
+}
+function decisionsAll(){ const d = Store.rows("settings").find(r=>r.id==="decisions"); return (d && d.items) || []; }
+async function saveDecision(item){
+  const items = decisionsAll().filter(it=>daysSince(String(it.at||"").slice(0,10)) <= 90).slice(-199);
+  items.push(item);
+  await Store.put("settings", "decisions", {items});
+}
+function machineDailySales(store, machine){           // 直近 30 日のその機械の売上／日
+  const rows=(Store.data.weekly||[]).filter(r=>r.store===store && r.machine===machine && daysSince(r.week)<=30);
+  if (!rows.length) return 0;
+  const span = Math.max(7, 30 - Math.min(...rows.map(r=>daysSince(r.week))) );
+  return rows.reduce((a,r)=>a+(num(r.sales)||num(r.plays)*PLAY_PRICE),0)/span;
+}
+function morningCandidates(){
+  const out=[], today=todayStr(), all=(Store.data.weekly||[]);
+  const byMachine = {};
+  all.forEach(r=>{ const k=r.store+"|"+r.machine; (byMachine[k]=byMachine[k]||[]).push(r); });
+  Object.values(byMachine).forEach(list=>list.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))));
+  // ① BOX の空き枠（3 日以上）
+  Object.entries(byMachine).forEach(([k,list])=>{
+    const last=list[0]; if (!last || !(last.slots||[]).length) return;
+    const nSlots = last.slots.length, perDay = machineDailySales(last.store, last.machine)/Math.max(1,nSlots);
+    last.slots.forEach(sl=>{
+      if (clean(sl.filled)) return;
+      if (!list.some(r=>(r.slots||[]).some(x=>x.i===sl.i && (clean(x.prize)||clean(x.filled))))) return;   // 一度も景品が入ったことのない枠（枠数の設定が多いだけ）は出さない
+      let since=last.week;
+      for (const r of list.slice(1)){ const o=(r.slots||[]).find(x=>x.i===sl.i); if (!o || clean(o.filled)) break; since=r.week; }
+      const days=daysSince(since); if (days<3) return;
+      out.push({key:`empty:${last.store}|${last.machine}|${sl.i}`, kind:"empty", loss:perDay*days, meta:{store:last.store, machine:last.machine, slot:sl.i, since},
+        text:`<b>${esc(last.store.replace(/店$/,""))} ${esc(last.machine)}</b> の <b>${sl.i} 番</b>が ${days} 日空き`,
+        detail:`1 枠あたり 1 日およそ ${yen(Math.round(perDay))} 円。空いていた分の機会損失 ${yen(Math.round(perDay*days))} 円。在庫から入れる？`});
+    });
+  });
+  // ② 滞留在庫・③ 在庫切れ間近（景品ラボと同じ基準）
+  let byP={}; try{ byP=labAgg(); }catch(e){}
+  Object.values(byP).forEach(P=>{
+    const stale = P.stock!==null && P.stock>=5 && (P.pacePerWeek<1 || (P.last && daysSince(P.last)>=14));
+    const best = Object.entries(P.stores).sort((a,b)=>b[1].paysPerDay-a[1].paysPerDay)[0];
+    const unit = P.unit||0;
+    if (stale) out.push({key:`stale:${P.prize}`, kind:"stale", loss:P.stock*unit*0.1, meta:{prize:P.prize, best:best?best[0]:""},
+      text:`<b>${esc(P.prize)}</b> が滞留（在庫 ${P.stock}）`,
+      detail:`${P.last?`最後に出たのは ${jpDate(P.last)}。`:"まだ出ていない。"}${best && best[1].paysPerDay>0?`出がいいのは ${esc(best[0].replace(/店$/,""))}。そこへ回す？`:"出やすい店に置いてみる？"}${unit?` 寝ている仕入れ額 ${yen(Math.round(P.stock*unit))} 円。`:""}`});
+    else if (P.weeksLeft!==null && P.weeksLeft<=1.5 && P.stock>0 && P.pacePerWeek>0)
+      out.push({key:`reorder:${P.prize}`, kind:"reorder", loss:P.pacePerWeek*PLAY_PRICE*(P.nOf||10), meta:{prize:P.prize},
+        text:`<b>${esc(P.prize)}</b> があと ${wk1(P.weeksLeft)} 週で切れる（在庫 ${P.stock}）`,
+        detail:`週 ${wk1(P.pacePerWeek)} 個のペース。切れると週およそ ${yen(Math.round(P.pacePerWeek*PLAY_PRICE*(P.nOf||10)))} 円の売上が止まる。発注する？ <a href="${SHIIRE_URL}?reorder=${encodeURIComponent(P.prize)}">🔁 おかわり</a>`});
+  });
+  // ④ 行っていない店（4 日以上）
+  STORES.forEach(s=>{ const last=storeLast(s.n); const d = last ? daysSince(last.week) : null; if (d!==null && d<4) return;
+    const daily = s.machines.reduce((a,m)=>a+machineDailySales(s.n,m),0);
+    out.push({key:`visit:${s.n}`, kind:"visit", loss:daily*0.3, meta:{store:s.n},
+      text:`<b>${esc(s.n.replace(/店$/,""))}</b> に ${d===null?"まだ":d+" 日"}行っていない`,
+      detail:`この店は 1 日およそ ${yen(Math.round(daily))} 円。空き枠や減りを見に行く？（石原さん・柳瀬さんに頼むのも可）`}); });
+  // ⑤ 置いていない在庫（在庫 5 以上で、直近 30 日どの機械にも入っていない）
+  const placed = new Set(); all.filter(r=>daysSince(r.week)<=30).forEach(r=>{ (r.slots||[]).forEach(x=>{ if (clean(x.filled)) placed.add(clean(x.filled)); if (clean(x.prize)) placed.add(clean(x.prize)); }); (r.rooms||[]).forEach(x=>{ if (clean(x.prize)) placed.add(clean(x.prize)); if (clean(x.addPrize)) placed.add(clean(x.addPrize)); }); });
+  allPrizes().forEach(pz=>{ const n=clean(pz.name); if (!n || placed.has(n) || byP[n]) return; const st=stockOf(n); if (st===null || st<5) return; const unit=prizeCostUnit(n)||0;
+    out.push({key:`idle:${n}`, kind:"idle", loss:st*unit*0.1, meta:{prize:n},
+      text:`<b>${esc(n)}</b>（在庫 ${st}）がどこにも置かれていない`, detail:`${unit?`仕入れ額 ${yen(Math.round(st*unit))} 円が寝ている。`:""}どこかの枠に置く？`}); });
+  // 決めたものは除く：やる／やらない は 14 日、保留 は今日だけ
+  const dec = decisionsAll();
+  return out.filter(c=>{ const d = dec.filter(x=>x.key===c.key).sort((a,b)=>String(b.at).localeCompare(String(a.at)))[0]; if (!d) return true;
+    const ago = daysSince(String(d.at).slice(0,10)); return d.choice==="保留" ? ago>=1 : ago>=14; })
+    .sort((a,b)=>b.loss-a.loss);
+}
+function decisionResult(d){                           // 「やる」と決めたことの答え合わせ（自動）。戻り値 {hit:true/false/null, text}
+  const at=String(d.at||""), day=at.slice(0,10), m=d.meta||{}, all=(Store.data.weekly||[]);
+  const after = all.filter(r=>String(r.createdAt||"")>at);
+  if (d.kind==="empty"){ const r = after.filter(r=>r.store===m.store && r.machine===m.machine).sort((a,b)=>String(a.createdAt).localeCompare(String(b.createdAt))).find(r=>(r.slots||[]).some(x=>x.i===m.slot && clean(x.filled)));
+    return r ? {hit:true, text:`${jpDate(r.week)} に ${m.slot} 番を埋めた（${daysSince(day)-daysSince(r.week)} 日後）`} : {hit:false, text:`まだ ${m.slot} 番は空きのまま`}; }
+  if (d.kind==="stale" || d.kind==="idle"){ let pays=0, placedAt=""; after.forEach(r=>{ (r.slots||[]).forEach(x=>{ if (clean(x.prize)===m.prize && x.out) pays++; if (clean(x.filled)===m.prize && !placedAt) placedAt=r.week; }); (r.rooms||[]).forEach(x=>{ if (clean(x.prize)===m.prize) pays+=num(x.pays); if ((clean(x.addPrize)===m.prize && num(x.add)>0) && !placedAt) placedAt=r.week; }); });
+    return pays>0 ? {hit:true, text:`そのあと ${pays} 個出た${placedAt?`（${jpDate(placedAt)} に置き直し）`:""}`} : placedAt ? {hit:null, text:`${jpDate(placedAt)} に置き直した。まだ出ていない`} : {hit:false, text:"まだ動かしていない"}; }
+  if (d.kind==="reorder"){ const p=(Store.data.prizes||[]).find(x=>clean(x.name)===m.prize && String(x.createdAt||"")>at); return p ? {hit:true, text:`${jpDate(localDay(p.createdAt))} に ${num(p.qty)} 個仕入れた`} : {hit:false, text:"まだ仕入れていない"}; }
+  if (d.kind==="visit"){ const r=after.find(r=>r.store===m.store && daysSince(r.week)>=daysSince(day)-2); return r ? {hit:true, text:`${jpDate(r.week)} に行った（${staffOf(r)}）`} : {hit:false, text:"まだ行っていない"}; }
+  return {hit:null, text:""};
+}
+function renderMorning(){
+  const el=$("#gqMorning"); if (!el) return;
+  const today=todayStr(), mon=today.slice(0,7), dom=+today.slice(8), dim=new Date(+today.slice(0,4), +today.slice(5,7), 0).getDate();
+  const cur=monthProfitAll(mon), prevMon=(()=>{ const d=new Date(+today.slice(0,4), +today.slice(5,7)-2, 1); return iso_(d).slice(0,7); })(), prev=monthProfitAll(prevMon);
+  const goal=bizGoal().profit, proj = dom>0 ? cur.profit/dom*dim : 0;
+  const pctG = goal>0 ? cur.profit/goal : null;
+  const pace = goal>0 ? `<div class="gq-bar hp${pctG>=1?" done":pctG<dom/dim?" low":""}" style="margin-top:7px"><i style="width:${Math.min(100,Math.max(0,(pctG||0)*100)).toFixed(1)}%"></i></div>` : "";
+  const cands=morningCandidates().slice(0,3);
+  const dec=decisionsAll().filter(d=>d.choice==="やる" && daysSince(String(d.at).slice(0,10))>=7 && daysSince(String(d.at).slice(0,10))<=45)
+    .sort((a,b)=>String(b.at).localeCompare(String(a.at))).map(d=>Object.assign({}, d, {res:decisionResult(d)}));
+  const judged=dec.filter(d=>d.res.hit!==null), hits=judged.filter(d=>d.res.hit).length;
+  el.innerHTML = `<div class="gq-h">▶ けさの 1 画面 <span class="gq-sub">${jpDate(today)}・2 分で終わる</span></div>
+    <div class="mo-box"><div class="mo-k"><span>① ペース（今月の粗利・全員分）</span><button type="button" id="moGoal">${goal>0?"目標を変える":"利益目標を決める"}</button></div>
+      <div class="mo-big"><span>${jpMonth(mon)} ${dom} 日まで <b>${yen(Math.round(cur.profit))}</b> 円</span>${goal>0?`<span>目標 ${yen(goal)} 円の <b style="font-size:18px">${pct(pctG,0)}</b></span>`:""}</div>
+      ${pace}
+      <div class="mo-line">このペースだと月末 <b>${yen(Math.round(proj))}</b> 円${goal>0?`（目標まで ${proj>=goal?"届く見込み":"あと "+yen(Math.round(goal-proj))+" 円足りない"}）`:""}。先月（${jpMonth(prevMon)}）は <b>${yen(Math.round(prev.profit))}</b> 円。売上 ${yen(cur.sales)} 円・記録 ${cur.n} 件。</div></div>
+    <div class="mo-box"><div class="mo-k"><span>② 今日決めること（${cands.length} 件）</span></div>
+      ${cands.length ? cands.map((c,i)=>`<div class="mo-item"><span class="t">${c.text}</span><span class="d">${c.detail}</span>
+        <div class="mo-acts">${["やる","やらない","保留"].map(ch=>`<button type="button" class="${ch==="やる"?"go":""}" data-mo="${i}" data-ch="${ch}">${ch}</button>`).join("")}</div></div>`).join("")
+        : `<div class="mo-empty">いま決めることはありません。空き枠なし・滞留なし・全店 3 日以内に巡回ずみ。</div>`}</div>
+    <div class="mo-box"><div class="mo-k"><span>③ 答え合わせ（7 日以上前に「やる」と決めたこと）</span><span>${judged.length?`勝率 ${hits}／${judged.length}`:""}</span></div>
+      ${dec.length ? dec.slice(0,6).map(d=>`<div class="mo-res ${d.res.hit===true?"hit":d.res.hit===false?"miss":""}"><span class="mk">${d.res.hit===true?"✔":d.res.hit===false?"✘":"…"}</span><span class="tx">${d.text}<small>${jpDate(String(d.at).slice(0,10))} に「やる」→ ${esc(d.res.text)}</small></span></div>`).join("")
+        : `<div class="mo-empty">まだありません。②で「やる」と決めたことが、7 日後にここで答え合わせになります。</div>`}</div>`;
+  el._cands = cands;
+  const gb=$("#moGoal"); if (gb) gb.onclick = async ()=>{ const v=prompt("今月の利益目標（円）。粗利＝売上 − 景品原価 − 場所代 − 経費 − 人件費", goal>0?String(goal):""); if (v===null) return; const n=num(String(v).replace(/[^\d]/g,"")); await Store.put("settings","bizGoal",{profit:n}); toast(n>0?`利益目標を ${yen(n)} 円にしました`:"利益目標を消しました"); };
+  el.querySelectorAll("[data-mo]").forEach(b=>b.onclick = async ()=>{ const c=el._cands[+b.dataset.mo]; if (!c) return; b.closest(".mo-acts").querySelectorAll("button").forEach(x=>x.disabled=true);
+    await saveDecision({key:c.key, kind:c.kind, text:c.text.replace(/<[^>]+>/g,""), at:new Date().toISOString(), choice:b.dataset.ch, by:me(), meta:c.meta});
+    toast(b.dataset.ch==="やる" ? "「やる」にしました。7 日後に答え合わせが出ます" : b.dataset.ch==="やらない" ? "14 日は出しません" : "あすまた出します"); });
+}
 function renderQuest(){
   if (!$("#gqLv")) return;
   chipRow($("#gqWhoRow"), STAFF, gqWho, v=>{ gqWho=v; renderDash(); renderQuest(); }, "mini");
+  { const boss=isBossView(); const card=document.querySelector("#p-dash .gq-card"); if (card) card.hidden=boss; const mo=$("#gqMorning"); if (mo){ mo.hidden=!boss; if (boss){ try{ renderMorning(); }catch(e){ console.error("morning", e); mo.innerHTML=`<div class="gq-h">▶ けさの 1 画面</div><div class="mo-empty">表示に失敗：${esc(String(e&&e.message||e))}</div>`; } } } }
   $("#gqTrainer").textContent = gqWho;
   const W=mine(Store.data.weekly), P=mine(Store.data.prizes), X=mine(Store.data.expenses);   // 見ている人の分だけ
   const g=Store.goal(gqWho), daily=dailyTarget();
