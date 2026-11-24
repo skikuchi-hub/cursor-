@@ -1553,7 +1553,9 @@ function unitIn(p){                                                  // 景品 1
   if (p.tax==="in" || p.tax==="ex" || p._sheet) return taxIn(c);
   return TAX_EX_VENDOR_RE.test(p.vendor||"") ? taxIn(c) : Math.round(c);
 }
-const PLACE_RATE = 0.30;     // 場所代率（標準）
+const PLACE_RATE = 0.30;     // 場所代率（標準。ファミマ）
+const PLACE_RATE_BY_BIZ = { "セブン":0.25 };   // 業態ごとの場所代率（2026-11-24 菊地さん「セブンイレブンは 30% じゃなく 25%」）
+const placeRateOf = store => { const s=STORES.find(x=>x.n===store); return (s && PLACE_RATE_BY_BIZ[s.biz]) || PLACE_RATE; };
 const COST_TARGET = 0.30;    // 景品原価率 管理目標（上限は設けない）
 const PRIZE_PRICE_CAP = 1000;// 景品の小売価格上限
 
@@ -4464,7 +4466,7 @@ function agg(rows){
   const pays  = rows.reduce((a,r)=>a+num(r.pays),0);
   const cost  = rows.reduce((a,r)=>a+num(r.cost),0);
   const sales = plays*PLAY_PRICE;
-  const place = Math.round(sales*PLACE_RATE);
+  const place = Math.round(rows.reduce((a,r)=>a+num(r.plays)*PLAY_PRICE*placeRateOf(r.store),0));   // 店ごとの率（セブン 25%・ファミマ 30%）
   return {plays,pays,cost,sales,place, gross:sales-cost-place,
           ratio:sales>0?cost/sales:null, getRate:plays>0?pays/plays:null,
           grossRate:sales>0?(sales-cost-place)/sales:null, n:rows.length};
