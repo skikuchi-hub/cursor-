@@ -4007,7 +4007,9 @@ function pointAtIssue(msg){
   let el=null, tip="";
   const mR = msg.match(/部屋\s*([A-D])|([A-D])\s*の景品|\b([A-D])\s*(?:は|が)/);
   const mS = msg.match(/(\d{1,2})\s*番/);
-  if (R.type==="4p" && mR){ const k=mR[1]||mR[2]||mR[3]; el=document.querySelector(`#roomGrid .pname[data-k="${k}"]`); tip=`部屋 ${k} の名前（✎）をタップ → 候補から選ぶか、上の欄に正しい名前を打って「新しい名前として使う」`; }
+  if (R.type==="4p" && mR){ const k=mR[1]||mR[2]||mR[3];
+    if (/入れた景品|入れ替え|補充で/.test(msg) && document.querySelector(`#roomGrid .rmact.on[data-k="${k}"]`)){ el=document.querySelector(`#roomGrid .rmact.on[data-k="${k}"]`); tip=`部屋 ${k} の「⇄ …」の行をタップ → 入れた景品の名前を選び直す`; }   // 補充・入れ替えで入れた景品の名前を直す依頼は、名前ボタンではなく入れ替えの行へ
+    else { el=document.querySelector(`#roomGrid .pname[data-k="${k}"]`); tip=`部屋 ${k} の名前（✎）をタップ → 候補から選ぶか、上の欄に正しい名前を打って「新しい名前として使う」`; } }
   else if (R.type==="box" && mS){ el=document.querySelector(`#slotGrid .slot[data-i="${+mS[1]}"]`); tip=`${+mS[1]} 番の枠をタップして、取られた／回収した／入れた を直す`; }
   if (!el){ toast("記録を開きました。直したら「修正を保存」"); return; }
   el.classList.add("gnow","nob"); el.scrollIntoView({block:"center", behavior:"smooth"});
