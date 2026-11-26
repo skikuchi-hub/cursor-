@@ -1026,6 +1026,7 @@ body{font-variant-numeric:tabular-nums}
 /* 補充候補の印：当たり（全店）／在庫多め */
 .hinttag{display:inline-block;margin-left:5px;padding:1px 6px;border-radius:999px;font-size:9.5px;font-weight:700;vertical-align:middle;line-height:1.5}
 .hinttag.hit{background:var(--gold-wash);color:var(--gold-text)}
+.hinttag.here{background:var(--navy);color:var(--gold)}
 .hinttag.stale{background:var(--sky-wash);color:var(--sky-ink)}
 .combo button .hinttag{float:right}
 /* ============ PIN gate ============ */
@@ -2698,13 +2699,25 @@ function prizeHints(storeName){
 }
 function orderByHints(names, storeName){
   const h = prizeHints(storeName);
-  const score = n => h.hit.has(n) ? 2e9 + h.hit.get(n) : h.stale.has(n) ? 1e9 : 0;
+  const here = new Set(recentRoomNames());                                    // この店舗・機械で最近使われた名前は先頭に
+  const score = n => (here.has(n) ? 4e9 : 0) + (h.hit.has(n) ? 2e9 + h.hit.get(n) : h.stale.has(n) ? 1e9 : 0);
   const sorted = names.slice().sort((a,b)=> score(b)-score(a));
-  return {names:sorted, tag:n=> h.hit.has(n) ? `<span class="hinttag hit">★当たり（全店）</span>` : h.stale.has(n) ? `<span class="hinttag stale">在庫多め</span>` : ""};
+  return {names:sorted, tag:n=> (here.has(n) ? `<span class="hinttag here">この機械</span>` : "") + (h.hit.has(n) ? `<span class="hinttag hit">★当たり（全店）</span>` : h.stale.has(n) ? `<span class="hinttag stale">在庫多め</span>` : "")};
 }
 /* 4人機の景品名：機械タイプ「4人機用」の景品をプルダウンで出し、打った文字で絞り込む */
 function prizeNames4p(){
-  return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name))).filter(n=>n && prizeAlias(n)===n);   // まとめた景品はまとめ先だけ
+  return Array.from(new Set(allPrizes().filter(p=>p.use!=="カリーノ用").map(p=>p.name).concat(recentRoomNames()))).filter(n=>n && prizeAlias(n)===n);   // まとめた景品はまとめ先だけ
+}
+/* この店舗・機械の直近 10 回の記録で部屋に入っていた景品名（景品マスタに無い名前でも候補に出す。
+   2026-11-26 柳瀬さん「名前を直したいのに候補に無くて直せなかった」） */
+function recentRoomNames(){
+  if (!F.store || !F.machine) return [];
+  const out=[];
+  (Store.data.weekly||[]).filter(r=>r.store===F.store && r.machine===F.machine && (r.rooms||[]).length)
+    .sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||""))).slice(0,10)
+    .forEach(r=>(r.rooms||[]).forEach(x=>{ [x.prize, x.addPrize].forEach(n=>{ n=clean(n); if (n && !out.includes(n)) out.push(n); }); }));
+  if (R && R.rooms) R.rooms.forEach(rm=>[rm.prize, rm.prizeWas, rm.addPrize].forEach(n=>{ n=clean(n); if (n && !out.includes(n)) out.push(n); }));
+  return out;
 }
 function attachCombo(inp, onPick){
   const box = document.createElement("div"); box.className="combo";
@@ -3988,13 +4001,28 @@ async function markFixed(x){
   await Store.put("settings", "issueFixed", {items});
   await dismissIssue(x.keys);
 }
+/* 要確認の文面から 部屋（A〜D）か 枠番号 を読み取り、編集画面のその部屋を光らせてどこを直すか案内する（2026-11-26） */
+function pointAtIssue(msg){
+  if (!R) return;
+  let el=null, tip="";
+  const mR = msg.match(/部屋\s*([A-D])|([A-D])\s*の景品|\b([A-D])\s*(?:は|が)/);
+  const mS = msg.match(/(\d{1,2})\s*番/);
+  if (R.type==="4p" && mR){ const k=mR[1]||mR[2]||mR[3]; el=document.querySelector(`#roomGrid .pname[data-k="${k}"]`); tip=`部屋 ${k} の名前（✎）をタップ → 候補から選ぶか、上の欄に正しい名前を打って「新しい名前として使う」`; }
+  else if (R.type==="box" && mS){ el=document.querySelector(`#slotGrid .slot[data-i="${+mS[1]}"]`); tip=`${+mS[1]} 番の枠をタップして、取られた／回収した／入れた を直す`; }
+  if (!el){ toast("記録を開きました。直したら「修正を保存」"); return; }
+  el.classList.add("gnow","nob"); el.scrollIntoView({block:"center", behavior:"smooth"});
+  setTimeout(()=>el.classList.remove("gnow","nob"), 12000);
+  toast(tip, 7000);
+}
 function openIssueSheet(){
   const ov=document.createElement("div"); ov.id="issueSheet"; ov.className="cf-ov sh-ov";
   fillIssueSheet(ov, dataIssues());
   document.body.appendChild(ov);
   const close = () => ov.remove();
   ov.addEventListener("click", e=>{ if (e.target===ov) close(); const b=e.target.closest("[data-edit-iss]"); if (!b) return;
-    close(); const tab=document.querySelector('.tab[data-p="p-log"]'); if (tab) tab.click(); startEdit(b.dataset.editIss); });
+    const item = b.closest(".iss-item"); const msg = item ? Array.from(item.querySelectorAll(".msg")).map(m=>m.textContent).join(" ") : "";
+    close(); const tab=document.querySelector('.tab[data-p="p-log"]'); if (tab) tab.click(); startEdit(b.dataset.editIss);
+    pointAtIssue(msg); });
 }
 
 /* ===================== 集金（店舗ごとの売上確定） =====================
