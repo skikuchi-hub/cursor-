@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-21b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-27a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -947,6 +947,9 @@ function maintenanceOnce_() {
   if (!pr.getProperty("pikachuMergeAt")) {          // 2026-10-14：菊地さん「ピカチュウセレクションは モンコレ ピカチュウセレクション① と同じ。BOX は 3 個セット、4人機と BOX の両方に入れる」
     try { var m2 = mergePikachu_(); pr.setProperty("pikachuMergeAt", nowIso() + " " + String(m2).slice(0, 200)); } catch (e) { Logger.log("mergePikachu: " + e); }
   }
+  if (!pr.getProperty("eh20261120_1At")) {          // 2026-11-27（依頼⑱）：手で送った下書き EH-20261120-1 を ④ と同じく「発注済み＋発注履歴＋景品マスタ」に（菊地さん「④ を君が押して」）
+    try { var m12 = registerManualSentOrders_(); pr.setProperty("eh20261120_1At", nowIso() + " " + String(m12).slice(0, 400)); } catch (e) { Logger.log("registerManualSentOrders: " + e); pr.setProperty("eh20261120_1Err", nowIso() + " " + String(e).slice(0, 300)); }
+  }
 }
 /* アプリ外で発注した追加仕入れを、アプリの景品登録と同じ形で入れる（2026-11-12 菊地さん：アンパンマン 72 個・単価 545）。
    クラウド側からスプシに直接書けず、PIN を使った API 呼び出しもしないので、push だけで一度だけ走るここに入れる。
@@ -994,6 +997,103 @@ function addOffAppOrder_() {
     done.push(o.name + " " + o.qty + " 個を登録（" + r.rec.id + "）");
   });
   var msg = done.join("、") || "対象なし"; Logger.log(msg); return msg;
+}
+/* ===================== 2026-11-27（依頼⑱）：手で送った下書き EH-20261120-1 を「発注済み＋景品マスタ登録」に（スプシのメニュー ④ の代行） =====================
+   起きたこと：11/20 10:06 に おかわり 2 商品（NICIビーンバッグキーリング売れ筋BEST14 84 個・ミニミニChibiぬいぐるみマスコット・サンリオキャラ② 96 個）の下書き（EH-20261120-1）を
+   Mac が作り、菊地さんが手で送って商品は 11/27 に届いた。しかし Mac の送信済み検知（tools/examuse check_sent）が拾わず、商品一覧は「下書き作成」のまま・景品マスタに行が無い
+   （在庫未計上）・仕入れアプリで「📦 受け取った」が押せない。同日の EH-20261120-2 は検知済み。菊地さん「④ を君が押して」。
+   やること（④・送信済み検知 _check_one と同じ 4 点。一度だけ・何度走っても同じ結果）：
+   ①商品一覧 S 発注状況を「発注済 2026-11-20 (EH-20261120-1)」に（その番号の「下書き作成」の行だけ。すでに発注済なら触らない）
+   ②発注履歴の先頭（2 行目）に送信区分「送信（下書きから手動）」で商品ごとに 1 行（Mac と同じ 11 列。その番号の「送信」行がすでにあれば足さない）
+   ③景品マスタ（このスプシ）に同名の行の直下に 1 行ずつ挿入（A 品名・B 仕入先・C 機械タイプ・D 税抜単価・F 数量・L メモ・O 商品キー・P 仕入日。Mac の master_append と同じ列。
+     メモにその番号がある同名の行があれば足さない＝菊地さんが先に ④ を押していても二重にならない）
+   ④発注要求の行を状態「完了（送信済）」にして結果欄に追記（メニュー ④ の候補から外す）。
+   メールは送らない・Mac の db.json は触らない（Mac がいつか同じメールを検知しても、商品一覧が「発注済」なので「記録のみ」になる） */
+var MANUAL_SENT_ORDERS = [
+  { no: "EH-20261120-1", date: "2026-11-20", sentAt: "2026-11-20 10:06", reqId: "R20261120100336", file: "発注書_20261120_1.xlsx", person: "菊地翔平",
+    mode: "送信済（下書きから手動送信・代行登録）", by: "菊地翔平" }
+];
+function registerManualSentOrders_() {
+  var out = [], tz = "Asia/Tokyo", today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
+  var x = exaSs(), items = x.getSheetByName("商品一覧"), hist = x.getSheetByName("発注履歴"), rq = x.getSheetByName("発注要求");
+  if (!items || !hist || !rq) throw new Error("仕入れ想定商品スプシのタブ（商品一覧・発注履歴・発注要求）が見つかりません");
+  var ps = ss().getSheetByName("景品マスタ"); if (!ps) throw new Error("景品マスタがありません");
+  MANUAL_SENT_ORDERS.forEach(function (o) {
+    var msg = [o.no], label = "発注済 " + o.date + " (" + o.no + ")";
+    // 発注要求の行（内容 JSON ＝ 発注した商品。④ と同じ材料）
+    var rv = rq.getDataRange().getValues(), rqRow = 0, list = [];
+    for (var i = 1; i < rv.length; i++) if (clean(rv[i][0]) === o.reqId || clean(rv[i][7]) === o.no) { rqRow = i + 1; break; }
+    if (!rqRow) { out.push(o.no + "：発注要求に行が無い → 何もしない"); return; }
+    try { list = JSON.parse(String(rv[rqRow - 1][8] || "[]")); } catch (e) { list = []; }
+    if (!list.length) { out.push(o.no + "：発注要求の内容(JSON)が読めない → 何もしない"); return; }
+    // ① 商品一覧：下書き作成 → 発注済（行の ハーフ・注意・機械タイプ・備考 は景品マスタのメモに使う）
+    var ncol = Math.max(items.getLastColumn(), EXA.raw), marked = 0, rows = {};
+    list.forEach(function (it) {
+      var row = exaRowByKey(items, it.key); if (!row) { msg.push(it.name + "：商品一覧に無い"); return; }
+      var r = items.getRange(row, 1, 1, ncol).getValues()[0]; rows[it.key] = r;
+      var st = clean(r[EXA.status - 1]);
+      if (/発注済/.test(st)) return;                                  // すでに発注済（④ 済み）
+      if (st.indexOf(o.no) < 0 || !/下書き作成/.test(st)) { msg.push(it.name + "：発注状況「" + st + "」が " + o.no + " の下書きではないので触らない"); return; }
+      items.getRange(row, EXA.status).setValue(label); marked++;
+    });
+    msg.push("商品一覧 " + marked + " 行を発注済に");
+    // ② 発注履歴：先頭に挿入（Mac の G.history と同じ列。すでに「送信」行があれば足さない）
+    var hv = hist.getDataRange().getValues(), has = false;
+    for (var j = 1; j < hv.length; j++) if (clean(hv[j][1]) === o.no && String(hv[j][2] || "").indexOf("送信") >= 0) { has = true; break; }
+    if (has) msg.push("発注履歴は登録済み");
+    else {
+      var when = Utilities.parseDate(o.sentAt, tz, "yyyy-MM-dd HH:mm");
+      var hrows = list.map(function (it) { return [when, o.no, "送信（下書きから手動）", it.name, it.code || "", num(it.cases), num(it.pcs), num(it.price), num(it.amount), o.file, o.person]; });
+      hist.insertRowsBefore(2, hrows.length);
+      hist.getRange(2, 1, hrows.length, 11).setValues(hrows);
+      hist.getRange(2, 1, hrows.length, 1).setNumberFormat("yyyy-mm-dd h:mm");
+      hist.getRange(2, 8, hrows.length, 2).setNumberFormat("#,##0");
+      msg.push("発注履歴 " + hrows.length + " 行追加");
+    }
+    // ③ 景品マスタ：同名の最後の行の直下に挿入（Mac の master_append と同じ列・メモの書式）
+    var pm = headerMap_(ps), cMemo = hcol_(pm, "メモ"), cKey = hcol_(pm, "商品キー"), cBuy = hcol_(pm, "仕入日"), added = 0;
+    var vendor = clean(exaSetting("発注先会社名")) || "株式会社インフィニティ";
+    list.forEach(function (it) {
+      var name = clean(it.name); if (!name) return;
+      var av = ps.getRange(1, 1, ps.getLastRow(), Math.max(cMemo, 1)).getValues(), lastSame = 0, dup = false, lastFilled = 1;
+      for (var k = 1; k < av.length; k++) {
+        if (clean(av[k][0]) !== "") lastFilled = k + 1;
+        if (clean(av[k][0]) !== name) continue;
+        lastSame = k + 1;
+        if (cMemo && String(av[k][cMemo - 1] || "").indexOf(o.no) >= 0) dup = true;
+      }
+      if (dup) { msg.push(name + "：景品マスタに登録済み"); return; }
+      var r0 = rows[it.key] || [];
+      var half = clean(r0[EXA.half - 1] || ""), caution = clean(r0[EXA.caution - 1] || ""), kind = clean(it.kind || r0[EXA.machine - 1] || "");
+      var casesTxt = (num(it.cases) === 0.5 ? "0.5" : String(num(it.cases))) + "ケース";
+      var memo = "発注No " + o.no + "（" + o.date.replace(/-/g, "/") + "・" + o.mode + "） / " + casesTxt;
+      if (half) memo += " / ハーフ" + (/不可|NG|×/.test(half) ? "不可" : /可|OK|○/.test(half) ? "可" : half);
+      if (caution) memo += " / 注意: " + caution;
+      var om = clean(it.memo || r0[EXA.memo - 1] || ""); if (om) memo += " / " + om;
+      var row;
+      if (lastSame) { ps.insertRowAfter(lastSame); row = lastSame + 1; }
+      else { row = lastFilled + 1; if (row > ps.getMaxRows()) ps.insertRowsAfter(ps.getMaxRows(), 10); }
+      ps.getRange(row, 1, 1, 6).setValues([[name, vendor, kind, num(it.price), "", num(it.pcs)]]);
+      ps.getRange(row, 4).setNumberFormat("#,##0.##");
+      if (cMemo) ps.getRange(row, cMemo).setValue(memo);
+      if (cKey) ps.getRange(row, cKey).setValue(it.key);
+      if (cBuy) ps.getRange(row, cBuy).setValue(dateOf(o.date)).setNumberFormat("yyyy/mm/dd");
+      added++;
+    });
+    msg.push("景品マスタ " + added + " 行追加");
+    // ④ 発注要求：状態を「完了（送信済）」に（メニュー ④ の候補から外す）
+    var st0 = clean(rv[rqRow - 1][2]);
+    if (st0 === "完了") {
+      rq.getRange(rqRow, 3).setValue("完了（送信済）");
+      rq.getRange(rqRow, 7).setValue(clean(rv[rqRow - 1][6]) + " ／ " + today + " 下書きの手動送信を代行登録（クレーンログ Apps Script・景品マスタ " + added + " 行追加）");
+      msg.push("発注要求を完了（送信済）に");
+    } else msg.push("発注要求は「" + st0 + "」のまま");
+    out.push(msg.join("、"));
+  });
+  try { CacheService.getScriptCache().remove("sourcing"); } catch (e) {}
+  dropCache("sheet_master"); markMetricsDirty_();
+  try { rebuildStock(); } catch (e) { Logger.log("rebuildStock: " + e); }
+  var res = out.join(" ／ "); Logger.log(res); return res;
 }
 /* ===================== 2026-11-13（依頼⑩）：博多東平尾1丁目店 11/12〜13 の記録の取り違えを直す =====================
    起きたこと（_app_db・写真タブ・石原さんの記録の prevId から確定）：
