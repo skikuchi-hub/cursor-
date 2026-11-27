@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-27a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-27b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -950,6 +950,9 @@ function maintenanceOnce_() {
   if (!pr.getProperty("eh20261120_1At")) {          // 2026-11-27（依頼⑱）：手で送った下書き EH-20261120-1 を ④ と同じく「発注済み＋発注履歴＋景品マスタ」に（菊地さん「④ を君が押して」）
     try { var m12 = registerManualSentOrders_(); pr.setProperty("eh20261120_1At", nowIso() + " " + String(m12).slice(0, 400)); } catch (e) { Logger.log("registerManualSentOrders: " + e); pr.setProperty("eh20261120_1Err", nowIso() + " " + String(e).slice(0, 300)); }
   }
+  if (pr.getProperty("eh20261120_1At") && !pr.getProperty("eh20261120_1TzFixAt")) {   // 2026-11-27：上の初回実行が書いた発注履歴の日時（タイムゾーンずれ）を直す
+    try { var m13 = fixManualSentHistoryTz_(); pr.setProperty("eh20261120_1TzFixAt", nowIso() + " " + String(m13).slice(0, 200)); } catch (e) { Logger.log("fixManualSentHistoryTz: " + e); }
+  }
 }
 /* アプリ外で発注した追加仕入れを、アプリの景品登録と同じ形で入れる（2026-11-12 菊地さん：アンパンマン 72 個・単価 545）。
    クラウド側からスプシに直接書けず、PIN を使った API 呼び出しもしないので、push だけで一度だけ走るここに入れる。
@@ -1013,6 +1016,18 @@ var MANUAL_SENT_ORDERS = [
   { no: "EH-20261120-1", date: "2026-11-20", sentAt: "2026-11-20 10:06", reqId: "R20261120100336", file: "発注書_20261120_1.xlsx", person: "菊地翔平",
     mode: "送信済（下書きから手動送信・代行登録）", by: "菊地翔平" }
 ];
+function exaTz_() { try { return exaSs().getSpreadsheetTimeZone() || "Asia/Tokyo"; } catch (e) { return "Asia/Tokyo"; } }
+/* 2026-11-27 18:44 の初回実行で、発注履歴 A 列を Asia/Tokyo の Date で書いたため、スプシ（別のタイムゾーン）では 11/19 17:06 と表示された。
+   その番号の「送信」行の日時をスプシのタイムゾーンで書き直す（何度走っても同じ結果） */
+function fixManualSentHistoryTz_() {
+  var hist = exaSs().getSheetByName("発注履歴"); if (!hist) return "発注履歴なし";
+  var v = hist.getDataRange().getValues(), n = 0, tz = exaTz_();
+  MANUAL_SENT_ORDERS.forEach(function (o) {
+    var when = Utilities.parseDate(o.sentAt, tz, "yyyy-MM-dd HH:mm");
+    for (var i = 1; i < v.length; i++) if (clean(v[i][1]) === o.no && String(v[i][2] || "").indexOf("送信") >= 0) { hist.getRange(i + 1, 1).setValue(when).setNumberFormat("yyyy-mm-dd h:mm"); n++; }
+  });
+  return "発注履歴の日時を " + n + " 行書き直し（" + tz + "）";
+}
 function registerManualSentOrders_() {
   var out = [], tz = "Asia/Tokyo", today = Utilities.formatDate(new Date(), tz, "yyyy-MM-dd");
   var x = exaSs(), items = x.getSheetByName("商品一覧"), hist = x.getSheetByName("発注履歴"), rq = x.getSheetByName("発注要求");
@@ -1042,7 +1057,7 @@ function registerManualSentOrders_() {
     for (var j = 1; j < hv.length; j++) if (clean(hv[j][1]) === o.no && String(hv[j][2] || "").indexOf("送信") >= 0) { has = true; break; }
     if (has) msg.push("発注履歴は登録済み");
     else {
-      var when = Utilities.parseDate(o.sentAt, tz, "yyyy-MM-dd HH:mm");
+      var when = Utilities.parseDate(o.sentAt, exaTz_(), "yyyy-MM-dd HH:mm");   // 仕入れ想定商品スプシのタイムゾーン（Asia/Tokyo ではない）で読ませる。Mac は文字列で書くのでスプシ側の解釈になる
       var hrows = list.map(function (it) { return [when, o.no, "送信（下書きから手動）", it.name, it.code || "", num(it.cases), num(it.pcs), num(it.price), num(it.amount), o.file, o.person]; });
       hist.insertRowsBefore(2, hrows.length);
       hist.getRange(2, 1, hrows.length, 11).setValues(hrows);
