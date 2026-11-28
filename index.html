@@ -2043,7 +2043,7 @@ const Store = {
     if (API_URL){
       if (dropQueued(c,id)){ render(); return; }                     // まだ送っていない記録は端末から消すだけ
       if (!this.online()){ toast("いまは削除できません（オフライン）"); return; }
-      try { const r = await api("remove", {col:c, id}); const upd={}; (r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
+      try { const r = await api("remove", {col:c, id}, {timeout:90000}); const upd={}; (r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
             this.data[c]=(this.data[c]||[]).filter(x=>x.id!==id).map(x=> upd[x.id] || x); render(); }   // 消した記録のあとの訪問は計算し直されて返る
       catch(e){ toast(errMsg(e)); }
       return;
@@ -2056,7 +2056,7 @@ const Store = {
       if (updateQueued(c,id,obj)){ render(); pump(true); return true; }   // まだ送っていない記録は端末の送信待ちを書き換えるだけ（送るときにその内容で届く）
       if (!this.online()){ toast("いまは保存できません（オフライン）"); return false; }
       try {
-        const r = await api("update", {col:c, id, obj});
+        const r = await api("update", {col:c, id, obj}, {timeout:90000});   // 修正はサーバーで行の作り直しがあり 30 秒を超えることがある（2026-11-28 柳瀬さん「電波が弱いと出て送信できない」→ 実は届いていた）
         const upd = {}; [r.rec].concat(r.recs||[]).forEach(x=>{ if (x && x.id) upd[x.id]=x; });
         this.data[c] = (this.data[c]||[]).map(x=> upd[x.id] || x); render(); return true;
       } catch(e){ if (e.code==="unauthorized") this.sync(false); toast(errMsg(e)); return false; }

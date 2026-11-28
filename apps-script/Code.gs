@@ -23,7 +23,7 @@ var TZ = "Asia/Tokyo";
 var MY_STORES = ["博多東平尾1丁目店", "博多竹下2丁目店", "福岡平尾山荘通り店", "福大工学部前店", "福岡下山門通り店"];
 
 /* ===================== 入口 ===================== */
-var CODE_BUILD = "2026-11-27b";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
+var CODE_BUILD = "2026-11-28a";   // 動いているコードの版。ウェブアプリの URL を開くと JSON で出る
 function doGet(e) {
   var p = PropertiesService.getScriptProperties().getProperties();
   var viaLoader = (typeof LOADER_BUILD !== "undefined");   // Loader.gs 経由で動いているか（本物のコードは GitHub から読み込み）
@@ -366,7 +366,7 @@ function removeDoc(me, col, id) {
   dematerialize(col, id);
   // 巡回の記録を消すと、あとの訪問の「前回」が変わる（2026-10-23：消した記録を前回にしていた訪問が累計まるごと今回分のまま残っていた）
   var recs = [];
-  if (col === "weekly" && old && old.store && old.machine) recs = recomputeLater_(old.store, old.machine, old.createdAt, id, readAllDocs());
+  if (col === "weekly" && old && old.store && old.machine) recs = recomputeLater_(old.store, old.machine, old.createdAt, id, readAllDocs(), 12000);
   if (col === "prizes") dropCache("sheet_master");
   return { ok: true, recs: recs };
 }
@@ -375,24 +375,57 @@ function removeDoc(me, col, id) {
    同じ店舗・機械のあとの訪問は「前回」が変わるので、差分と行を同じように作り直す（写真タブの行はそのまま） */
 var REFRESH_TABS = ["巡回ログ", "部屋別ログ", "景品実績"];
 /* 同じ店舗・機械の、createdAt より後の訪問の売上差分と行を作り直す（修正・削除で「前回」が変わるため） */
-function recomputeLater_(store, machine, createdAt, excludeId, docs) {
-  var sh = dbSheet();
+/* 2026-11-28：あとの訪問 1 件の作り直しに 10 秒以上かかり、4 件あるとアプリの待ち時間（30 秒）を超えて「時間切れ（電波が弱い）」になっていた
+   （柳瀬さん 11/27〜28：保存は届いていたのに失敗に見えて何度もやり直し）。budgetMs を渡すと、その時間内で済む分だけ今やり、残りは
+   pendingRecompute（スクリプトのプロパティ）に積んで 10 分ごとの importPhotoChecks → processPendingRecompute_ が続きをやる */
+function recomputeLater_(store, machine, createdAt, excludeId, docs, budgetMs) {
+  var sh = dbSheet(), t0 = Date.now();
   var later = docs.weekly.filter(function (r) { return r.id !== excludeId && r.store === store && r.machine === machine && String(r.createdAt || "") > String(createdAt || ""); })
     .sort(function (a, b) { return String(a.createdAt || "").localeCompare(String(b.createdAt || "")); });
   var recs = [];
-  later.forEach(function (r) {
+  for (var i = 0; i < later.length; i++) {
+    var r = later[i];
+    if (budgetMs !== undefined && (i > 0 ? Date.now() - t0 > budgetMs : budgetMs < 2000)) { queueRecompute_(store, machine, i > 0 ? later[i - 1].createdAt : createdAt); break; }   // 直前まで終わった所から続きを後回し（残り時間が無ければ最初から）
     applySalesDelta(r, docs.weekly); rewriteAutoMoney(r);
-    var rr = findDbRow("weekly", r.id); if (!rr) return;
+    var rr = findDbRow("weekly", r.id); if (!rr) continue;
     sh.getRange(rr, 4, 1, 3).setValues([[nowIso(), "recompute", JSON.stringify(stripId(r))]]);
     rematerialize(r, docs); recs.push(r);
-  });
+  }
   return recs;
+}
+var PENDING_RECOMPUTE = "pendingRecompute";
+function queueRecompute_(store, machine, createdAt) {
+  var pr = PropertiesService.getScriptProperties(), q = {};
+  try { q = JSON.parse(pr.getProperty(PENDING_RECOMPUTE) || "{}") || {}; } catch (e) { q = {}; }
+  var k = store + "|" + machine, cur = q[k];
+  if (!cur || String(createdAt || "") < String(cur)) q[k] = String(createdAt || "");   // 同じ店舗・機械は一番古い所から
+  pr.setProperty(PENDING_RECOMPUTE, JSON.stringify(q));
+}
+/* 後回しにした「あとの訪問の作り直し」を進める（10 分ごと）。1 回の実行は 4 分まで。残りは次回 */
+function processPendingRecompute_() {
+  var pr = PropertiesService.getScriptProperties(), q;
+  try { q = JSON.parse(pr.getProperty(PENDING_RECOMPUTE) || "{}") || {}; } catch (e) { q = {}; }
+  var keys = Object.keys(q); if (!keys.length) return "";
+  pr.setProperty(PENDING_RECOMPUTE, "{}");                        // 先に空にする（処理中に積まれた新しい修正は残る）
+  var t0 = Date.now(), done = [];
+  withLock(function () {
+    var docs = readAllDocs();
+    keys.forEach(function (k) {
+      var sm = k.split("|");
+      if (Date.now() - t0 > 240000) { queueRecompute_(sm[0], sm[1], q[k]); return; }   // 時間切れの分は次回へ戻す
+      recomputeLater_(sm[0], sm[1], q[k], "", docs, 230000 - (Date.now() - t0));
+      done.push(k);
+    });
+  });
+  var msg = nowIso() + " " + done.join(", ") + " " + Math.round((Date.now() - t0) / 1000) + "s";
+  pr.setProperty("pendingRecomputeAt", msg.slice(0, 400));
+  return msg;
 }
 function updateDoc(me, col, id, obj) {
   if (col === "prizes" || col === "weekly") markMetricsDirty_();
   if (col === "prizes") return updatePrize_(me, id, obj);
   if (col !== "weekly") throw new Error("この記録は修正できません");
-  var row = findDbRow(col, id);
+  var row = findDbRow(col, id), t0 = Date.now();
   if (!row) throw new Error("記録が見つかりません");
   var sh = dbSheet();
   var old; try { old = JSON.parse(sh.getRange(row, 6).getValue()); } catch (e) { old = {}; }
@@ -408,7 +441,7 @@ function updateDoc(me, col, id, obj) {
   applySalesDelta(rec, docs.weekly);
   sh.getRange(row, 4, 1, 3).setValues([[nowIso(), me.name, JSON.stringify(stripId(rec))]]);
   rematerialize(rec, docs);
-  var recs = recomputeLater_(rec.store, rec.machine, rec.createdAt, id, docs);   // あとの訪問（同じ店舗・機械）を作り直す
+  var recs = recomputeLater_(rec.store, rec.machine, rec.createdAt, id, docs, Math.max(0, 18000 - (Date.now() - t0)));   // あとの訪問（同じ店舗・機械）を作り直す。保存開始から 18 秒で終わらない分は 10 分ごとの処理に回す（アプリの時間切れ対策）
   return { ok: true, rec: rec, recs: recs };
 }
 function rematerialize(rec, docs) {
@@ -1335,6 +1368,7 @@ function mergePikachu_() {
 }
 function importPhotoChecks() {
   try { maintenanceOnce_(); } catch (e) {}
+  try { processPendingRecompute_(); } catch (e) { Logger.log("processPendingRecompute: " + e); }   // 修正・削除で後回しにした「あとの訪問の作り直し」
   try { if (PropertiesService.getScriptProperties().getProperty("weeklyCostTaxAt")) normalizeMasterTax_(false); } catch (e) { Logger.log("normalizeMasterTax(sweep): " + e); }   // 景品マスタに手で入れた個店の税込単価を税抜に換算（10 分ごと）
   var dir = photoCheckDir();
   var files = dir.getFiles(), n = 0, m = 0;
